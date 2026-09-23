@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification icon: the KITT scanner bar with a lit centre lamp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M1,10h3v4h-3z M5,10h3v4h-3z M9,9h6v6h-6z M16,10h3v4h-3z M20,10h3v4h-3z" />
+</vector>

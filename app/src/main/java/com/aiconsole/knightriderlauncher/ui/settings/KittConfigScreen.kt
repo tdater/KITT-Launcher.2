@@ -1,0 +1,314 @@
+package com.aiconsole.knightriderlauncher.ui.settings
+
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import com.aiconsole.knightriderlauncher.KittApplication
+import com.aiconsole.knightriderlauncher.assistant.AiAppHandoff
+import com.aiconsole.knightriderlauncher.assistant.GeminiAssistantClient
+import com.aiconsole.knightriderlauncher.data.settings.AiProvider
+import com.aiconsole.knightriderlauncher.data.settings.KittSettings
+import com.aiconsole.knightriderlauncher.data.settings.PersonaStyle
+import com.aiconsole.knightriderlauncher.ui.components.ChoiceRow
+import com.aiconsole.knightriderlauncher.ui.components.HelpText
+import com.aiconsole.knightriderlauncher.ui.components.KittButton
+import com.aiconsole.knightriderlauncher.ui.components.KittPanel
+import com.aiconsole.knightriderlauncher.ui.components.KittTextField
+import com.aiconsole.knightriderlauncher.ui.components.KittToggle
+import com.aiconsole.knightriderlauncher.ui.components.SectionHeader
+import com.aiconsole.knightriderlauncher.ui.scanner.ScannerOverlayService
+import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
+import com.aiconsole.knightriderlauncher.ui.theme.DashGrey
+import com.aiconsole.knightriderlauncher.ui.theme.LedGreen
+import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
+import kotlinx.coroutines.launch
+
+private val PERPLEXITY_PRESETS = listOf("fast", "low", "medium", "high")
+
+/** KITT CONFIG: AI core (provider, keys, models), personality, display and quick links. */
+@Composable
+fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val app = context.applicationContext as KittApplication
+    val settings = app.settings
+    val scope = rememberCoroutineScope()
+
+    val provider by settings.provider.state.collectAsState()
+    val persona by settings.persona.state.collectAsState()
+    val savedGeminiKey by settings.geminiKeySaved.collectAsState()
+    val savedPerplexityKey by settings.perplexityKeySaved.collectAsState()
+    val chatModel by settings.chatModel.state.collectAsState()
+    val diagnosticModel by settings.diagnosticModel.state.collectAsState()
+    val chatPreset by settings.perplexityChatPreset.state.collectAsState()
+    val diagPreset by settings.perplexityDiagnosticPreset.state.collectAsState()
+    val webSearch by settings.webSearch.state.collectAsState()
+    val driverName by settings.driverName.state.collectAsState()
+    val voiceReply by settings.voiceReply.state.collectAsState()
+    val greeting by settings.greeting.state.collectAsState()
+    val voiceAlerts by settings.voiceAlerts.state.collectAsState()
+    val voiceName by settings.kittVoiceName.state.collectAsState()
+    val metric by settings.metricUnits.state.collectAsState()
+    val overlay by settings.scannerOverlay.state.collectAsState()
+
+    var geminiKeyInput by remember { mutableStateOf("") }
+    var perplexityKeyInput by remember { mutableStateOf("") }
+    var nameInput by remember { mutableStateOf(driverName) }
+    var keyStatus by remember { mutableStateOf<String?>(null) }
+    var models by remember { mutableStateOf(listOf(KittSettings.DEFAULT_CHAT_MODEL, KittSettings.DEFAULT_DIAGNOSTIC_MODEL)) }
+    var voices by remember { mutableStateOf(emptyList<String>()) }
+    val handoffApps = remember { AiAppHandoff.installed(context) }
+
+    fun testGeminiKey() {
+        keyStatus = "Checking key…"
+        scope.launch {
+            GeminiAssistantClient(app).listModels(settings.geminiKey).fold(
+                onSuccess = { list ->
+                    if (list.isNotEmpty()) models = list.map { it.id }
+                    keyStatus = "Key OK · ${list.size} chat models available."
+                },
+                onFailure = { keyStatus = "Key check failed: ${it.message}" }
+            )
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        voices = app.kittVoice.englishVoices()
+        if (settings.geminiKey.isNotEmpty()) {
+            GeminiAssistantClient(app).listModels(settings.geminiKey).onSuccess { list ->
+                if (list.isNotEmpty()) models = list.map { it.id }
+            }
+        }
+    }
+
+    BackHandler(onBack = onDismiss)
+
+    KittPanel(
+        title = "KITT Config",
+        modifier = modifier.pointerInput(Unit) { detectTapGestures {} },
+        accent = DashAmber,
+        trailing = { KittButton("Close", onDismiss, Modifier.height(32.dp).width(80.dp), DashGrey) }
+    ) {
+        LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // ---------------- AI core ----------------
+            item { SectionHeader("AI core") }
+            item { ChoiceRow(AiProvider.entries, provider, { it.label }, { settings.provider.set(it) }, color = ScannerRed) }
+
+            if (provider == AiProvider.Gemini) {
+                item {
+                    HelpText(
+                        "Get a key at aistudio.google.com/apikey. The free tier works but has no web search; " +
+                            "with billing enabled, Gemini 3.x includes 5,000 free searches a month. " +
+                            if (savedGeminiKey.isNotEmpty()) "A key is saved (encrypted on this unit)." else "No key saved yet."
+                    )
+                }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        KittTextField(geminiKeyInput, { geminiKeyInput = it }, "Paste Gemini API key", Modifier.weight(1f), secret = true)
+                        KittButton(
+                            label = "Save",
+                            onClick = {
+                                settings.setGeminiKey(geminiKeyInput)
+                                geminiKeyInput = ""
+                                testGeminiKey()
+                            },
+                            modifier = Modifier.height(48.dp),
+                            color = LedGreen,
+                            enabled = geminiKeyInput.isNotBlank()
+                        )
+                        KittButton("Test", ::testGeminiKey, Modifier.height(48.dp), DashAmber)
+                        KittButton(
+                            label = "Forget",
+                            onClick = {
+                                settings.setGeminiKey("")
+                                keyStatus = "Key removed."
+                            },
+                            modifier = Modifier.height(48.dp),
+                            color = ScannerRed,
+                            enabled = savedGeminiKey.isNotEmpty()
+                        )
+                    }
+                }
+                keyStatus?.let { item { HelpText(it, color = DashAmber) } }
+                item { Text("CONVERSATION MODEL (FAST)", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
+                item { ChoiceRow(models, chatModel, { it.removePrefix("gemini-") }, { settings.chatModel.set(it) }) }
+                item { Text("DIAGNOSTICS MODEL (SMARTEST)", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
+                item { ChoiceRow(models, diagnosticModel, { it.removePrefix("gemini-") }, { settings.diagnosticModel.set(it) }) }
+                item {
+                    KittToggle(
+                        "Web search",
+                        webSearch,
+                        { settings.webSearch.set(it) },
+                        description = "Grounds answers in Google Search (recalls, service intervals, prices). Skipped automatically on free-tier keys."
+                    )
+                }
+            } else {
+                item {
+                    HelpText(
+                        "Perplexity Agent API key from perplexity.ai/account/api. Every answer is web-grounded. " +
+                            if (savedPerplexityKey.isNotEmpty()) "A key is saved (encrypted on this unit)." else "No key saved yet."
+                    )
+                }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        KittTextField(perplexityKeyInput, { perplexityKeyInput = it }, "Paste Perplexity API key", Modifier.weight(1f), secret = true)
+                        KittButton(
+                            label = "Save",
+                            onClick = {
+                                settings.setPerplexityKey(perplexityKeyInput)
+                                perplexityKeyInput = ""
+                            },
+                            modifier = Modifier.height(48.dp),
+                            color = LedGreen,
+                            enabled = perplexityKeyInput.isNotBlank()
+                        )
+                        KittButton(
+                            label = "Forget",
+                            onClick = { settings.setPerplexityKey("") },
+                            modifier = Modifier.height(48.dp),
+                            color = ScannerRed,
+                            enabled = savedPerplexityKey.isNotEmpty()
+                        )
+                    }
+                }
+                item { Text("CONVERSATION PRESET", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
+                item { ChoiceRow(PERPLEXITY_PRESETS, chatPreset, { it }, { settings.perplexityChatPreset.set(it) }) }
+                item { Text("DIAGNOSTICS PRESET", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
+                item { ChoiceRow(PERPLEXITY_PRESETS, diagPreset, { it }, { settings.perplexityDiagnosticPreset.set(it) }) }
+            }
+
+            item {
+                HelpText(
+                    "Subscriptions (Gemini, Claude, Perplexity Pro) only work inside their own apps. " +
+                        if (handoffApps.isEmpty()) "Install any of those apps and KITT can hand questions to them."
+                        else "Installed for hand-off from the KITT panel: ${handoffApps.joinToString { it.label }}."
+                )
+            }
+
+            // ---------------- Personality ----------------
+            item { SectionHeader("Personality") }
+            item { ChoiceRow(PersonaStyle.entries, persona, { it.label }, { settings.persona.set(it) }, color = ScannerRed) }
+            item {
+                HelpText(
+                    if (persona == PersonaStyle.Unfiltered) {
+                        "Sarcastic, crude and profane on every reply and alert, while staying accurate."
+                    } else {
+                        "Calm, precise and dry, like the original."
+                    }
+                )
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    KittTextField(nameInput, { nameInput = it }, "Driver name (optional)", Modifier.weight(1f))
+                    KittButton(
+                        label = "Save",
+                        onClick = { settings.driverName.set(nameInput.trim()) },
+                        modifier = Modifier.height(48.dp),
+                        color = LedGreen,
+                        enabled = nameInput.trim() != driverName
+                    )
+                }
+            }
+            item { Text("VOICE", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
+            item {
+                ChoiceRow(
+                    options = listOf("") + voices,
+                    selected = voiceName,
+                    label = { if (it.isEmpty()) "System default" else it },
+                    onSelect = {
+                        settings.kittVoiceName.set(it)
+                        app.kittVoice.setVoice(it)
+                        app.kittVoice.speak("Voice check. All systems functional.")
+                    }
+                )
+            }
+            if (voices.isEmpty()) item { HelpText("Voices appear once the text-to-speech engine is ready; reopen this screen if the list is empty.") }
+            item { KittToggle("Speak replies", voiceReply, { settings.voiceReply.set(it) }) }
+            item { KittToggle("Greeting on start", greeting, { settings.greeting.set(it) }) }
+            item {
+                KittToggle(
+                    "Voice alerts",
+                    voiceAlerts,
+                    { settings.voiceAlerts.set(it) },
+                    description = "Overheating, charging faults, new trouble codes and your gauge limits."
+                )
+            }
+
+            // ---------------- Display ----------------
+            item { SectionHeader("Display") }
+            item { ChoiceRow(listOf(false, true), metric, { if (it) "Metric" else "Imperial" }, { settings.metricUnits.set(it) }) }
+            item {
+                KittToggle(
+                    "Scanner over all apps",
+                    overlay,
+                    { enabled ->
+                        if (enabled && !Settings.canDrawOverlays(context)) {
+                            try {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                )
+                            } catch (_: ActivityNotFoundException) {
+                            }
+                        }
+                        settings.scannerOverlay.set(enabled)
+                        if (enabled) ScannerOverlayService.start(context) else ScannerOverlayService.stop(context)
+                    },
+                    description = "Keeps the red scanner sweeping across the top while fullscreen apps are open. " +
+                        "Needs the \"display over other apps\" permission."
+                )
+            }
+
+            // ---------------- Quick links ----------------
+            item { SectionHeader("Quick links") }
+            item {
+                Row(Modifier.fillMaxWidth().height(44.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(
+                        "Bluetooth" to Settings.ACTION_BLUETOOTH_SETTINGS,
+                        "Wi-Fi" to Settings.ACTION_WIFI_SETTINGS,
+                        "Display" to Settings.ACTION_DISPLAY_SETTINGS,
+                        "Home app" to Settings.ACTION_HOME_SETTINGS
+                    ).forEach { (label, action) ->
+                        KittButton(
+                            label = label,
+                            onClick = {
+                                try {
+                                    context.startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                } catch (_: ActivityNotFoundException) {
+                                }
+                            },
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            color = DashAmber
+                        )
+                    }
+                }
+            }
+            item { Column(Modifier.height(24.dp)) {} }
+        }
+    }
+}

@@ -1,0 +1,96 @@
+package com.aiconsole.knightriderlauncher
+
+import android.app.Application
+import android.database.SQLException
+import android.util.Log
+import com.aiconsole.knightriderlauncher.assistant.AssistantPrompt
+import com.aiconsole.knightriderlauncher.assistant.AssistantRepository
+import com.aiconsole.knightriderlauncher.assistant.GeminiAssistantClient
+import com.aiconsole.knightriderlauncher.assistant.KittAlerts
+import com.aiconsole.knightriderlauncher.assistant.PerplexityAssistantClient
+import com.aiconsole.knightriderlauncher.assistant.TextToSpeechHelper
+import com.aiconsole.knightriderlauncher.data.settings.KittSettings
+import com.aiconsole.knightriderlauncher.data.trip.TripDatabase
+import com.aiconsole.knightriderlauncher.data.trip.TripMetricRecorder
+import com.aiconsole.knightriderlauncher.obd.AdapterConfig
+import com.aiconsole.knightriderlauncher.obd.AdapterType
+import com.aiconsole.knightriderlauncher.obd.CustomPidStore
+import com.aiconsole.knightriderlauncher.obd.GaugeStore
+import com.aiconsole.knightriderlauncher.obd.ObdManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
+
+/** Holds app-wide singletons. The OBD session and KITT's voice outlive any single screen. */
+class KittApplication : Application() {
+
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    val settings: KittSettings by lazy { KittSettings(this, appScope) }
+
+    val tripDatabase: TripDatabase by lazy { TripDatabase.create(this) }
+
+    val tripRecorder: TripMetricRecorder by lazy {
+        TripMetricRecorder(tripDatabase.tripMetricDao(), appScope)
+    }
+
+    val gauges: GaugeStore by lazy { GaugeStore(this) }
+
+    val customPids: CustomPidStore by lazy { CustomPidStore(this) }
+
+    val obd: ObdManager by lazy { ObdManager(this, settings, tripRecorder, customPids, appScope) }
+
+    /** KITT's one voice, shared by the assistant and alerts. */
+    val kittVoice: TextToSpeechHelper by lazy { TextToSpeechHelper(this, settings.kittVoiceName.value) }
+
+    val alerts: KittAlerts by lazy { KittAlerts(settings, obd, gauges, kittVoice, appScope) }
+
+    val assistantRepository: AssistantRepository by lazy {
+        AssistantRepository(
+            settings = settings,
+            gemini = GeminiAssistantClient(this),
+            perplexity = PerplexityAssistantClient(this),
+            dao = tripDatabase.tripMetricDao(),
+            recorder = tripRecorder,
+            vehicleContext = { obd.vehicleContext() }
+        )
+    }
+
+    /** Questions queued for KITT from other screens; the assistant consumes and clears them. */
+    val assistantInbox = MutableStateFlow<AssistantPrompt?>(null)
+
+    fun savedAdapter(): AdapterConfig? {
+        val type = runCatching { AdapterType.valueOf(settings.adapterType.value) }.getOrNull() ?: return null
+        val address = settings.adapterAddress.value.ifEmpty { return null }
+        return AdapterConfig(type, address, settings.adapterName.value.ifEmpty { address })
+    }
+
+    fun saveAdapter(config: AdapterConfig) {
+        settings.adapterType.set(config.type.name)
+        settings.adapterAddress.set(config.address)
+        settings.adapterName.set(config.name)
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        // Dashboard gauges are always polled while connected, on screen or not (alerts need them).
+        appScope.launch {
+            gauges.gauges.collect { list -> obd.watch("dashboard", list.map { it.pidId }.toSet()) }
+        }
+        appScope.launch(Dispatchers.IO) {
+            try {
+                val cutoff = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(RETENTION_DAYS)
+                tripDatabase.tripMetricDao().deleteOlderThan(cutoff)
+            } catch (e: SQLException) {
+                Log.w("KittApplication", "Trip log pruning failed", e)
+            }
+        }
+    }
+
+    private companion object {
+        const val RETENTION_DAYS = 90L
+    }
+}

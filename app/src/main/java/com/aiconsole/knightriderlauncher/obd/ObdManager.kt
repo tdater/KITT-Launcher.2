@@ -1,0 +1,508 @@
+package com.aiconsole.knightriderlauncher.obd
+
+import android.content.Context
+import android.util.Log
+import com.aiconsole.knightriderlauncher.assistant.VehicleContext
+import com.aiconsole.knightriderlauncher.data.settings.KittSettings
+import com.aiconsole.knightriderlauncher.data.trip.TripMetricLog
+import com.aiconsole.knightriderlauncher.data.trip.TripMetricRecorder
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import java.io.IOException
+import java.util.Locale
+import kotlin.math.roundToInt
+
+sealed interface ObdState {
+    data object Idle : ObdState
+    data class Connecting(val stage: String) : ObdState
+    data class Connected(val info: ObdSessionInfo) : ObdState
+    data class Error(val message: String, val retryInSeconds: Int) : ObdState
+}
+
+data class ObdSessionInfo(
+    val adapterName: String,
+    val elmVersion: String,
+    val protocol: String,
+    val isCan: Boolean,
+    val vin: String?,
+    val detectedProfile: ManufacturerProfile?,
+    val supportedPidCount: Int
+)
+
+data class PidReading(val value: Double, val timestamp: Long)
+
+data class DtcReport(
+    val stored: List<String>,
+    val pending: List<String>,
+    val permanent: List<String>,
+    val milOn: Boolean,
+    val readAt: Long
+) {
+    val all: List<String> get() = (stored + pending + permanent).distinct()
+}
+
+/**
+ * Owns the OBD session: connect → init ELM327 → discover supported PIDs → read VIN and
+ * detect the manufacturer → poll continuously, with automatic reconnect and backoff.
+ *
+ * Polling is demand-driven (only PIDs something is watching), tiered (fast PIDs every
+ * cycle, slow ones every [SLOW_EVERY] cycles), and batched on CAN (up to 6 Mode 01 PIDs per
+ * request) with the ELM "expected responses" suffix to skip adapter timeouts.
+ */
+class ObdManager(
+    private val context: Context,
+    private val settings: KittSettings,
+    private val recorder: TripMetricRecorder,
+    customPids: CustomPidStore,
+    private val scope: CoroutineScope
+) {
+    private val _state = MutableStateFlow<ObdState>(ObdState.Idle)
+    val state: StateFlow<ObdState> = _state.asStateFlow()
+
+    private val _readings = MutableStateFlow<Map<String, PidReading>>(emptyMap())
+    val readings: StateFlow<Map<String, PidReading>> = _readings.asStateFlow()
+
+    private val _dtcs = MutableStateFlow<DtcReport?>(null)
+    val dtcs: StateFlow<DtcReport?> = _dtcs.asStateFlow()
+
+    /** Full polling cycles per second, like Car Scanner's refresh indicator. */
+    private val _refreshHz = MutableStateFlow(0f)
+    val refreshHz: StateFlow<Float> = _refreshHz.asStateFlow()
+
+    private val _supportedMode01 = MutableStateFlow<Set<Int>>(emptySet())
+    private val _unavailable = MutableStateFlow<Set<String>>(emptySet())
+    private val _detected = MutableStateFlow<ManufacturerProfile?>(null)
+
+    /** Active manufacturer profile: the user's choice, or auto-detected from the VIN. */
+    val profile: StateFlow<ManufacturerProfile> =
+        combine(settings.manufacturerProfile.state, _detected) { choice, detected ->
+            if (choice == ManufacturerProfiles.AUTO) detected ?: ManufacturerProfiles.generic
+            else ManufacturerProfiles.byId(choice) ?: ManufacturerProfiles.generic
+        }.stateIn(scope, SharingStarted.Eagerly, ManufacturerProfiles.generic)
+
+    /** Every PID definition the app knows about right now, by id. */
+    val definitions: StateFlow<Map<String, PidDefinition>> =
+        combine(profile, customPids.pids, settings.manufacturerPids.state) { p, custom, useMfr ->
+            (PidCatalog.standard + PidCatalog.adapterVoltage + (if (useMfr) p.pids else emptyList()) + custom)
+                .associateBy { it.id }
+        }.stateIn(scope, SharingStarted.Eagerly, emptyMap())
+
+    /** PIDs worth offering in pickers: standard ones filtered to what this car supports once known. */
+    val available: StateFlow<List<PidDefinition>> =
+        combine(definitions, _supportedMode01, _unavailable) { defs, supported, dead ->
+            defs.values.filter { def ->
+                def.id !in dead && (supported.isEmpty() || def.mode01Pid?.let { it in supported } ?: true)
+            }.sortedWith(compareBy<PidDefinition> { it.source.ordinal }.thenBy { it.name })
+        }.stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    private val watchers = MutableStateFlow<Map<String, Set<String>>>(emptyMap())
+
+    @Volatile
+    private var elm: Elm327? = null
+
+    @Volatile
+    private var isCan = false
+
+    private var session: Job? = null
+
+    /** Registers the PIDs a screen needs polled; replaces that screen's previous set. */
+    fun watch(key: String, pidIds: Set<String>) = watchers.update { it + (key to pidIds) }
+
+    fun unwatch(key: String) = watchers.update { it - key }
+
+    fun connect(config: AdapterConfig) {
+        session?.cancel()
+        session = scope.launch(Dispatchers.IO) { runWithReconnect(config) }
+    }
+
+    fun disconnect() {
+        session?.cancel()
+        session = null
+        elm = null
+        _state.value = ObdState.Idle
+        _readings.value = emptyMap()
+        _refreshHz.value = 0f
+    }
+
+    suspend fun readCodes(): Result<DtcReport> {
+        val link = elm ?: return Result.failure(IOException("OBD adapter not connected"))
+        return try {
+            Result.success(readCodesInternal(link))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            Result.failure(e)
+        }
+    }
+
+    /** Mode 04: clears codes and freeze frame, and resets readiness monitors. */
+    suspend fun clearCodes(): Result<DtcReport> {
+        val link = elm ?: return Result.failure(IOException("OBD adapter not connected"))
+        return try {
+            val raw = link.exclusive {
+                if (isCan) useHeader(BROADCAST_HEADER)
+                val response = send("04", 5_000)
+                useDefaultHeader()
+                response
+            }
+            ObdResponseParser.errorOf(raw)?.let { return Result.failure(IOException("Clear failed: $it")) }
+            Result.success(readCodesInternal(link))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            Result.failure(e)
+        }
+    }
+
+    /** One-off request for the custom PID editor: raw response plus the decoded value. */
+    suspend fun testPid(def: PidDefinition): String {
+        val link = elm ?: return "Not connected"
+        return try {
+            val raw = link.exclusive {
+                if (def.header != null) useHeader(def.header) else useDefaultHeader()
+                val response = send(def.command, 2_000)
+                useDefaultHeader()
+                response
+            }
+            val data = decodeData(def, raw) ?: return "Raw: ${raw.replace('\n', ' ')}\nNo matching data"
+            val hex = data.joinToString(" ") { "%02X".format(Locale.US, it) }
+            val value = FormulaEvaluator.evaluate(def.formula, data)
+            "Data: $hex\nValue: ${"%.2f".format(Locale.US, value)} ${def.unit(true)}"
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            "Error: ${e.message}"
+        } catch (e: FormulaEvaluator.FormulaException) {
+            "Formula error: ${e.message}"
+        }
+    }
+
+    /** Current vehicle state for the AI assistant, in the driver's display units. */
+    fun vehicleContext(): VehicleContext {
+        val current = _state.value
+        val metric = settings.metricUnits.value
+        val defs = definitions.value
+        val now = System.currentTimeMillis()
+        val lines = _readings.value
+            .filter { now - it.value.timestamp < STALE_MS }
+            .mapNotNull { (id, reading) ->
+                val def = defs[id] ?: return@mapNotNull null
+                val value = def.displayValue(reading.value, metric)
+                "${def.name}: ${formatValue(value, def)} ${def.unit(metric)}".trim()
+            }
+        val info = (current as? ObdState.Connected)?.info
+        val dtc = _dtcs.value
+        return VehicleContext(
+            linkStatus = when (current) {
+                is ObdState.Connected -> "connected (${info?.protocol})"
+                is ObdState.Connecting -> "connecting"
+                is ObdState.Error -> "error: ${current.message}"
+                ObdState.Idle -> "not connected"
+            },
+            vehicle = info?.let { i ->
+                listOfNotNull(profile.value.name.takeIf { profile.value.id != "generic" }, i.vin?.let { "VIN $it" })
+                    .joinToString(", ").ifEmpty { null }
+            },
+            liveReadings = lines,
+            storedCodes = dtc?.stored.orEmpty() + dtc?.permanent.orEmpty(),
+            pendingCodes = dtc?.pending.orEmpty()
+        )
+    }
+
+    // ---------------------------------------------------------------------------------------
+
+    private suspend fun runWithReconnect(config: AdapterConfig) {
+        var attempt = 0
+        while (currentCoroutineContext().isActive) {
+            try {
+                runSession(config)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "OBD session ended", e)
+                attempt++
+                val wait = (3 * attempt).coerceAtMost(30)
+                _state.value = ObdState.Error(e.message ?: e.javaClass.simpleName, wait)
+                _readings.value = emptyMap()
+                _refreshHz.value = 0f
+                delay(wait * 1_000L)
+                continue
+            }
+            attempt = 0
+        }
+    }
+
+    private suspend fun runSession(config: AdapterConfig) {
+        _state.value = ObdState.Connecting("Opening ${config.type.label} link to ${config.name}")
+        val transport = createTransport(context, config)
+        try {
+            transport.connect()
+            val link = Elm327(transport)
+            _state.value = ObdState.Connecting("Initializing adapter")
+            val init = link.initialize(settings.obdProtocol.value)
+            isCan = init.isCan
+
+            _state.value = ObdState.Connecting("Reading vehicle systems")
+            _unavailable.value = emptySet()
+            val supported = link.exclusive { discoverSupported(this, init.isCan) }
+            _supportedMode01.value = supported
+            val vin = runCatching { link.exclusive { ObdResponseParser.vin(ObdResponseParser.messages(send("0902", 5_000))) } }
+                .getOrNull()
+            _detected.value = ManufacturerProfiles.detect(vin)
+
+            elm = link
+            _state.value = ObdState.Connected(
+                ObdSessionInfo(config.name, init.version, init.protocolName, init.isCan, vin, _detected.value, supported.size)
+            )
+            runCatching { readCodesInternal(link) }
+            pollLoop(link)
+        } finally {
+            elm = null
+            transport.close()
+        }
+    }
+
+    private suspend fun discoverSupported(link: Elm327.Link, can: Boolean): Set<Int> {
+        if (can) {
+            // Address the engine ECU directly: faster, and avoids mixed replies from other modules.
+            link.setDefaultHeader(ENGINE_HEADER)
+            link.useHeader(ENGINE_HEADER)
+        }
+        var result = readSupportedBitmaps(link)
+        if (result.isEmpty() && can) {
+            link.setDefaultHeader(BROADCAST_HEADER)
+            link.useHeader(BROADCAST_HEADER)
+            result = readSupportedBitmaps(link)
+        }
+        return result
+    }
+
+    private suspend fun readSupportedBitmaps(link: Elm327.Link): Set<Int> {
+        val all = mutableSetOf<Int>()
+        var base = 0x00
+        while (base <= 0xC0) {
+            val raw = link.send("01%02X".format(Locale.US, base), 3_000)
+            val found = ObdResponseParser.supportedPids(ObdResponseParser.messages(raw), base)
+            all += found
+            if (base + 0x20 !in found) break
+            base += 0x20
+        }
+        return all
+    }
+
+    private suspend fun readCodesInternal(link: Elm327): DtcReport {
+        val report = link.exclusive {
+            // Broadcast so every emissions-related module reports its codes.
+            if (isCan) useHeader(BROADCAST_HEADER)
+            fun parse(raw: String, service: Int) =
+                ObdResponseParser.dtcs(ObdResponseParser.messages(raw), service, isCan)
+            val stored = parse(send("03", 4_000), 0x43)
+            val pending = parse(send("07", 4_000), 0x47)
+            val permanent = if (isCan) parse(send("0A", 4_000), 0x4A) else emptyList()
+            val status = ObdResponseParser.mode01Values(
+                ObdResponseParser.messages(send("0101", 2_000)), PidCatalog.mode01ByteCounts
+            )[0x01]
+            useDefaultHeader()
+            DtcReport(
+                stored = stored,
+                pending = pending,
+                permanent = permanent,
+                milOn = status?.let { it[0].toInt() and 0x80 != 0 } ?: stored.isNotEmpty(),
+                readAt = System.currentTimeMillis()
+            )
+        }
+        _dtcs.value = report
+        return report
+    }
+
+    private suspend fun pollLoop(link: Elm327) {
+        var cycle = 0L
+        var multiPid = settings.obdFastPolling.value && isCan
+        var countHint = true
+        val failures = HashMap<String, Int>()
+        var windowStart = System.currentTimeMillis()
+        var windowCycles = 0
+        var lastLog = 0L
+        var lastMilCheck = System.currentTimeMillis()
+        var lastMilCount = _dtcs.value?.stored?.size ?: 0
+
+        fun fail(def: PidDefinition) {
+            val count = (failures[def.id] ?: 0) + 1
+            failures[def.id] = count
+            if (count >= MAX_FAILURES) _unavailable.update { it + def.id }
+        }
+
+        while (currentCoroutineContext().isActive) {
+            val defs = definitions.value
+            val supported = _supportedMode01.value
+            val dead = _unavailable.value
+            val wanted = (watchers.value.values.flatten() + ALWAYS_POLLED).toSet()
+                .mapNotNull { defs[it] }
+                .filter { it.id !in dead }
+                .filter { def -> def.mode01Pid?.let { supported.isEmpty() || it in supported } ?: true }
+                .filter { isCan || it.header == null }
+            val due = wanted.filter { it.fast || cycle % SLOW_EVERY == 0L }
+            if (due.isEmpty()) {
+                delay(250)
+                cycle++
+                continue
+            }
+
+            val now = System.currentTimeMillis()
+            val results = HashMap<String, Double>()
+
+            // 1) Standard Mode 01 on the engine ECU, batched on CAN.
+            val standard = due.filter { it.mode01Pid != null }
+            val groups = if (multiPid) standard.chunked(6) else standard.map { listOf(it) }
+            for (group in groups) {
+                val command = "01" + group.joinToString("") { "%02X".format(Locale.US, it.mode01Pid) }
+                var raw = link.exclusive {
+                    useDefaultHeader()
+                    send(if (group.size == 1 && countHint && isCan) command + "1" else command, 1_000)
+                }
+                if (raw.trim() == "?" && countHint) {
+                    countHint = false // Old/clone adapter without the response-count suffix.
+                    raw = link.exclusive { send(command, 1_000) }
+                }
+                val values = ObdResponseParser.mode01Values(ObdResponseParser.messages(raw), PidCatalog.mode01ByteCounts)
+                if (group.size > 1 && values.size < (group.size + 1) / 2) {
+                    multiPid = false // ECU doesn't handle multi-PID requests well; go single.
+                }
+                for (def in group) {
+                    val data = values[def.mode01Pid]
+                    val value = data?.let { evaluate(def, it) }
+                    if (value != null) {
+                        results[def.id] = value
+                        failures.remove(def.id)
+                    } else if (!multiPid || group.size == 1) {
+                        fail(def)
+                    }
+                }
+            }
+
+            // 2) Adapter battery voltage.
+            if (due.any { it.id == PidCatalog.ADAPTER_VOLTAGE }) {
+                link.exclusive { ObdResponseParser.voltage(send("ATRV", 1_000)) }
+                    ?.let { results[PidCatalog.ADAPTER_VOLTAGE] = it }
+            }
+
+            // 3) Manufacturer and custom PIDs, each on its own ECU header.
+            for (def in due.filter { it.mode01Pid == null && it.source != PidSource.ADAPTER }) {
+                val raw = link.exclusive {
+                    if (def.header != null) useHeader(def.header) else useDefaultHeader()
+                    send(def.command, 1_500)
+                }
+                val value = decodeData(def, raw)?.let { evaluate(def, it) }
+                if (value != null) {
+                    results[def.id] = value
+                    failures.remove(def.id)
+                } else {
+                    fail(def)
+                }
+            }
+            if (due.any { it.header != null }) link.exclusive { useDefaultHeader() }
+
+            if (results.isNotEmpty()) {
+                _readings.update { old -> old + results.mapValues { PidReading(it.value, now) } }
+            }
+
+            // Refresh-rate indicator.
+            windowCycles++
+            val elapsed = now - windowStart
+            if (elapsed >= 2_000) {
+                _refreshHz.value = windowCycles * 1000f / elapsed
+                windowStart = now
+                windowCycles = 0
+            }
+
+            // 1 Hz trip logging into Room.
+            if (now - lastLog >= 1_000) {
+                lastLog = now
+                logTrip(now)
+            }
+
+            // Cheap MIL/code-count check every 30 s; full code read only when it changes.
+            if (now - lastMilCheck >= 30_000) {
+                lastMilCheck = now
+                val status = link.exclusive {
+                    useDefaultHeader()
+                    ObdResponseParser.mode01Values(ObdResponseParser.messages(send("0101", 1_000)), PidCatalog.mode01ByteCounts)[0x01]
+                }
+                val count = status?.let { it[0].toInt() and 0x7F }
+                if (count != null && count != lastMilCount) {
+                    lastMilCount = count
+                    runCatching { readCodesInternal(link) }
+                }
+            }
+            cycle++
+        }
+    }
+
+    private fun logTrip(now: Long) {
+        val r = _readings.value
+        fun fresh(id: String) = r[id]?.takeIf { now - it.timestamp < STALE_MS }?.value
+        val rpm = fresh(PidCatalog.RPM) ?: return
+        val speed = fresh(PidCatalog.SPEED) ?: return
+        val coolant = fresh(PidCatalog.COOLANT) ?: return
+        val throttle = fresh(PidCatalog.THROTTLE) ?: 0.0
+        recorder.record(
+            TripMetricLog(
+                timestamp = now,
+                rpm = rpm.roundToInt(),
+                speed = speed.roundToInt(),
+                coolantTemp = coolant.roundToInt(),
+                throttlePosition = throttle.toFloat()
+            ),
+            faultCodes = _dtcs.value?.all.orEmpty()
+        )
+    }
+
+    private fun decodeData(def: PidDefinition, raw: String): ByteArray? {
+        if (def.command.startsWith("AT")) return null
+        val request = ObdResponseParser.hexBytes(def.command)
+        return ObdResponseParser.serviceData(ObdResponseParser.messages(raw), request)
+    }
+
+    private fun evaluate(def: PidDefinition, data: ByteArray): Double? = try {
+        FormulaEvaluator.evaluate(def.formula, data).takeIf { it.isFinite() }
+    } catch (_: FormulaEvaluator.FormulaException) {
+        null
+    }
+
+    companion object {
+        private const val TAG = "ObdManager"
+        const val ENGINE_HEADER = "7E0"
+        const val BROADCAST_HEADER = "7DF"
+        private const val SLOW_EVERY = 5L
+        private const val MAX_FAILURES = 5
+        private const val STALE_MS = 5_000L
+
+        /** Needed for logging, the HUD and KITT's alerts regardless of what's on screen. */
+        val ALWAYS_POLLED = setOf(
+            PidCatalog.RPM, PidCatalog.SPEED, PidCatalog.COOLANT, PidCatalog.THROTTLE, PidCatalog.ADAPTER_VOLTAGE
+        )
+
+        fun formatValue(value: Double, def: PidDefinition): String {
+            val span = def.max - def.min
+            return when {
+                span <= 2 -> "%.2f".format(Locale.US, value)
+                span <= 30 || def.quantity == com.aiconsole.knightriderlauncher.obd.Quantity.VOLTAGE ->
+                    "%.1f".format(Locale.US, value)
+                else -> value.roundToInt().toString()
+            }
+        }
+    }
+}
