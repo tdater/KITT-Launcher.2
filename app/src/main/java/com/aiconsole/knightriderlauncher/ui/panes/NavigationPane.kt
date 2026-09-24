@@ -1,12 +1,18 @@
 package com.aiconsole.knightriderlauncher.ui.panes
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,24 +23,36 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import com.aiconsole.knightriderlauncher.nav.NavInstruction
+import com.aiconsole.knightriderlauncher.ui.components.KittButton
 import com.aiconsole.knightriderlauncher.ui.components.KittPanel
 import com.aiconsole.knightriderlauncher.ui.components.LedBarGauge
 import com.aiconsole.knightriderlauncher.ui.gauges.SegmentDisplay
 import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
 import com.aiconsole.knightriderlauncher.ui.theme.DashGrey
+import com.aiconsole.knightriderlauncher.ui.theme.DashWhite
 import com.aiconsole.knightriderlauncher.ui.theme.KittBlack
 import com.aiconsole.knightriderlauncher.ui.theme.LedGreen
 import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
@@ -50,26 +68,37 @@ data class HudState(
 )
 
 /**
- * Top pane. Placeholder for the map / navigation module (swap [NavigationVisualizer] for a
- * MapView or Maps composable), with KITT's digital speedometer and bar-graph tach on top.
+ * Top pane: a themed OpenStreetMap that follows the car (or the 80s vector grid when the map
+ * is off or location isn't allowed), the next turn from Google Maps / Waze, and KITT's digital
+ * speedometer and bar-graph tach on top.
+ *
+ * [hud] is read inside the small readout composables only, so live OBD updates redraw the
+ * readouts without recomposing the map.
  */
 @Composable
-fun NavigationPane(modifier: Modifier = Modifier, hud: HudState = HudState()) {
+fun NavigationPane(
+    modifier: Modifier = Modifier,
+    hud: () -> HudState = { HudState() },
+    showMap: Boolean = false,
+    mapActive: Boolean = true,
+    nav: NavInstruction? = null
+) {
+    val context = LocalContext.current
+    fun hasLocation() = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+        PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    var locationGranted by remember { mutableStateOf(hasLocation()) }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        locationGranted = hasLocation()
+    }
+    val mapController = remember { NavMapController() }
+    val mapOn = showMap && locationGranted
+
     KittPanel(
         title = "Navigation",
         modifier = modifier,
         accent = ScannerRed,
-        trailing = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Box(
-                    Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(if (hud.linked) LedGreen else DashGrey)
-                )
-                Text(hud.linkLabel, style = MaterialTheme.typography.labelMedium, color = if (hud.linked) LedGreen else DashGrey)
-            }
-        }
+        trailing = { LinkIndicator(hud) }
     ) {
         Box(
             Modifier
@@ -77,45 +106,128 @@ fun NavigationPane(modifier: Modifier = Modifier, hud: HudState = HudState()) {
                 .clip(MaterialTheme.shapes.small)
                 .background(KittBlack)
         ) {
-            NavigationVisualizer(Modifier.fillMaxSize())
+            if (mapOn) {
+                NavMap(ScannerRed, mapActive, mapController, Modifier.fillMaxSize())
+            } else {
+                NavigationVisualizer(Modifier.fillMaxSize())
+            }
 
-            Text(
-                text = "MAP MODULE OFFLINE",
-                modifier = Modifier.align(Alignment.TopStart).padding(12.dp),
-                style = MaterialTheme.typography.labelSmall,
-                color = DashGrey
-            )
-
-            // Digital speedometer, bottom right.
             Column(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 14.dp, bottom = 30.dp),
-                horizontalAlignment = Alignment.End
+                Modifier.align(Alignment.TopStart).padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                SegmentDisplay(
-                    text = hud.speed ?: "--",
-                    modifier = Modifier.width(150.dp).height(72.dp),
-                    color = DashAmber,
-                    cells = 3
+                when {
+                    nav != null -> TurnBanner(nav)
+                    showMap && !locationGranted -> KittButton(
+                        label = "Enable map (location)",
+                        onClick = {
+                            permission.launch(
+                                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+                            )
+                        },
+                        modifier = Modifier.height(40.dp),
+                        color = ScannerRed,
+                        active = true
+                    )
+                    !showMap -> Text("MAP MODULE OFFLINE", style = MaterialTheme.typography.labelSmall, color = DashGrey)
+                }
+            }
+            if (mapOn) {
+                KittButton(
+                    label = "Center",
+                    onClick = mapController::recenter,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(10.dp).height(36.dp).width(84.dp),
+                    color = ScannerRed
                 )
-                Text(hud.speedUnit, style = MaterialTheme.typography.labelMedium, color = DashAmber)
             }
 
-            // Bar-graph tachometer along the bottom edge.
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-                LedBarGauge(
-                    level = hud.rpmFraction,
-                    modifier = Modifier.fillMaxWidth().height(12.dp),
-                    segments = 32
-                )
-                Text(
-                    text = hud.rpmText?.let { "$it RPM" } ?: "RPM",
-                    modifier = Modifier.padding(top = 2.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = DashGrey
-                )
+            SpeedReadout(hud, Modifier.align(Alignment.BottomEnd).padding(end = 14.dp, bottom = 30.dp))
+            TachBar(hud, Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp))
+        }
+    }
+}
+
+@Composable
+private fun LinkIndicator(hud: () -> HudState) {
+    val state = hud()
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(
+            Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(if (state.linked) LedGreen else DashGrey)
+        )
+        Text(state.linkLabel, style = MaterialTheme.typography.labelMedium, color = if (state.linked) LedGreen else DashGrey)
+    }
+}
+
+/** Digital speedometer. */
+@Composable
+private fun SpeedReadout(hud: () -> HudState, modifier: Modifier = Modifier) {
+    val state = hud()
+    Column(modifier, horizontalAlignment = Alignment.End) {
+        SegmentDisplay(
+            text = state.speed ?: "--",
+            modifier = Modifier.width(150.dp).height(72.dp),
+            color = DashAmber,
+            cells = 3
+        )
+        Text(state.speedUnit, style = MaterialTheme.typography.labelMedium, color = DashAmber)
+    }
+}
+
+/** Bar-graph tachometer along the bottom edge. */
+@Composable
+private fun TachBar(hud: () -> HudState, modifier: Modifier = Modifier) {
+    val state = hud()
+    Column(modifier) {
+        LedBarGauge(
+            level = state.rpmFraction,
+            modifier = Modifier.fillMaxWidth().height(12.dp),
+            segments = 32
+        )
+        Text(
+            text = state.rpmText?.let { "$it RPM" } ?: "RPM",
+            modifier = Modifier.padding(top = 2.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = DashGrey
+        )
+    }
+}
+
+/** Next maneuver relayed from the navigation app's notification. */
+@Composable
+private fun TurnBanner(nav: NavInstruction) {
+    val shape = MaterialTheme.shapes.small
+    Row(
+        Modifier
+            .widthIn(max = 420.dp)
+            .clip(shape)
+            .background(KittBlack.copy(alpha = 0.88f))
+            .border(1.dp, ScannerRed, shape)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        nav.maneuver?.let { bitmap ->
+            Image(
+                bitmap = remember(bitmap) { bitmap.asImageBitmap() },
+                contentDescription = null,
+                modifier = Modifier.size(52.dp),
+                colorFilter = ColorFilter.tint(ScannerRed)
+            )
+        }
+        Column {
+            Text(nav.primary, style = MaterialTheme.typography.titleMedium, color = DashWhite, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            nav.secondary?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = DashAmber, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
+            Text(
+                listOfNotNull(nav.eta, nav.app.uppercase()).joinToString(" · "),
+                style = MaterialTheme.typography.labelSmall,
+                color = DashGrey,
+                maxLines = 1
+            )
         }
     }
 }

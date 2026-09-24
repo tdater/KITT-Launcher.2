@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.aiconsole.knightriderlauncher.ui.theme.AlertRed
 import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
 import com.aiconsole.knightriderlauncher.ui.theme.DashAmberDim
 import com.aiconsole.knightriderlauncher.ui.theme.DashGrey
@@ -56,6 +57,9 @@ import com.aiconsole.knightriderlauncher.ui.theme.KittGraphite
 import com.aiconsole.knightriderlauncher.ui.theme.LedGreen
 import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
 import com.aiconsole.knightriderlauncher.ui.theme.ScannerRedDim
+import com.aiconsole.knightriderlauncher.ui.theme.ThemeState
+import com.aiconsole.knightriderlauncher.ui.theme.UiTheme
+import androidx.compose.ui.draw.shadow
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -117,10 +121,16 @@ fun KittPanel(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val shape = MaterialTheme.shapes.medium
+    val console = ThemeState.theme == UiTheme.Colorado
     Column(
         modifier
+            // Colorado OS: translucent console glass with a soft phosphor glow over the rain.
+            .then(if (console) Modifier.shadow(10.dp, shape, ambientColor = accent, spotColor = accent) else Modifier)
             .clip(shape)
-            .background(Brush.verticalGradient(listOf(KittGraphite, KittCharcoal)))
+            .background(
+                if (console) Brush.verticalGradient(listOf(KittGraphite.copy(alpha = 0.9f), KittCharcoal.copy(alpha = 0.86f)))
+                else Brush.verticalGradient(listOf(KittGraphite, KittCharcoal))
+            )
             .border(1.dp, KittBezel, shape)
     ) {
         Row(
@@ -129,14 +139,17 @@ fun KittPanel(
                 .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                Modifier
-                    .size(width = 4.dp, height = 14.dp)
-                    .background(accent)
-            )
-            Spacer(Modifier.width(8.dp))
+            if (!console) {
+                Box(
+                    Modifier
+                        .size(width = 4.dp, height = 14.dp)
+                        .background(accent)
+                )
+                Spacer(Modifier.width(8.dp))
+            }
             Text(
-                text = title.uppercase(),
+                // Colorado OS reads like a terminal: "> NAVIGATION".
+                text = if (console) "> ${title.uppercase()}" else title.uppercase(),
                 style = MaterialTheme.typography.labelLarge,
                 color = accent,
                 maxLines = 1
@@ -253,7 +266,7 @@ fun LedBarGauge(
             val onColor = color ?: when {
                 fraction <= 0.6f -> LedGreen
                 fraction <= 0.85f -> DashYellow
-                else -> ScannerRed
+                else -> AlertRed
             }
             drawRect(
                 color = if (i < lit) onColor else onColor.copy(alpha = 0.12f),

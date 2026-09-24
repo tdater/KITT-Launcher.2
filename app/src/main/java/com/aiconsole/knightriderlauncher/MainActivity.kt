@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +40,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.coerceIn
@@ -47,6 +51,8 @@ import com.aiconsole.knightriderlauncher.assistant.AssistantPrompt
 import com.aiconsole.knightriderlauncher.assistant.KittAlert
 import com.aiconsole.knightriderlauncher.data.InstalledApps
 import com.aiconsole.knightriderlauncher.data.LauncherApp
+import com.aiconsole.knightriderlauncher.nav.NavBridge
+import com.aiconsole.knightriderlauncher.nav.NavInstruction
 import com.aiconsole.knightriderlauncher.obd.AdapterDiscovery
 import com.aiconsole.knightriderlauncher.obd.AdapterType
 import com.aiconsole.knightriderlauncher.obd.ObdConnectionService
@@ -69,7 +75,11 @@ import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
 import com.aiconsole.knightriderlauncher.ui.theme.DashWhite
 import com.aiconsole.knightriderlauncher.ui.theme.KittBlack
 import com.aiconsole.knightriderlauncher.ui.theme.KnightRiderLauncherTheme
+import com.aiconsole.knightriderlauncher.ui.theme.MatrixRain
 import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
+import com.aiconsole.knightriderlauncher.ui.theme.ThemeState
+import com.aiconsole.knightriderlauncher.ui.theme.UiTheme
+import com.aiconsole.knightriderlauncher.ui.trip.TripScreen
 import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -94,13 +104,23 @@ class MainActivity : ComponentActivity() {
             KnightRiderLauncherTheme {
                 // This is the home screen: there is nothing to go back to.
                 BackHandler {}
+                val settings = kitt.settings
+                val showMap by settings.showMap.state.collectAsState()
+                val navNotifications by settings.navNotifications.state.collectAsState()
+                val navInstruction by NavBridge.current.collectAsState()
+                val rain by settings.matrixRain.state.collectAsState()
+                val night by kitt.nightMode.night.collectAsState()
                 LauncherRoot(
                     apps = apps,
                     onAppClick = { InstalledApps.launch(this, it) },
                     dash = rememberDashState(kitt),
                     voiceTrigger = voiceTrigger,
                     onAskKitt = { kitt.assistantInbox.value = AssistantPrompt(it, diagnostic = true) },
-                    onDismissAlert = { kitt.alerts.dismiss() }
+                    onDismissAlert = { kitt.alerts.dismiss() },
+                    showMap = showMap,
+                    nav = if (navNotifications) navInstruction else null,
+                    rain = rain && ThemeState.theme == UiTheme.Colorado,
+                    night = night
                 )
             }
         }
@@ -114,11 +134,13 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         LauncherVisibility.visible.value = true
+        kitt.nightMode.setActive(true)
         startVehicleSystems()
     }
 
     override fun onStop() {
         LauncherVisibility.visible.value = false
+        kitt.nightMode.setActive(false)
         super.onStop()
     }
 
@@ -152,11 +174,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-enum class LauncherOverlay { None, MultiView, Assistant, Diagnostics, Config }
+enum class LauncherOverlay { None, MultiView, Assistant, Diagnostics, Config, Trips }
 
 /** Live vehicle state for the home screen. */
 data class DashState(
-    val hud: HudState = HudState(),
+    /** Read lazily so live OBD updates redraw only the HUD readouts, not the map. */
+    val hud: () -> HudState = { HudState() },
     val gauges: List<GaugeUi> = emptyList(),
     val metric: Boolean = false,
     val alert: KittAlert? = null,
@@ -165,35 +188,42 @@ data class DashState(
 
 @Composable
 private fun rememberDashState(app: KittApplication): DashState {
-    val state by app.obd.state.collectAsState()
-    val readings by app.obd.readings.collectAsState()
-    val defs by app.obd.definitions.collectAsState()
+    val state = app.obd.state.collectAsState()
+    val readings = app.obd.readings.collectAsState()
+    val defs = app.obd.definitions.collectAsState()
     val gaugeConfigs by app.gauges.gauges.collectAsState()
-    val metric by app.settings.metricUnits.state.collectAsState()
+    val metric = app.settings.metricUnits.state.collectAsState()
     val alert by app.alerts.active.collectAsState()
     val speaking by app.kittVoice.speaking.collectAsState()
-    val hz by app.obd.refreshHz.collectAsState()
+    val hz = app.obd.refreshHz.collectAsState()
 
-    val speedDef = defs[PidCatalog.SPEED]
-    val speed = readings[PidCatalog.SPEED]?.value
-    val rpm = readings[PidCatalog.RPM]?.value
-    val hud = HudState(
-        speed = if (speed != null && speedDef != null) speedDef.displayValue(speed, metric).roundToInt().toString() else null,
-        speedUnit = if (metric) "KM/H" else "MPH",
-        rpmFraction = ((rpm ?: 0.0) / 7000.0).toFloat().coerceIn(0f, 1f),
-        rpmText = rpm?.roundToInt()?.toString(),
-        linkLabel = when (state) {
-            is ObdState.Connected -> "OBD LINK · ${"%.1f".format(Locale.US, hz)} HZ"
-            is ObdState.Connecting -> "LINKING"
-            is ObdState.Error -> "LINK ERROR"
-            ObdState.Idle -> "OBD OFFLINE"
-        },
-        linked = state is ObdState.Connected
-    )
+    val hudState = remember {
+        derivedStateOf {
+            val isMetric = metric.value
+            val speedDef = defs.value[PidCatalog.SPEED]
+            val speed = readings.value[PidCatalog.SPEED]?.value
+            val rpm = readings.value[PidCatalog.RPM]?.value
+            val link = state.value
+            HudState(
+                speed = if (speed != null && speedDef != null) speedDef.displayValue(speed, isMetric).roundToInt().toString() else null,
+                speedUnit = if (isMetric) "KM/H" else "MPH",
+                rpmFraction = ((rpm ?: 0.0) / 7000.0).toFloat().coerceIn(0f, 1f),
+                rpmText = rpm?.roundToInt()?.toString(),
+                linkLabel = when (link) {
+                    is ObdState.Connected -> "OBD LINK · ${"%.1f".format(Locale.US, hz.value)} HZ"
+                    is ObdState.Connecting -> "LINKING"
+                    is ObdState.Error -> "LINK ERROR"
+                    ObdState.Idle -> "OBD OFFLINE"
+                },
+                linked = link is ObdState.Connected
+            )
+        }
+    }
+    val hud = remember(hudState) { { hudState.value } }
     return DashState(
         hud = hud,
-        gauges = gaugeConfigs.map { GaugeUi(it, defs[it.pidId], readings[it.pidId]) },
-        metric = metric,
+        gauges = gaugeConfigs.map { GaugeUi(it, defs.value[it.pidId], readings.value[it.pidId]) },
+        metric = metric.value,
         alert = alert,
         kittSpeaking = speaking
     )
@@ -216,7 +246,11 @@ fun LauncherRoot(
     dash: DashState = DashState(),
     voiceTrigger: Int = 0,
     onAskKitt: (String) -> Unit = {},
-    onDismissAlert: () -> Unit = {}
+    onDismissAlert: () -> Unit = {},
+    showMap: Boolean = false,
+    nav: NavInstruction? = null,
+    rain: Boolean = false,
+    night: Boolean = false
 ) {
     var overlay by rememberSaveable { mutableStateOf(LauncherOverlay.None) }
     var autoListen by remember { mutableStateOf(false) }
@@ -227,105 +261,135 @@ fun LauncherRoot(
         }
     }
 
-    Column(
+    val askKitt = { prompt: String ->
+        onAskKitt(prompt)
+        autoListen = false
+        overlay = LauncherOverlay.Assistant
+    }
+
+    Box(
         modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .windowInsetsPadding(WindowInsets.safeDrawing)
+            // Night: dim everything, scanner included, without blocking touches.
+            .drawWithContent {
+                drawContent()
+                if (night) drawRect(Color.Black, alpha = NightDim)
+            }
     ) {
-        KittScanner(Modifier.fillMaxWidth().height(ScannerHeight), alert = dash.alert?.severe == true)
+        // Colorado OS: falling glyphs behind the translucent panels.
+        if (rain) MatrixRain(Modifier.fillMaxSize())
 
-        BoxWithConstraints(
+        Column(
             Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .padding(8.dp)
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing)
         ) {
-            val isTall = maxHeight >= maxWidth * 1.2f
-            val gap = 8.dp
-            val dockHeight = (maxHeight * if (isTall) 0.15f else 0.20f).coerceIn(112.dp, 280.dp)
-            val portraitCellWidth = if (maxWidth >= 600.dp) 150.dp else 110.dp
-            val open = { target: LauncherOverlay -> overlay = target }
+            KittScanner(Modifier.fillMaxWidth().height(ScannerHeight), alert = dash.alert?.severe == true)
 
-            val dock = @Composable {
-                ControlDock(
-                    onMultiView = { open(LauncherOverlay.MultiView) },
-                    onAssistant = {
-                        autoListen = false
-                        open(LauncherOverlay.Assistant)
-                    },
-                    onDiagnostics = { open(LauncherOverlay.Diagnostics) },
-                    onConfig = { open(LauncherOverlay.Config) },
-                    modifier = Modifier.fillMaxWidth().height(dockHeight),
-                    kittSpeaking = dash.kittSpeaking
-                )
-            }
-            val grid = @Composable { gridModifier: Modifier, cellWidth: androidx.compose.ui.unit.Dp ->
-                StatusGridPane(
-                    apps = apps,
-                    onAppClick = onAppClick,
-                    modifier = gridModifier,
-                    minCellWidth = cellWidth,
-                    gauges = dash.gauges,
-                    metric = dash.metric,
-                    onGaugeClick = { open(LauncherOverlay.Diagnostics) }
-                )
-            }
+            BoxWithConstraints(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(8.dp)
+            ) {
+                val isTall = maxHeight >= maxWidth * 1.2f
+                val gap = 8.dp
+                val dockHeight = (maxHeight * if (isTall) 0.15f else 0.20f).coerceIn(112.dp, 280.dp)
+                val portraitCellWidth = if (maxWidth >= 600.dp) 150.dp else 110.dp
+                val open = { target: LauncherOverlay -> overlay = target }
+                // The map stops tracking and redrawing while a full-screen overlay covers it.
+                val mapActive = overlay == LauncherOverlay.None || overlay == LauncherOverlay.MultiView
 
-            if (isTall) {
-                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
-                    // 50 : 35 of the space above the dock keeps the 50/35/15 split
-                    NavigationPane(Modifier.fillMaxWidth().weight(0.50f), dash.hud)
-                    grid(Modifier.fillMaxWidth().weight(0.35f), portraitCellWidth)
-                    dock()
+                val dock = @Composable {
+                    ControlDock(
+                        onMultiView = { open(LauncherOverlay.MultiView) },
+                        onAssistant = {
+                            autoListen = false
+                            open(LauncherOverlay.Assistant)
+                        },
+                        onDiagnostics = { open(LauncherOverlay.Diagnostics) },
+                        onConfig = { open(LauncherOverlay.Config) },
+                        modifier = Modifier.fillMaxWidth().height(dockHeight),
+                        kittSpeaking = dash.kittSpeaking,
+                        onTrip = { open(LauncherOverlay.Trips) },
+                        metric = dash.metric
+                    )
                 }
-            } else {
-                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(gap)
-                    ) {
-                        NavigationPane(Modifier.fillMaxHeight().weight(0.60f), dash.hud)
-                        grid(Modifier.fillMaxHeight().weight(0.40f), 120.dp)
+                val grid = @Composable { gridModifier: Modifier, cellWidth: androidx.compose.ui.unit.Dp ->
+                    StatusGridPane(
+                        apps = apps,
+                        onAppClick = onAppClick,
+                        modifier = gridModifier,
+                        minCellWidth = cellWidth,
+                        gauges = dash.gauges,
+                        metric = dash.metric,
+                        onGaugeClick = { open(LauncherOverlay.Diagnostics) }
+                    )
+                }
+                val navPane = @Composable { paneModifier: Modifier ->
+                    NavigationPane(paneModifier, dash.hud, showMap = showMap, mapActive = mapActive, nav = nav)
+                }
+
+                if (isTall) {
+                    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
+                        // 50 : 35 of the space above the dock keeps the 50/35/15 split
+                        navPane(Modifier.fillMaxWidth().weight(0.50f))
+                        grid(Modifier.fillMaxWidth().weight(0.35f), portraitCellWidth)
+                        dock()
                     }
-                    dock()
+                } else {
+                    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(gap)
+                        ) {
+                            navPane(Modifier.fillMaxHeight().weight(0.60f))
+                            grid(Modifier.fillMaxHeight().weight(0.40f), 120.dp)
+                        }
+                        dock()
+                    }
                 }
-            }
 
-            dash.alert?.let { alert ->
-                AlertBanner(alert, onDismissAlert, Modifier.align(Alignment.TopCenter).fillMaxWidth())
-            }
+                dash.alert?.let { alert ->
+                    AlertBanner(alert, onDismissAlert, Modifier.align(Alignment.TopCenter).fillMaxWidth())
+                }
 
-            val close = { overlay = LauncherOverlay.None }
-            when (overlay) {
-                LauncherOverlay.None -> Unit
-                LauncherOverlay.MultiView -> MultiViewScreen(
-                    apps = apps,
-                    onDismiss = close,
-                    modifier = Modifier.fillMaxSize(),
-                    reservedTop = ScannerHeight,
-                    // Dock + outer padding + a gap, so windows stop just above the dock.
-                    reservedBottom = dockHeight + gap * 2
-                )
-                LauncherOverlay.Assistant -> AssistantOverlay(
-                    onDismiss = close,
-                    modifier = Modifier.fillMaxSize(),
-                    autoListen = autoListen
-                )
-                LauncherOverlay.Diagnostics -> DiagnosticsScreen(
-                    onDismiss = close,
-                    onAskKitt = { prompt ->
-                        onAskKitt(prompt)
-                        autoListen = false
-                        overlay = LauncherOverlay.Assistant
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
-                LauncherOverlay.Config -> KittConfigScreen(onDismiss = close, modifier = Modifier.fillMaxSize())
+                val close = { overlay = LauncherOverlay.None }
+                when (overlay) {
+                    LauncherOverlay.None -> Unit
+                    LauncherOverlay.MultiView -> MultiViewScreen(
+                        apps = apps,
+                        onDismiss = close,
+                        modifier = Modifier.fillMaxSize(),
+                        reservedTop = ScannerHeight,
+                        // Dock + outer padding + a gap, so windows stop just above the dock.
+                        reservedBottom = dockHeight + gap * 2
+                    )
+                    LauncherOverlay.Assistant -> AssistantOverlay(
+                        onDismiss = close,
+                        modifier = Modifier.fillMaxSize(),
+                        autoListen = autoListen
+                    )
+                    LauncherOverlay.Diagnostics -> DiagnosticsScreen(
+                        onDismiss = close,
+                        onAskKitt = askKitt,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    LauncherOverlay.Config -> KittConfigScreen(onDismiss = close, modifier = Modifier.fillMaxSize())
+                    LauncherOverlay.Trips -> TripScreen(
+                        onDismiss = close,
+                        onAskKitt = askKitt,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         }
     }
 }
+
+/** How much the night mode darkens the whole launcher. */
+private const val NightDim = 0.45f
 
 /** KITT speaking up: voice bars plus the message, tap to dismiss. */
 @Composable

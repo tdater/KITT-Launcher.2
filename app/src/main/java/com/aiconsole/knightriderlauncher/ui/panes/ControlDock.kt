@@ -22,7 +22,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -33,20 +32,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.aiconsole.knightriderlauncher.KittApplication
 import com.aiconsole.knightriderlauncher.ui.components.KittButton
-import com.aiconsole.knightriderlauncher.ui.components.SegmentedSlider
 import com.aiconsole.knightriderlauncher.ui.components.VoiceModulator
+import com.aiconsole.knightriderlauncher.ui.gauges.SegmentDisplay
 import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
-import com.aiconsole.knightriderlauncher.ui.theme.DashAmberDim
 import com.aiconsole.knightriderlauncher.ui.theme.DashGrey
 import com.aiconsole.knightriderlauncher.ui.theme.KittBezel
 import com.aiconsole.knightriderlauncher.ui.theme.KittBlack
 import com.aiconsole.knightriderlauncher.ui.theme.KittCharcoal
 import com.aiconsole.knightriderlauncher.ui.theme.KittGrid
 import com.aiconsole.knightriderlauncher.ui.theme.LedGreen
-import com.aiconsole.knightriderlauncher.ui.theme.LedGreenDim
 import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
-import kotlin.math.roundToInt
+import com.aiconsole.knightriderlauncher.ui.trip.rememberRecentTrips
+import java.util.Locale
 
 /** Bottom pane: stationary dock with climate, media and vehicle shortcuts. */
 @Composable
@@ -56,7 +55,9 @@ fun ControlDock(
     onDiagnostics: () -> Unit,
     onConfig: () -> Unit,
     modifier: Modifier = Modifier,
-    kittSpeaking: Boolean = false
+    kittSpeaking: Boolean = false,
+    onTrip: () -> Unit = {},
+    metric: Boolean = false
 ) {
     val context = LocalContext.current
     val shape = MaterialTheme.shapes.medium
@@ -73,7 +74,7 @@ fun ControlDock(
                 .padding(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            ClimateSection(Modifier.weight(1.3f).fillMaxHeight())
+            TripSection(onTrip, metric, Modifier.weight(1.3f).fillMaxHeight())
             MediaSection(
                 modifier = Modifier.weight(1f).fillMaxHeight(),
                 onMediaKey = { sendMediaKey(context, it) }
@@ -131,49 +132,49 @@ private fun DockSection(
     }
 }
 
-// TODO: route these to the vehicle HVAC bus (e.g. android.car CarPropertyManager) when available.
+/**
+ * Last drive at a glance; tap for the trip computer. (This slot used to hold climate sliders,
+ * but third-party apps can't reach the HVAC bus on aftermarket head units.)
+ */
 @Composable
-private fun ClimateSection(modifier: Modifier = Modifier) {
-    var driver by rememberSaveable { mutableFloatStateOf(0.48f) }
-    var fan by rememberSaveable { mutableFloatStateOf(0.43f) }
-    var passenger by rememberSaveable { mutableFloatStateOf(0.48f) }
-
-    DockSection("Climate", DashAmber, modifier) {
-        ClimateRow("DRV", driver, { driver = it }, "${toFahrenheit(driver)}°", DashAmber, DashAmberDim, Modifier.weight(1f))
-        ClimateRow("FAN", fan, { fan = it }, "${(fan * 7).roundToInt()}", LedGreen, LedGreenDim, Modifier.weight(1f))
-        ClimateRow("PASS", passenger, { passenger = it }, "${toFahrenheit(passenger)}°", DashAmber, DashAmberDim, Modifier.weight(1f))
+private fun TripSection(onClick: () -> Unit, metric: Boolean, modifier: Modifier = Modifier) {
+    val app = LocalContext.current.applicationContext as KittApplication
+    val latest = rememberRecentTrips(app.tripDatabase.tripMetricDao(), days = 1)?.firstOrNull()
+    DockSection("Trip", DashAmber, modifier.clickable(onClick = onClick)) {
+        TripLine(
+            "DIST",
+            latest?.let { "%.1f".format(Locale.US, if (metric) it.distanceKm else it.distanceKm * 0.621371) } ?: "--",
+            if (metric) "KM" else "MI",
+            DashAmber,
+            Modifier.weight(1f)
+        )
+        TripLine(
+            "ECON",
+            latest?.let { t -> (if (metric) t.litersPer100Km else t.mpg)?.let { "%.1f".format(Locale.US, it) } } ?: "--",
+            if (metric) "L/100" else "MPG",
+            LedGreen,
+            Modifier.weight(1f)
+        )
+        TripLine(
+            "TIME",
+            latest?.let { (it.durationMs / 60_000).toString() } ?: "--",
+            "MIN",
+            DashAmber,
+            Modifier.weight(1f)
+        )
     }
 }
 
-private fun toFahrenheit(value: Float): Int = 60 + (value * 25).roundToInt()
-
 @Composable
-private fun ClimateRow(
-    label: String,
-    value: Float,
-    onValueChange: (Float) -> Unit,
-    readout: String,
-    activeColor: Color,
-    inactiveColor: Color,
-    modifier: Modifier = Modifier
-) {
+private fun TripLine(label: String, value: String, unit: String, color: Color, modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, Modifier.width(34.dp), style = MaterialTheme.typography.labelSmall, color = DashGrey)
-        SegmentedSlider(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight(0.7f),
-            segments = 14,
-            activeColor = activeColor,
-            inactiveColor = inactiveColor
-        )
+        Text(label, Modifier.width(40.dp), style = MaterialTheme.typography.labelSmall, color = DashGrey)
+        SegmentDisplay(value, Modifier.weight(1f).fillMaxHeight(0.8f), color, cells = 5)
         Text(
-            text = readout,
-            modifier = Modifier.width(40.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = activeColor,
+            text = unit,
+            modifier = Modifier.width(44.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = DashGrey,
             textAlign = TextAlign.End,
             maxLines = 1
         )

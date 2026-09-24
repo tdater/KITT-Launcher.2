@@ -34,7 +34,9 @@ import com.aiconsole.knightriderlauncher.assistant.AiAppHandoff
 import com.aiconsole.knightriderlauncher.assistant.GeminiAssistantClient
 import com.aiconsole.knightriderlauncher.data.settings.AiProvider
 import com.aiconsole.knightriderlauncher.data.settings.KittSettings
+import com.aiconsole.knightriderlauncher.data.settings.NightMode
 import com.aiconsole.knightriderlauncher.data.settings.PersonaStyle
+import com.aiconsole.knightriderlauncher.nav.NavBridge
 import com.aiconsole.knightriderlauncher.ui.components.ChoiceRow
 import com.aiconsole.knightriderlauncher.ui.components.HelpText
 import com.aiconsole.knightriderlauncher.ui.components.KittButton
@@ -47,6 +49,8 @@ import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
 import com.aiconsole.knightriderlauncher.ui.theme.DashGrey
 import com.aiconsole.knightriderlauncher.ui.theme.LedGreen
 import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
+import com.aiconsole.knightriderlauncher.ui.theme.UiTheme
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private val PERPLEXITY_PRESETS = listOf("fast", "low", "medium", "high")
@@ -75,6 +79,12 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val voiceName by settings.kittVoiceName.state.collectAsState()
     val metric by settings.metricUnits.state.collectAsState()
     val overlay by settings.scannerOverlay.state.collectAsState()
+    val theme by settings.uiTheme.state.collectAsState()
+    val rain by settings.matrixRain.state.collectAsState()
+    val nightMode by settings.nightMode.state.collectAsState()
+    val showMap by settings.showMap.state.collectAsState()
+    val navNotifications by settings.navNotifications.state.collectAsState()
+    var navAccess by remember { mutableStateOf(NavBridge.hasAccess(context)) }
 
     var geminiKeyInput by remember { mutableStateOf("") }
     var perplexityKeyInput by remember { mutableStateOf("") }
@@ -103,6 +113,14 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
             GeminiAssistantClient(app).listModels(settings.geminiKey).onSuccess { list ->
                 if (list.isNotEmpty()) models = list.map { it.id }
             }
+        }
+    }
+
+    // Notification access is granted in system settings; pick it up when the driver comes back.
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(2_000)
+            navAccess = NavBridge.hasAccess(context)
         }
     }
 
@@ -261,6 +279,19 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
 
             // ---------------- Display ----------------
             item { SectionHeader("Display") }
+            item { Text("THEME", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
+            item { ChoiceRow(UiTheme.entries, theme, { it.label }, { settings.uiTheme.set(it) }, color = ScannerRed) }
+            if (theme == UiTheme.Colorado) {
+                item { KittToggle("Matrix rain", rain, { settings.matrixRain.set(it) }, description = "Falling glyphs behind the panels.") }
+            }
+            item { Text("NIGHT MODE", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
+            item { ChoiceRow(NightMode.entries, nightMode, { it.label }, { settings.nightMode.set(it) }) }
+            item {
+                HelpText(
+                    "Dims the whole launcher for night driving. Auto follows the head unit's light sensor, " +
+                        "or the clock (7 PM to 7 AM) when it has none."
+                )
+            }
             item { ChoiceRow(listOf(false, true), metric, { if (it) "Metric" else "Imperial" }, { settings.metricUnits.set(it) }) }
             item {
                 KittToggle(
@@ -282,6 +313,49 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                     description = "Keeps the red scanner sweeping across the top while fullscreen apps are open. " +
                         "Needs the \"display over other apps\" permission."
                 )
+            }
+
+            // ---------------- Navigation ----------------
+            item { SectionHeader("Navigation") }
+            item {
+                KittToggle(
+                    "Home-screen map",
+                    showMap,
+                    { settings.showMap.set(it) },
+                    description = "OpenStreetMap that follows the car. Needs location access; off shows the vector grid."
+                )
+            }
+            item {
+                KittToggle(
+                    "Turn-by-turn from Maps / Waze",
+                    navNotifications,
+                    { settings.navNotifications.set(it) },
+                    description = "Shows the next turn from Google Maps or Waze on the home screen. " +
+                        "Only those apps' navigation notifications are read."
+                )
+            }
+            if (navNotifications && !navAccess) {
+                item {
+                    KittButton(
+                        label = "Grant notification access",
+                        onClick = {
+                            try {
+                                context.startActivity(NavBridge.accessSettingsIntent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            } catch (_: ActivityNotFoundException) {
+                                try {
+                                    context.startActivity(
+                                        Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    )
+                                } catch (_: ActivityNotFoundException) {
+                                    // Some head-unit ROMs strip this screen entirely.
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        color = DashAmber,
+                        active = true
+                    )
+                }
             }
 
             // ---------------- Quick links ----------------

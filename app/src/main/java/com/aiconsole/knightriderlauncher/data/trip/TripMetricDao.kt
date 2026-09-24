@@ -31,6 +31,9 @@ interface TripMetricDao {
     )
     suspend fun baselineSince(since: Long): MetricBaseline
 
+    @Query("SELECT timestamp, speed, fuelRate FROM trip_metric_log WHERE timestamp >= :since ORDER BY timestamp")
+    suspend fun samplesSince(since: Long): List<TripSample>
+
     @Query("SELECT * FROM trip_metric_log ORDER BY timestamp DESC LIMIT :limit")
     suspend fun latest(limit: Int): List<TripMetricLog>
 

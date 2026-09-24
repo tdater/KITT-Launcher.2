@@ -9,6 +9,7 @@ import com.aiconsole.knightriderlauncher.data.trip.TripMetricRecorder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -17,6 +18,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.sample
+import kotlinx.coroutines.flow.scan
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -43,6 +48,24 @@ data class ObdSessionInfo(
 )
 
 data class PidReading(val value: Double, val timestamp: Long)
+
+/** Sensor snapshot the ECU stored when [dtc] set (Mode 02, frame 0). */
+data class FreezeFrame(val dtc: String, val values: List<FreezeFrameValue>, val readAt: Long)
+
+data class FreezeFrameValue(val def: PidDefinition, val value: Double)
+
+/** Pure driving-state thresholds (speed in km/h), unit-tested. */
+object DrivingRules {
+    const val MOVING_ABOVE_KMH = 8.0
+    const val STOPPED_BELOW_KMH = 3.0
+
+    fun nextMoving(wasMoving: Boolean, speedKmh: Double?): Boolean = when {
+        speedKmh == null -> false
+        speedKmh > MOVING_ABOVE_KMH -> true
+        speedKmh < STOPPED_BELOW_KMH -> false
+        else -> wasMoving
+    }
+}
 
 data class DtcReport(
     val stored: List<String>,
@@ -75,8 +98,27 @@ class ObdManager(
     private val _readings = MutableStateFlow<Map<String, PidReading>>(emptyMap())
     val readings: StateFlow<Map<String, PidReading>> = _readings.asStateFlow()
 
+    /**
+     * [readings] sampled at [DISPLAY_INTERVAL_MS] for the UI. The poll loop can run well above
+     * 10 Hz on CAN; redrawing faster than that only costs frames. Logging and alerts keep
+     * using the full-rate [readings].
+     */
+    @OptIn(FlowPreview::class)
+    val displayReadings: StateFlow<Map<String, PidReading>> =
+        _readings.sample(DISPLAY_INTERVAL_MS).stateIn(scope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    /** True while the vehicle is moving, for driving-mode UI limits. Hysteresis avoids flicker. */
+    val moving: StateFlow<Boolean> = _readings
+        .map { it[PidCatalog.SPEED]?.value }
+        .scan(false) { was, speed -> DrivingRules.nextMoving(was, speed) }
+        .distinctUntilChanged()
+        .stateIn(scope, SharingStarted.Eagerly, false)
+
     private val _dtcs = MutableStateFlow<DtcReport?>(null)
     val dtcs: StateFlow<DtcReport?> = _dtcs.asStateFlow()
+
+    private val _freezeFrame = MutableStateFlow<FreezeFrame?>(null)
+    val freezeFrame: StateFlow<FreezeFrame?> = _freezeFrame.asStateFlow()
 
     /** Full polling cycles per second, like Car Scanner's refresh indicator. */
     private val _refreshHz = MutableStateFlow(0f)
@@ -148,6 +190,18 @@ class ObdManager(
         }
     }
 
+    /** Re-reads the freeze frame on demand (it's also read automatically with stored codes). */
+    suspend fun readFreezeFrame(): Result<FreezeFrame?> {
+        val link = elm ?: return Result.failure(IOException("OBD adapter not connected"))
+        return try {
+            Result.success(readFreezeFrameInternal(link))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            Result.failure(e)
+        }
+    }
+
     /** Mode 04: clears codes and freeze frame, and resets readiness monitors. */
     suspend fun clearCodes(): Result<DtcReport> {
         val link = elm ?: return Result.failure(IOException("OBD adapter not connected"))
@@ -205,6 +259,7 @@ class ObdManager(
             }
         val info = (current as? ObdState.Connected)?.info
         val dtc = _dtcs.value
+        val frame = _freezeFrame.value
         return VehicleContext(
             linkStatus = when (current) {
                 is ObdState.Connected -> "connected (${info?.protocol})"
@@ -218,7 +273,11 @@ class ObdManager(
             },
             liveReadings = lines,
             storedCodes = dtc?.stored.orEmpty() + dtc?.permanent.orEmpty(),
-            pendingCodes = dtc?.pending.orEmpty()
+            pendingCodes = dtc?.pending.orEmpty(),
+            freezeFrameCode = frame?.dtc,
+            freezeFrame = frame?.values.orEmpty().map { (def, value) ->
+                "${def.name}: ${formatValue(def.displayValue(value, metric), def)} ${def.unit(metric)}".trim()
+            }
         )
     }
 
@@ -325,7 +384,51 @@ class ObdManager(
             )
         }
         _dtcs.value = report
+        if (report.stored.isEmpty()) {
+            _freezeFrame.value = null
+        } else {
+            try {
+                readFreezeFrameInternal(link)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: IOException) {
+                Log.w(TAG, "Freeze frame read failed", e) // Codes still count; the frame is a bonus.
+            }
+        }
         return report
+    }
+
+    /** Mode 02 frame 0: the DTC that stored it, then every supported standard PID in it. */
+    private suspend fun readFreezeFrameInternal(link: Elm327): FreezeFrame? {
+        val frame = link.exclusive {
+            useDefaultHeader()
+            fun hex(pid: Int) = "02%02X00".format(Locale.US, pid)
+            val dtc = ObdResponseParser.freezeFrameDtc(ObdResponseParser.messages(send(hex(0x02), 2_000)))
+                ?: return@exclusive null
+            val supported = mutableSetOf<Int>()
+            var base = 0x00
+            while (base <= 0xC0) {
+                val found = ObdResponseParser.freezeFrameSupported(ObdResponseParser.messages(send(hex(base), 2_000)), base)
+                supported += found
+                if (base + 0x20 !in found) break
+                base += 0x20
+            }
+            // ECUs that don't report the Mode 02 bitmap still answer the core set.
+            val defs = PidCatalog.standard.filter { def ->
+                val pid = def.mode01Pid ?: return@filter false
+                if (supported.isEmpty()) def.id in FREEZE_FRAME_CORE else pid in supported
+            }
+            val values = defs.mapNotNull { def ->
+                val pid = def.mode01Pid ?: return@mapNotNull null
+                val data = ObdResponseParser.freezeFrameData(ObdResponseParser.messages(send(hex(pid), 1_500)), pid)
+                    ?: return@mapNotNull null
+                val bytes = if (def.bytes > 0 && data.size > def.bytes) data.copyOfRange(0, def.bytes) else data
+                evaluate(def, bytes)?.let { FreezeFrameValue(def, it) }
+            }
+            FreezeFrame(dtc, values, System.currentTimeMillis())
+        }
+        _freezeFrame.value = frame
+        return frame
     }
 
     private suspend fun pollLoop(link: Elm327) {
@@ -458,13 +561,15 @@ class ObdManager(
         val speed = fresh(PidCatalog.SPEED) ?: return
         val coolant = fresh(PidCatalog.COOLANT) ?: return
         val throttle = fresh(PidCatalog.THROTTLE) ?: 0.0
+        val fuel = PidCatalog.fuelRateLph(fresh(PidCatalog.FUEL_RATE), fresh(PidCatalog.MAF))
         recorder.record(
             TripMetricLog(
                 timestamp = now,
                 rpm = rpm.roundToInt(),
                 speed = speed.roundToInt(),
                 coolantTemp = coolant.roundToInt(),
-                throttlePosition = throttle.toFloat()
+                throttlePosition = throttle.toFloat(),
+                fuelRate = fuel?.toFloat()
             ),
             faultCodes = _dtcs.value?.all.orEmpty()
         )
@@ -489,10 +594,18 @@ class ObdManager(
         private const val SLOW_EVERY = 5L
         private const val MAX_FAILURES = 5
         private const val STALE_MS = 5_000L
+        const val DISPLAY_INTERVAL_MS = 100L
+
+        private val FREEZE_FRAME_CORE = setOf(
+            PidCatalog.RPM, PidCatalog.SPEED, PidCatalog.COOLANT, PidCatalog.ENGINE_LOAD, PidCatalog.THROTTLE,
+            PidCatalog.INTAKE_TEMP, "01_06", "01_07", "01_0B"
+        )
 
         /** Needed for logging, the HUD and KITT's alerts regardless of what's on screen. */
         val ALWAYS_POLLED = setOf(
-            PidCatalog.RPM, PidCatalog.SPEED, PidCatalog.COOLANT, PidCatalog.THROTTLE, PidCatalog.ADAPTER_VOLTAGE
+            PidCatalog.RPM, PidCatalog.SPEED, PidCatalog.COOLANT, PidCatalog.THROTTLE, PidCatalog.ADAPTER_VOLTAGE,
+            // Trip fuel economy; unsupported ones are skipped by the supported-PID filter.
+            PidCatalog.FUEL_RATE, PidCatalog.MAF
         )
 
         fun formatValue(value: Double, def: PidDefinition): String {

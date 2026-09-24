@@ -49,7 +49,10 @@ import com.aiconsole.knightriderlauncher.ui.theme.DashYellow
 import com.aiconsole.knightriderlauncher.ui.theme.KittBezel
 import com.aiconsole.knightriderlauncher.ui.theme.KittBlack
 import com.aiconsole.knightriderlauncher.ui.theme.LedGreen
-import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
+import com.aiconsole.knightriderlauncher.ui.theme.AlertRed
+import com.aiconsole.knightriderlauncher.ui.theme.DashBlue
+import com.aiconsole.knightriderlauncher.ui.theme.ThemeState
+import com.aiconsole.knightriderlauncher.ui.theme.UiTheme
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -83,7 +86,9 @@ fun GaugeTile(
     } else {
         1f
     }
-    val accent = if (warning) ScannerRed.copy(alpha = blink) else DashAmber
+    val console = ThemeState.theme == UiTheme.Colorado
+    // Colorado OS shows readouts in terminal green like its telemetry grid; KITT uses dash amber.
+    val accent = if (warning) AlertRed.copy(alpha = blink) else if (console) LedGreen else DashAmber
 
     val display = if (def != null && base != null) def.displayValue(base, metric) else null
     val text = if (def != null && display != null) ObdManager.formatValue(display, def) else "--"
@@ -97,7 +102,7 @@ fun GaugeTile(
         modifier = modifier
             .clip(shape)
             .background(KittBlack)
-            .border(1.dp, if (warning) ScannerRed else KittBezel, shape)
+            .border(1.dp, if (warning) AlertRed else KittBezel, shape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -107,11 +112,11 @@ fun GaugeTile(
                 text = (def?.shortName ?: "Unknown PID").uppercase(),
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.labelSmall,
-                color = if (warning) ScannerRed else DashGrey,
+                color = if (warning) AlertRed else DashGrey,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Text(def?.unit(metric).orEmpty(), style = MaterialTheme.typography.labelSmall, color = DashGrey)
+            Text(def?.unit(metric).orEmpty(), style = MaterialTheme.typography.labelSmall, color = if (console) DashBlue else DashGrey)
             header?.invoke(this)
         }
         when (gauge.config.style) {
@@ -147,7 +152,7 @@ private fun ColumnScope.DialBody(text: String, fraction: Float, accent: Color) {
                     center.y + radius * 0.78f * sin(angle).toFloat()
                 )
                 val color = when {
-                    t > 0.85f -> ScannerRed
+                    t > 0.85f -> AlertRed
                     t > 0.6f -> DashYellow
                     else -> LedGreen
                 }

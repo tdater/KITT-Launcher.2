@@ -29,7 +29,7 @@ import com.aiconsole.knightriderlauncher.ui.components.KittPanel
 import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
 import com.aiconsole.knightriderlauncher.ui.theme.DashGrey
 import com.aiconsole.knightriderlauncher.ui.theme.LedGreen
-import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
+import com.aiconsole.knightriderlauncher.ui.theme.AlertRed
 import java.util.Locale
 
 enum class DiagTab(val label: String) {
@@ -62,7 +62,7 @@ fun DiagnosticsScreen(
             val (text, color) = when (val s = state) {
                 is ObdState.Connected -> "LINKED · ${"%.1f".format(Locale.US, hz)} HZ" to LedGreen
                 is ObdState.Connecting -> "CONNECTING" to DashAmber
-                is ObdState.Error -> "LINK ERROR · RETRY ${s.retryInSeconds}S" to ScannerRed
+                is ObdState.Error -> "LINK ERROR · RETRY ${s.retryInSeconds}S" to AlertRed
                 ObdState.Idle -> "OFFLINE" to DashGrey
             }
             Text(text, style = MaterialTheme.typography.labelMedium, color = color)

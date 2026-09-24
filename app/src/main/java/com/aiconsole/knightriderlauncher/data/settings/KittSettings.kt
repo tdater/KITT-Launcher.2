@@ -3,6 +3,7 @@ package com.aiconsole.knightriderlauncher.data.settings
 import android.content.Context
 import android.content.SharedPreferences
 import com.aiconsole.knightriderlauncher.BuildConfig
+import com.aiconsole.knightriderlauncher.ui.theme.UiTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +19,12 @@ enum class AiProvider(val label: String) {
 enum class PersonaStyle(val label: String) {
     Unfiltered("Unfiltered KITT"),
     Classic("Classic KITT")
+}
+
+enum class NightMode(val label: String) {
+    Off("Off"),
+    Auto("Auto"),
+    On("Always")
 }
 
 /** All user-facing launcher settings. Plain prefs for options, [SecureStore] for API keys. */
@@ -75,6 +82,21 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     // --- Display ---
     val metricUnits = boolPref("metric_units", false)
     val scannerOverlay = boolPref("scanner_overlay", false)
+    val uiTheme = Pref(
+        "ui_theme", UiTheme.Kitt,
+        { k, d -> runCatching { UiTheme.valueOf(getString(k, d.name)!!) }.getOrDefault(d) },
+        { k, v -> putString(k, v.name) }
+    )
+    val matrixRain = boolPref("matrix_rain", true)
+    val nightMode = Pref(
+        "night_mode", NightMode.Auto,
+        { k, d -> runCatching { NightMode.valueOf(getString(k, d.name)!!) }.getOrDefault(d) },
+        { k, v -> putString(k, v.name) }
+    )
+    val drivingMode = boolPref("driving_mode", true)
+    val showMap = boolPref("show_map", true)
+    val navNotifications = boolPref("nav_notifications", true)
+    val wakeWord = boolPref("wake_word", false)
 
     // --- OBD ---
     val adapterType = stringPref("obd_adapter_type", "")

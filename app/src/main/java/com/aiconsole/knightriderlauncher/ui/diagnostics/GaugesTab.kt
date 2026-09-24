@@ -49,14 +49,14 @@ import com.aiconsole.knightriderlauncher.ui.theme.DashWhite
 import com.aiconsole.knightriderlauncher.ui.theme.KittBezel
 import com.aiconsole.knightriderlauncher.ui.theme.KittBlack
 import com.aiconsole.knightriderlauncher.ui.theme.LedGreen
-import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
+import com.aiconsole.knightriderlauncher.ui.theme.AlertRed
 import java.util.Locale
 
 /** The custom gauge dashboard: live gauges with edit mode, an add-gauge picker and limit editor. */
 @Composable
 fun GaugesTab(app: KittApplication) {
     val gauges by app.gauges.gauges.collectAsState()
-    val readings by app.obd.readings.collectAsState()
+    val readings by app.obd.displayReadings.collectAsState()
     val defs by app.obd.definitions.collectAsState()
     val metric by app.settings.metricUnits.state.collectAsState()
     var editing by remember { mutableStateOf(false) }
@@ -114,7 +114,7 @@ fun GaugesTab(app: KittApplication) {
                                     color = LedGreen
                                 )
                                 KittButton("Limit", { limitsFor = config }, Modifier.weight(1.4f).fillMaxHeight(), DashAmber)
-                                KittButton("X", { app.gauges.remove(config.id) }, Modifier.weight(1f).fillMaxHeight(), ScannerRed)
+                                KittButton("X", { app.gauges.remove(config.id) }, Modifier.weight(1f).fillMaxHeight(), AlertRed)
                             }
                         }
                     }
@@ -128,7 +128,7 @@ fun GaugesTab(app: KittApplication) {
 @Composable
 private fun GaugePicker(app: KittApplication, metric: Boolean, onDone: () -> Unit) {
     val available by app.obd.available.collectAsState()
-    val readings by app.obd.readings.collectAsState()
+    val readings by app.obd.displayReadings.collectAsState()
     var query by remember { mutableStateOf("") }
     var style by remember { mutableStateOf(GaugeStyle.BAR) }
     val filtered = available.filter {

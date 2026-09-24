@@ -46,7 +46,7 @@ import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
 import com.aiconsole.knightriderlauncher.ui.theme.DashGrey
 import com.aiconsole.knightriderlauncher.ui.theme.DashWhite
 import com.aiconsole.knightriderlauncher.ui.theme.LedGreen
-import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
+import com.aiconsole.knightriderlauncher.ui.theme.AlertRed
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -111,7 +111,7 @@ fun LinkTab(app: KittApplication) {
                 val (status, color) = when (val s = state) {
                     is ObdState.Connected -> "CONNECTED" to LedGreen
                     is ObdState.Connecting -> s.stage.uppercase() to DashAmber
-                    is ObdState.Error -> "${s.message} · retry in ${s.retryInSeconds}s" to ScannerRed
+                    is ObdState.Error -> "${s.message} · retry in ${s.retryInSeconds}s" to AlertRed
                     ObdState.Idle -> "NOT CONNECTED" to DashGrey
                 }
                 Text(status, style = MaterialTheme.typography.titleMedium, color = color)
@@ -145,7 +145,7 @@ fun LinkTab(app: KittApplication) {
                     label = "Disconnect",
                     onClick = { ObdConnectionService.stop(context) },
                     modifier = Modifier.weight(1f).fillMaxHeight(),
-                    color = ScannerRed,
+                    color = AlertRed,
                     enabled = state !is ObdState.Idle
                 )
             }

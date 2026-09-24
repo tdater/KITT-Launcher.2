@@ -17,6 +17,8 @@ import com.aiconsole.knightriderlauncher.obd.AdapterType
 import com.aiconsole.knightriderlauncher.obd.CustomPidStore
 import com.aiconsole.knightriderlauncher.obd.GaugeStore
 import com.aiconsole.knightriderlauncher.obd.ObdManager
+import com.aiconsole.knightriderlauncher.ui.theme.NightModeController
+import com.aiconsole.knightriderlauncher.ui.theme.ThemeState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -62,6 +64,9 @@ class KittApplication : Application() {
     /** Questions queued for KITT from other screens; the assistant consumes and clears them. */
     val assistantInbox = MutableStateFlow<AssistantPrompt?>(null)
 
+    /** Night dimming (light sensor or clock); the activity turns the sensor on while visible. */
+    val nightMode: NightModeController by lazy { NightModeController(this, settings, appScope) }
+
     fun savedAdapter(): AdapterConfig? {
         val type = runCatching { AdapterType.valueOf(settings.adapterType.value) }.getOrNull() ?: return null
         val address = settings.adapterAddress.value.ifEmpty { return null }
@@ -76,6 +81,11 @@ class KittApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Apply the saved look before the first frame, then follow changes from KITT Config.
+        ThemeState.theme = settings.uiTheme.value
+        appScope.launch(Dispatchers.Main) {
+            settings.uiTheme.state.collect { ThemeState.theme = it }
+        }
         // Dashboard gauges are always polled while connected, on screen or not (alerts need them).
         appScope.launch {
             gauges.gauges.collect { list -> obd.watch("dashboard", list.map { it.pidId }.toSet()) }

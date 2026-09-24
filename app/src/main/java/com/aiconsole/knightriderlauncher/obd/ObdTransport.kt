@@ -82,16 +82,37 @@ class ClassicBluetoothTransport(context: Context, private val address: String) :
             // Needs BLUETOOTH_SCAN on Android 12+; harmless to skip.
         }
         val device = bt.getRemoteDevice(address)
-        val connected = try {
-            device.createRfcommSocketToServiceRecord(SPP_UUID).also { it.connect() }
-        } catch (first: IOException) {
-            // Many clones have broken SDP records: fall back to RFCOMM channel 1 directly.
-            try {
-                (device.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
-                    .invoke(device, 1) as BluetoothSocket).also { it.connect() }
-            } catch (_: Exception) {
-                throw IOException("Couldn't reach the adapter. Is it plugged in and the ignition on?", first)
+        // Head-unit Bluetooth stacks differ a lot from phones, so try every way in:
+        // 1) secure SPP via SDP, 2) insecure SPP (modules that can't do authenticated links),
+        // 3) raw RFCOMM channel 1 (clones with broken SDP records).
+        val attempts: List<Pair<String, () -> BluetoothSocket>> = listOf(
+            "secure SPP" to { device.createRfcommSocketToServiceRecord(SPP_UUID) },
+            "insecure SPP" to { device.createInsecureRfcommSocketToServiceRecord(SPP_UUID) },
+            "RFCOMM channel 1" to {
+                device.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType).invoke(device, 1) as BluetoothSocket
             }
+        )
+        val failures = mutableListOf<String>()
+        var connected: BluetoothSocket? = null
+        for ((name, open) in attempts) {
+            var candidate: BluetoothSocket? = null
+            try {
+                candidate = open()
+                candidate.connect()
+                connected = candidate
+                break
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                runCatching { candidate?.close() }
+                failures += "$name: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+        if (connected == null) {
+            throw IOException(
+                "Couldn't reach the adapter (${failures.joinToString("; ")}). Check it's plugged in with the ignition on. " +
+                    "Many head units run Bluetooth on a separate module that only offers phone profiles, not SPP; " +
+                    "if pairing works on a phone but never here, use a Wi-Fi or BLE ELM327 instead."
+            )
         }
         socket = connected
         startReading(connected.inputStream, connected.outputStream)

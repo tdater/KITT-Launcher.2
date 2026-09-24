@@ -116,6 +116,41 @@ object ObdResponseParser {
         return out
     }
 
+    /**
+     * Mode 02 freeze-frame data: request `02 <pid> <frame>` answers `42 <pid> <frame> <data>`.
+     * Returns the data bytes for [pid] in [frame], or null when the ECU has none.
+     */
+    fun freezeFrameData(messages: List<ByteArray>, pid: Int, frame: Int = 0): ByteArray? {
+        for (message in messages) {
+            if (message.size < 4 || message[0].u() != 0x42 || message[1].u() != pid || message[2].u() != frame) continue
+            return message.copyOfRange(3, message.size)
+        }
+        return null
+    }
+
+    /** Mode 02 "PIDs supported" bitmap (request 020000, 022000, ...), OR-ed across all ECUs. */
+    fun freezeFrameSupported(messages: List<ByteArray>, base: Int): Set<Int> {
+        val out = mutableSetOf<Int>()
+        for (message in messages) {
+            val data = freezeFrameData(listOf(message), base) ?: continue
+            if (data.size < 4) continue
+            for (byteIndex in 0 until 4) {
+                val b = data[byteIndex].u()
+                for (bit in 0 until 8) {
+                    if (b and (0x80 shr bit) != 0) out += base + byteIndex * 8 + bit + 1
+                }
+            }
+        }
+        return out
+    }
+
+    /** The trouble code that caused the freeze frame (Mode 02 PID 02), or null for none. */
+    fun freezeFrameDtc(messages: List<ByteArray>): String? {
+        val data = freezeFrameData(messages, 0x02) ?: return null
+        if (data.size < 2) return null
+        return DtcDecoder.decode(data[0].u(), data[1].u())
+    }
+
     /** Fault codes from Mode 03/07/0A responses. CAN responses carry a count byte first. */
     fun dtcs(messages: List<ByteArray>, responseService: Int, isCan: Boolean): List<String> {
         val codes = LinkedHashSet<String>()

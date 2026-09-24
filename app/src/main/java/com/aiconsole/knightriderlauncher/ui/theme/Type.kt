@@ -96,3 +96,25 @@ val Typography = Typography(
         letterSpacing = 1.5.sp
     )
 )
+
+/**
+ * Colorado OS: everything in a Courier-style monospace with tighter tracking, like the
+ * TruckAPK console. Sizes match the KITT scale so layouts don't shift when switching.
+ */
+val ColoradoTypography = Typography.run {
+    fun TextStyle.console(tracking: Float) = copy(fontFamily = FontFamily.Monospace, letterSpacing = tracking.sp)
+    copy(
+        displayLarge = displayLarge.console(1f),
+        displayMedium = displayMedium.console(1f),
+        displaySmall = displaySmall.console(0.8f),
+        headlineMedium = headlineMedium.console(1f),
+        headlineSmall = headlineSmall.console(0.5f),
+        titleMedium = titleMedium.console(0.8f),
+        titleSmall = titleSmall.console(0.6f),
+        bodyLarge = bodyLarge.console(0f),
+        bodyMedium = bodyMedium.console(0f),
+        labelLarge = labelLarge.console(0.6f),
+        labelMedium = labelMedium.console(0.4f),
+        labelSmall = labelSmall.console(0.3f)
+    )
+}

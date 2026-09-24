@@ -37,7 +37,7 @@ import com.aiconsole.knightriderlauncher.ui.components.SectionHeader
 import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
 import com.aiconsole.knightriderlauncher.ui.theme.DashGrey
 import com.aiconsole.knightriderlauncher.ui.theme.LedGreen
-import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
+import com.aiconsole.knightriderlauncher.ui.theme.AlertRed
 import kotlinx.coroutines.launch
 
 private const val WATCH_KEY = "diagnostics_pids"
@@ -48,7 +48,7 @@ fun PidsTab(app: KittApplication) {
     val profile by app.obd.profile.collectAsState()
     val custom by app.customPids.pids.collectAsState()
     val available by app.obd.available.collectAsState()
-    val readings by app.obd.readings.collectAsState()
+    val readings by app.obd.displayReadings.collectAsState()
     val metric by app.settings.metricUnits.state.collectAsState()
     val mfrEnabled by app.settings.manufacturerPids.state.collectAsState()
     var showAll by remember { mutableStateOf(false) }
@@ -108,7 +108,7 @@ fun PidsTab(app: KittApplication) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Column(Modifier.weight(1f)) { PidRow(def, readings[def.id]?.value, metric) }
                 KittButton("Edit", { editing = def }, Modifier.width(64.dp).height(44.dp))
-                KittButton("X", { app.customPids.remove(def.id) }, Modifier.width(44.dp).height(44.dp), ScannerRed)
+                KittButton("X", { app.customPids.remove(def.id) }, Modifier.width(44.dp).height(44.dp), AlertRed)
             }
         }
 
@@ -184,7 +184,7 @@ private fun CustomPidEditor(app: KittApplication, existing: PidDefinition?, onDo
         item {
             Column {
                 Field("Formula") { KittTextField(formula, { formula = it }, "A-40", Modifier.fillMaxWidth()) }
-                formulaError?.let { HelpText(it, color = ScannerRed) }
+                formulaError?.let { HelpText(it, color = AlertRed) }
             }
         }
         item {

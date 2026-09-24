@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.aiconsole.knightriderlauncher.data.LauncherApp
+import com.aiconsole.knightriderlauncher.obd.PidReading
 import com.aiconsole.knightriderlauncher.ui.components.KittPanel
 import com.aiconsole.knightriderlauncher.ui.gauges.GaugeTile
 import com.aiconsole.knightriderlauncher.ui.gauges.GaugeTileHeight
@@ -38,7 +39,12 @@ import com.aiconsole.knightriderlauncher.ui.theme.KittBlack
 
 private val AppTileHeight = 96.dp
 
-/** Middle pane: the driver's live gauges followed by quick-launch app shortcuts. */
+/**
+ * Middle pane: the driver's live gauges followed by quick-launch app shortcuts.
+ *
+ * [gauges] carry configuration only; each tile pulls its live value through [reading] inside
+ * its own item, so OBD updates redraw the gauge tiles and never the app grid.
+ */
 @Composable
 fun StatusGridPane(
     apps: List<LauncherApp>,
@@ -47,7 +53,9 @@ fun StatusGridPane(
     minCellWidth: Dp = 140.dp,
     gauges: List<GaugeUi> = emptyList(),
     metric: Boolean = false,
-    onGaugeClick: () -> Unit = {}
+    onGaugeClick: () -> Unit = {},
+    reading: (String) -> PidReading? = { null },
+    appTileHeight: Dp = AppTileHeight
 ) {
     KittPanel(
         title = "Systems",
@@ -78,7 +86,7 @@ fun StatusGridPane(
             }
             items(gauges, key = { "gauge_${it.config.id}" }) { gauge ->
                 GaugeTile(
-                    gauge = gauge,
+                    gauge = gauge.copy(reading = reading(gauge.config.pidId)),
                     metric = metric,
                     modifier = Modifier.height(GaugeTileHeight),
                     onClick = onGaugeClick
@@ -88,7 +96,7 @@ fun StatusGridPane(
                 SectionLabel("Applications")
             }
             items(apps, key = { it.key }) { app ->
-                AppTile(app, onClick = { onAppClick(app) })
+                AppTile(app, appTileHeight, onClick = { onAppClick(app) })
             }
         }
     }
@@ -105,11 +113,11 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
-private fun AppTile(app: LauncherApp, onClick: () -> Unit) {
+private fun AppTile(app: LauncherApp, height: Dp, onClick: () -> Unit) {
     val shape = MaterialTheme.shapes.small
     Column(
         modifier = Modifier
-            .height(AppTileHeight)
+            .height(height)
             .clip(shape)
             .background(KittBlack)
             .border(1.dp, KittBezel, shape)

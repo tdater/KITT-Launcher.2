@@ -84,6 +84,19 @@ object PidCatalog {
     const val FUEL_LEVEL = "01_2F"
     const val INTAKE_TEMP = "01_0F"
     const val MODULE_VOLTAGE = "01_42"
+    const val MAF = "01_10"
+    const val FUEL_RATE = "01_5E"
+
+    /** Gasoline stoichiometric air-fuel ratio and fuel density (g/L), for MAF-based fuel rate. */
+    private const val STOICH_AFR = 14.7
+    private const val GASOLINE_G_PER_L = 745.0
+
+    /**
+     * Fuel burn in L/h: PID 5E when the car reports it, else estimated from MAF (g/s) at
+     * stoichiometric. The MAF estimate suits gasoline engines only; diesels run lean.
+     */
+    fun fuelRateLph(fuelRate: Double?, maf: Double?): Double? =
+        fuelRate ?: maf?.let { it * 3_600.0 / (STOICH_AFR * GASOLINE_G_PER_L) }
     const val ADAPTER_VOLTAGE = "elm_voltage"
 
     private fun std(

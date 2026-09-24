@@ -20,24 +20,29 @@ import com.aiconsole.knightriderlauncher.ui.theme.KittBezel
 import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
 
 /**
- * The always-on KITT front scanner: a black slot with [lamps] red lenses and a persistence
- * trail. Frame updates only trigger a redraw, never recomposition.
+ * The always-on KITT front scanner: a black slot with [lamps] lenses in the theme's accent
+ * and a persistence trail. The sweep speeds up with engine revs ([rpmFraction], 0..1) and
+ * the lamps pulse while KITT is [speaking]. Both are read in the draw pass, so frame and
+ * OBD updates only trigger a redraw, never recomposition.
  */
 @Composable
 fun KittScanner(
     modifier: Modifier = Modifier,
     lamps: Int = 8,
     color: Color = ScannerRed,
-    alert: Boolean = false
+    alert: Boolean = false,
+    rpmFraction: () -> Float = { 0f },
+    speaking: () -> Boolean = { false }
 ) {
     val engine = remember(lamps) { ScannerEngine(lamps) }
-    engine.speed = if (alert) 1.8f else 1f
     var frameNanos by remember { mutableLongStateOf(0L) }
     LaunchedEffect(engine) {
         while (true) withFrameNanos { frameNanos = it }
     }
 
     Canvas(modifier) {
+        engine.speed = ScannerEngine.speedFor(alert, rpmFraction())
+        val pulse = if (speaking()) ScannerEngine.voicePulse(frameNanos) else 1f
         val levels = engine.step(frameNanos)
         drawRect(Color.Black)
         clipRect {
@@ -50,7 +55,7 @@ fun KittScanner(
 
             for (i in 0 until lamps) {
                 val x = gap + i * (lampWidth + gap)
-                val level = levels[i]
+                val level = levels[i] * pulse
                 // Unlit lens: dark ruby glass.
                 drawRoundRect(color.copy(alpha = 0.16f), Offset(x, top), Size(lampWidth, lampHeight), corner)
                 if (level < 0.02f) continue

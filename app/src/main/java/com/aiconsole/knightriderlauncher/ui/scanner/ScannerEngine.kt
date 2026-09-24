@@ -23,6 +23,23 @@ class ScannerEngine(
     /** Speeds the sweep up (e.g. 1.8 while an alert is active). */
     var speed: Float = 1f
 
+    companion object {
+        /**
+         * Sweep speed for the engine state: idle-calm at low revs, up to ~2x near redline,
+         * and never slower than the alert pace while an alert is up.
+         */
+        fun speedFor(alert: Boolean, rpmFraction: Float): Float {
+            val revs = 0.8f + rpmFraction.coerceIn(0f, 1f) * 1.2f
+            return if (alert) maxOf(1.8f, revs) else revs
+        }
+
+        /** Brightness multiplier while KITT talks: a quick 0.55..1 throb, like the voice box. */
+        fun voicePulse(nowNanos: Long): Float {
+            val t = (nowNanos / 1_000_000L % 360L) / 360.0
+            return (0.55 + 0.45 * abs(kotlin.math.sin(t * 2 * PI))).toFloat()
+        }
+    }
+
     /** Advances to [nowNanos] and returns lamp brightness 0..1. The array is reused. */
     fun step(nowNanos: Long): FloatArray {
         val dt = if (lastNanos == 0L) 0.0 else ((nowNanos - lastNanos) / 1_000_000.0).coerceIn(0.0, 100.0)

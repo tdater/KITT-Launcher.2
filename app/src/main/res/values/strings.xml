@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Knight Rider Launcher</string>
+    <string name="nav_listener_label">KITT navigation relay</string>
 </resources>

@@ -24,10 +24,9 @@
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation"
         tools:targetApi="s" />
-    <!-- BLE scanning needs location only on Android 11 and older. -->
-    <uses-permission
-        android:name="android.permission.ACCESS_FINE_LOCATION"
-        android:maxSdkVersion="30" />
+    <!-- The home-screen map's position marker (and BLE scanning on Android 11 and older). -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
 
     <!-- Background vehicle link and the always-on scanner overlay. -->
@@ -45,6 +44,9 @@
         android:required="false" />
     <uses-feature
         android:name="android.hardware.microphone"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.location.gps"
         android:required="false" />
 
     <!-- Package-visibility fallback for builds that drop QUERY_ALL_PACKAGES. -->
@@ -112,6 +114,17 @@
             android:name=".obd.ObdConnectionService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+
+        <!-- Reads Google Maps / Waze turn-by-turn notifications for the home-screen map. -->
+        <service
+            android:name=".nav.NavNotificationListener"
+            android:exported="true"
+            android:label="@string/nav_listener_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
         <service
             android:name=".ui.scanner.ScannerOverlayService"
