@@ -8,9 +8,11 @@ import android.content.pm.PackageManager
 import android.graphics.Rect
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
 import android.view.WindowInsets
 import android.view.WindowManager
 import kotlinx.coroutines.delay
+import org.lsposed.hiddenapibypass.HiddenApiBypass
 import kotlin.math.roundToInt
 
 /** A slot's position as fractions (0..1) of the usable screen area. */
@@ -52,6 +54,7 @@ enum class MultiViewLayout(val label: String, val slots: List<SlotFraction>) {
 
 object MultiWindowLauncher {
 
+    private const val TAG = "MultiWindowLauncher"
     // Hidden WindowConfiguration.WINDOWING_MODE_FREEFORM
     private const val WINDOWING_MODE_FREEFORM = 5
     private const val LAUNCH_STAGGER_MS = 350L
@@ -114,17 +117,19 @@ object MultiWindowLauncher {
     }
 
     /**
-     * Launch bounds alone are ignored on some Android 9+ builds unless the launch also asks
-     * for freeform windowing mode, which is only reachable by reflection. Best effort only.
+     * On AOSP 10+ launch bounds alone are ignored on a fullscreen display: the launch must also
+     * ask for freeform windowing mode. That setter is a hidden API that Android 9+ blocks for
+     * plain reflection, so it goes through HiddenApiBypass. (Samsung honours bare bounds.)
      */
     private fun requestFreeformMode(options: ActivityOptions) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
         try {
-            ActivityOptions::class.java
-                .getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
-                .invoke(options, WINDOWING_MODE_FREEFORM)
-        } catch (_: Exception) {
-            // Not available on this build; the bounds still apply where freeform is the default.
+            HiddenApiBypass.invoke(
+                ActivityOptions::class.java, options, "setLaunchWindowingMode", WINDOWING_MODE_FREEFORM
+            )
+        } catch (e: Exception) {
+            // Windows will open fullscreen; leave a trace so it shows up in logcat.
+            Log.w(TAG, "setLaunchWindowingMode(FREEFORM) unavailable", e)
         }
     }
 
