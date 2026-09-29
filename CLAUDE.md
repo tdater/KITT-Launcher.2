@@ -18,7 +18,7 @@ This is the owner's personal project, and they vibe code it. Deliver complete, w
   4. ECU response (`NO DATA`, `?`, CAN errors, headers);
   5. PID decoding (parser and formulas).
 
-  Classic SPP has never worked on the owner's head unit, so BLE/Wi-Fi are the practical paths there.
+  The owner's adapters are a Veepeak OBDCheck BLE and an OBDAi Gen-1 (likely Classic). The OBDAi connects on the head unit in Torque Pro and Car Scanner Pro, so the head unit supports Classic SPP. If our Classic connect fails there, treat it as an app bug; don't blame the hardware.
 - **Vehicle safety:** never clear DTCs, change ECU settings or send any vehicle write command (Mode 04, Mode 08, writes to Mode 2E/2F/31/3B, etc.) unless the owner explicitly asks for that operation. The existing user-initiated `ObdManager.clearCodes()` stays behind its explicit UI action. Never call it automatically, from the assistant, or during testing, and don't add new write paths unasked.
 - **Verify before calling it done:** after implementing, run `testDebugUnitTest` (plus any new tests) and `assembleDebug`. Fix failures and rerun until both pass. A successful build or passing tests is not proof of a live adapter, ECU or head-unit behavior, so never claim otherwise.
 - **Final report:** end with:
