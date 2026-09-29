@@ -62,13 +62,13 @@ Run `git diff` (plus `git status --short` for new files) and check that:
 
 Fix anything you find, then rerun step 4.
 
-Don't commit unless the owner asked to.
+Once everything passes, commit without asking. Stage only the files this task changed by explicit path (never `git add -A`), and leave the owner's unrelated changes unstaged. Don't push unless asked.
 
 ## 6. Report
 
 End with exactly these sections, kept short:
 
-- **Changed:** files and what each change does.
+- **Changed:** files and what each change does, plus the commit hash.
 - **Verified:** each command that ran and its real result (tests passed/failed with counts, lint errors, build result). Also say whether Capacitor sync or the instrumented tests were skipped and why.
 - **APK:** the full path, or "not built" and why.
 - **Not verified, needs hardware:** only the specific on-device steps this change needs. For example: "On the head unit, connect the BLE adapter, open Diagnostics, confirm RPM updates." For OBD changes, name the layer being tested: transport (Classic/BLE/Wi-Fi), adapter connection, ELM init, ECU response or PID decoding.
