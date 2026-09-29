@@ -2,6 +2,31 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## How to work on this project
+
+This is the owner's personal project, and they vibe code it. Deliver complete, working solutions with as little back-and-forth as possible.
+
+- **Look before changing:** read the relevant code, `gradle/libs.versions.toml` and `AndroidManifest.xml` first. Don't assume the structure matches older notes, this file included; if they disagree, the code wins.
+- **Decide routine things yourself.** Ask only when you're blocked, or before a risky or irreversible action.
+- **Preserve what works:** don't regress existing features, and never discard, overwrite or commit the owner's unrelated uncommitted changes.
+- **Edit sources, not generated output:** never hand-edit `app/build/`, `build/`, `.gradle/`, `.kotlin/` or KSP output. The project has no Capacitor or `node_modules`, so don't add web-wrapper layers.
+- **Android versions:** gate permissions and APIs by SDK level (minSdk 24). Bluetooth is `BLUETOOTH`/`BLUETOOTH_ADMIN` below API 31 and `BLUETOOTH_CONNECT`/`BLUETOOTH_SCAN` from API 31. Location is needed for scans on older versions. `POST_NOTIFICATIONS` applies from API 33, and foreground-service types from API 34. Handle denied permissions, a disabled adapter and missing hardware with a visible error, not a crash.
+- **OBD diagnosis:** name the failing layer and don't blur them together:
+  1. Bluetooth Classic (SPP/RFCOMM), BLE (GATT), or the Wi-Fi transport;
+  2. adapter connection (socket or GATT link up);
+  3. ELM327 initialization (`AT` commands, `>` prompt, protocol detect);
+  4. ECU response (`NO DATA`, `?`, CAN errors, headers);
+  5. PID decoding (parser and formulas).
+
+  Classic SPP has never worked on the owner's head unit, so BLE/Wi-Fi are the practical paths there.
+- **Vehicle safety:** never clear DTCs, change ECU settings or send any vehicle write command (Mode 04, Mode 08, writes to Mode 2E/2F/31/3B, etc.) unless the owner explicitly asks for that operation. The existing user-initiated `ObdManager.clearCodes()` stays behind its explicit UI action. Never call it automatically, from the assistant, or during testing, and don't add new write paths unasked.
+- **Verify before calling it done:** after implementing, run `testDebugUnitTest` (plus any new tests) and `assembleDebug`. Fix failures and rerun until both pass. A successful build or passing tests is not proof of a live adapter, ECU or head-unit behavior, so never claim otherwise.
+- **Final report:** end with:
+  - what changed;
+  - the actual verification results (commands run, pass/fail);
+  - the APK path if one was built (`app/build/outputs/apk/debug/app-debug.apk`);
+  - only the specific on-device test the owner needs to do.
+
 ## What this is
 
 A Knight Rider (KITT) themed Android **home-screen launcher** for aftermarket car head units, primarily a 12.1" portrait (9:16) Tesla-style unit with freeform-window support. It includes:
