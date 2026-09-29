@@ -109,9 +109,9 @@ class ClassicBluetoothTransport(context: Context, private val address: String) :
         }
         if (connected == null) {
             throw IOException(
-                "Couldn't reach the adapter (${failures.joinToString("; ")}). Check it's plugged in with the ignition on. " +
-                    "Many head units run Bluetooth on a separate module that only offers phone profiles, not SPP; " +
-                    "if pairing works on a phone but never here, use a Wi-Fi or BLE ELM327 instead."
+                "Couldn't reach the adapter (${failures.joinToString("; ")}). Check it's plugged in with the ignition on " +
+                    "and not held by another OBD app (close Torque or Car Scanner, since an adapter only takes one connection). " +
+                    "If Android asked for a PIN, try 1234 or 0000. Unplugging the adapter for a few seconds resets it."
             )
         }
         socket = connected

@@ -80,6 +80,7 @@ fun LinkTab(app: KittApplication) {
     var hasPermission by remember { mutableStateOf(AdapterDiscovery.hasPermissions(context)) }
     var paired by remember { mutableStateOf(if (hasPermission) AdapterDiscovery.pairedDevices(context) else emptyList()) }
     val bleFound = remember { mutableStateListOf<AdapterConfig>() }
+    val classicFound = remember { mutableStateListOf<AdapterConfig>() }
     var scanning by remember { mutableStateOf<Job?>(null) }
     var wifiAddress by remember { mutableStateOf("192.168.0.10:35000") }
 
@@ -158,7 +159,15 @@ fun LinkTab(app: KittApplication) {
                 KittButton("Allow Bluetooth access", ::requestPermissions, Modifier.fillMaxWidth().height(44.dp), DashAmber, active = true)
             }
         } else {
-            item { HelpText("Pair classic ELM327 dongles in Android Bluetooth settings first (PIN is usually 1234 or 0000).") }
+            item {
+                HelpText(
+                    "Scan to find your adapter; it doesn't need pairing in Android settings first. " +
+                        "If Android asks for a PIN when connecting, it's usually 1234 or 0000."
+                )
+            }
+            if (AdapterDiscovery.scanNeedsLocationEnabled(context)) {
+                item { HelpText("Turn on Location: this Android version finds no Bluetooth devices while it's off.", color = AlertRed) }
+            }
             items(paired, key = { "p_${it.address}" }) { device ->
                 KittButton(
                     label = "${device.name}${if (AdapterDiscovery.isLikelyObd(device.name)) "  · OBD" else ""}",
@@ -171,15 +180,27 @@ fun LinkTab(app: KittApplication) {
             item {
                 Row(Modifier.fillMaxWidth().height(44.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     KittButton(
-                        label = if (scanning != null) "Scanning…" else "Scan for BLE adapters",
+                        label = if (scanning != null) "Scanning…" else "Scan for adapters",
                         onClick = {
                             bleFound.clear()
+                            classicFound.clear()
+                            paired = AdapterDiscovery.pairedDevices(context)
                             scanning = scope.launch {
+                                val classic = launch {
+                                    withTimeoutOrNull(15_000) {
+                                        AdapterDiscovery.scanClassic(context).collect { found ->
+                                            val known = classicFound.any { it.address == found.address } ||
+                                                paired.any { it.address == found.address }
+                                            if (!known) classicFound += found
+                                        }
+                                    }
+                                }
                                 withTimeoutOrNull(10_000) {
                                     AdapterDiscovery.scanBle(context).collect { found ->
                                         if (bleFound.none { it.address == found.address }) bleFound += found
                                     }
                                 }
+                                classic.join()
                                 scanning = null
                             }
                         },
@@ -199,6 +220,15 @@ fun LinkTab(app: KittApplication) {
                         color = DashAmber
                     )
                 }
+            }
+            items(classicFound.sortedByDescending { AdapterDiscovery.isLikelyObd(it.name) }, key = { "c_${it.address}" }) { device ->
+                KittButton(
+                    label = "BT · ${device.name}${if (AdapterDiscovery.isLikelyObd(device.name)) "  · OBD" else ""}",
+                    onClick = { choose(device) },
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    color = LedGreen,
+                    active = saved?.address == device.address
+                )
             }
             items(bleFound.sortedByDescending { AdapterDiscovery.isLikelyObd(it.name) }, key = { "b_${it.address}" }) { device ->
                 KittButton(
