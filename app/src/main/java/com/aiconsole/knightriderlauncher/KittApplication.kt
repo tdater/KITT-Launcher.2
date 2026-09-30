@@ -12,6 +12,7 @@ import com.aiconsole.knightriderlauncher.assistant.TextToSpeechHelper
 import com.aiconsole.knightriderlauncher.data.settings.KittSettings
 import com.aiconsole.knightriderlauncher.data.trip.TripDatabase
 import com.aiconsole.knightriderlauncher.data.trip.TripMetricRecorder
+import com.aiconsole.knightriderlauncher.media.MediaBridge
 import com.aiconsole.knightriderlauncher.obd.AdapterConfig
 import com.aiconsole.knightriderlauncher.obd.AdapterType
 import com.aiconsole.knightriderlauncher.obd.CustomPidStore
@@ -46,6 +47,9 @@ class KittApplication : Application() {
     val customPids: CustomPidStore by lazy { CustomPidStore(this) }
 
     val obd: ObdManager by lazy { ObdManager(this, settings, tripRecorder, customPids, appScope) }
+
+    /** Now-playing from the active media session (needs notification access). */
+    val media: MediaBridge by lazy { MediaBridge(this) }
 
     /** Last few minutes of every polled sensor, for the live graphs. */
     val pidHistory = PidHistory()

@@ -81,7 +81,9 @@ fun NavigationPane(
     hud: () -> HudState = { HudState() },
     showMap: Boolean = false,
     mapActive: Boolean = true,
-    nav: NavInstruction? = null
+    nav: NavInstruction? = null,
+    /** Opens the streaming window over this pane; null hides the button. */
+    onStream: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     fun hasLocation() = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -132,13 +134,16 @@ fun NavigationPane(
                     !showMap -> Text("MAP MODULE OFFLINE", style = MaterialTheme.typography.labelSmall, color = DashGrey)
                 }
             }
-            if (mapOn) {
-                KittButton(
-                    label = "Center",
-                    onClick = mapController::recenter,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(10.dp).height(36.dp).width(84.dp),
-                    color = ScannerRed
-                )
+            Row(
+                Modifier.align(Alignment.TopEnd).padding(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (onStream != null) {
+                    KittButton("Stream", onStream, Modifier.height(36.dp).width(84.dp), ScannerRed, active = true)
+                }
+                if (mapOn) {
+                    KittButton("Center", mapController::recenter, Modifier.height(36.dp).width(84.dp), ScannerRed)
+                }
             }
 
             SpeedReadout(hud, Modifier.align(Alignment.BottomEnd).padding(end = 14.dp, bottom = 30.dp))

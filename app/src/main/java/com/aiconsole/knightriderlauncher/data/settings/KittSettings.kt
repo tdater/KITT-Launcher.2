@@ -118,6 +118,10 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     )
     val drivingMode = boolPref("driving_mode", true)
     val showMap = boolPref("show_map", true)
+
+    // --- Home & app drawer (newline-separated LauncherApp keys, see AppLists) ---
+    val pinnedApps = stringPref("pinned_apps", "")
+    val hiddenApps = stringPref("hidden_apps", "")
     val navNotifications = boolPref("nav_notifications", true)
     val wakeWord = boolPref("wake_word", false)
 

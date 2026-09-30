@@ -55,7 +55,8 @@ fun StatusGridPane(
     metric: Boolean = false,
     onGaugeClick: () -> Unit = {},
     reading: (String) -> PidReading? = { null },
-    appTileHeight: Dp = AppTileHeight
+    appTileHeight: Dp = AppTileHeight,
+    appsTitle: String = "Applications"
 ) {
     KittPanel(
         title = "Systems",
@@ -93,7 +94,7 @@ fun StatusGridPane(
                 )
             }
             item(key = "header_apps", span = { GridItemSpan(maxLineSpan) }) {
-                SectionLabel("Applications")
+                SectionLabel(appsTitle)
             }
             items(apps, key = { it.key }) { app ->
                 AppTile(app, appTileHeight, onClick = { onAppClick(app) })

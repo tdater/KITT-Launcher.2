@@ -21,16 +21,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aiconsole.knightriderlauncher.KittApplication
 import com.aiconsole.knightriderlauncher.ui.components.KittButton
@@ -38,6 +37,7 @@ import com.aiconsole.knightriderlauncher.ui.components.VoiceModulator
 import com.aiconsole.knightriderlauncher.ui.gauges.SegmentDisplay
 import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
 import com.aiconsole.knightriderlauncher.ui.theme.DashGrey
+import com.aiconsole.knightriderlauncher.ui.theme.DashWhite
 import com.aiconsole.knightriderlauncher.ui.theme.KittBezel
 import com.aiconsole.knightriderlauncher.ui.theme.KittBlack
 import com.aiconsole.knightriderlauncher.ui.theme.KittCharcoal
@@ -180,18 +180,40 @@ private fun TripLine(label: String, value: String, unit: String, color: Color, m
     }
 }
 
+/** Compact now-playing: track and progress when a media session is visible, else plain media keys. */
 @Composable
 private fun MediaSection(onMediaKey: (Int) -> Unit, modifier: Modifier = Modifier) {
-    // Local play/pause indicator only; hook a MediaController session for true playback state.
-    var playing by rememberSaveable { mutableStateOf(false) }
+    val app = LocalContext.current.applicationContext as KittApplication
+    val now by app.media.nowPlaying.collectAsState()
+    val current = now
 
     DockSection("Media", ScannerRed, modifier) {
-        VoiceModulator(
-            active = playing,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-        )
+        if (current != null) {
+            Column(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.Center) {
+                Text(
+                    current.title ?: current.appLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = DashWhite,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    current.artist ?: current.appLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = DashGrey,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                ProgressBar(current)
+            }
+        } else {
+            VoiceModulator(
+                active = false,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -200,23 +222,20 @@ private fun MediaSection(onMediaKey: (Int) -> Unit, modifier: Modifier = Modifie
         ) {
             KittButton(
                 label = "Prev",
-                onClick = { onMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS) },
+                onClick = { if (current != null) app.media.previous() else onMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS) },
                 modifier = Modifier.weight(1f).fillMaxHeight(),
                 color = ScannerRed
             )
             KittButton(
-                label = if (playing) "Pause" else "Play",
-                onClick = {
-                    playing = !playing
-                    onMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
-                },
+                label = if (current?.playing == true) "Pause" else "Play",
+                onClick = { if (current != null) app.media.playPause() else onMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) },
                 modifier = Modifier.weight(1f).fillMaxHeight(),
                 color = ScannerRed,
-                active = playing
+                active = current?.playing == true
             )
             KittButton(
                 label = "Next",
-                onClick = { onMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT) },
+                onClick = { if (current != null) app.media.next() else onMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT) },
                 modifier = Modifier.weight(1f).fillMaxHeight(),
                 color = ScannerRed
             )

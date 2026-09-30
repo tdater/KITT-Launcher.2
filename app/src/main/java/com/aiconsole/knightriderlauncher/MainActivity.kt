@@ -25,9 +25,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -35,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.aiconsole.knightriderlauncher.assistant.AssistantPrompt
 import com.aiconsole.knightriderlauncher.assistant.KittAlert
+import com.aiconsole.knightriderlauncher.data.AppLists
 import com.aiconsole.knightriderlauncher.data.InstalledApps
 import com.aiconsole.knightriderlauncher.data.LauncherApp
 import com.aiconsole.knightriderlauncher.nav.NavBridge
@@ -60,13 +65,19 @@ import com.aiconsole.knightriderlauncher.obd.ObdState
 import com.aiconsole.knightriderlauncher.obd.PidCatalog
 import com.aiconsole.knightriderlauncher.obd.PidReading
 import com.aiconsole.knightriderlauncher.ui.assistant.AssistantOverlay
+import com.aiconsole.knightriderlauncher.ui.components.KittButton
 import com.aiconsole.knightriderlauncher.ui.components.VoiceModulator
 import com.aiconsole.knightriderlauncher.ui.diagnostics.DiagnosticsScreen
 import com.aiconsole.knightriderlauncher.ui.gauges.GaugeUi
+import com.aiconsole.knightriderlauncher.ui.panes.AppDrawerPane
 import com.aiconsole.knightriderlauncher.ui.panes.ControlDock
+import com.aiconsole.knightriderlauncher.ui.panes.GaugeWallPane
 import com.aiconsole.knightriderlauncher.ui.panes.HudState
+import com.aiconsole.knightriderlauncher.ui.panes.MediaPane
 import com.aiconsole.knightriderlauncher.ui.panes.NavigationPane
 import com.aiconsole.knightriderlauncher.ui.panes.StatusGridPane
+import com.aiconsole.knightriderlauncher.ui.panes.StreamSession
+import com.aiconsole.knightriderlauncher.ui.panes.StreamWindow
 import com.aiconsole.knightriderlauncher.ui.scanner.KittScanner
 import com.aiconsole.knightriderlauncher.ui.scanner.LauncherVisibility
 import com.aiconsole.knightriderlauncher.ui.scanner.ScannerEngine
@@ -81,9 +92,9 @@ import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
 import com.aiconsole.knightriderlauncher.ui.theme.ThemeState
 import com.aiconsole.knightriderlauncher.ui.theme.UiTheme
 import com.aiconsole.knightriderlauncher.ui.trip.TripScreen
-import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -91,6 +102,9 @@ class MainActivity : ComponentActivity() {
 
     /** Bumped by the steering-wheel voice button (VOICE_COMMAND / ASSIST intents). */
     private var voiceTrigger by mutableIntStateOf(0)
+
+    /** Bumped when Home is pressed while the launcher is already showing: back to the Drive page. */
+    private var homeTrigger by mutableIntStateOf(0)
 
     private val kitt: KittApplication get() = application as KittApplication
 
@@ -111,8 +125,19 @@ class MainActivity : ComponentActivity() {
                 val navInstruction by NavBridge.current.collectAsState()
                 val rain by settings.matrixRain.state.collectAsState()
                 val night by kitt.nightMode.night.collectAsState()
+                val pinnedStored by settings.pinnedApps.state.collectAsState()
+                val hiddenStored by settings.hiddenApps.state.collectAsState()
+                val obdMoving by kitt.obd.moving.collectAsState()
+                val pinned = remember(pinnedStored) { AppLists.decode(pinnedStored) }
+                val homeApps = remember(apps, pinned, hiddenStored) {
+                    AppLists.homeSelection(apps, LauncherApp::key, pinned, AppLists.decode(hiddenStored).toSet())
+                }
                 LauncherRoot(
                     apps = apps,
+                    homeApps = homeApps,
+                    favorites = pinned.isNotEmpty(),
+                    homeTrigger = homeTrigger,
+                    obdMoving = obdMoving,
                     onAppClick = { InstalledApps.launch(this, it) },
                     dash = rememberDashState(kitt),
                     voiceTrigger = voiceTrigger,
@@ -130,12 +155,15 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleVoiceIntent(intent)
+        if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_HOME)) homeTrigger++
     }
 
     override fun onStart() {
         super.onStart()
         LauncherVisibility.visible.value = true
         kitt.nightMode.setActive(true)
+        // Re-check media sessions: notification access may have just been granted in Settings.
+        kitt.media.start()
         startVehicleSystems()
     }
 
@@ -262,6 +290,11 @@ fun LauncherRoot(
     apps: List<LauncherApp>,
     onAppClick: (LauncherApp) -> Unit,
     modifier: Modifier = Modifier,
+    /** Home grid apps: pinned favourites, or everything not hidden. */
+    homeApps: List<LauncherApp> = apps,
+    favorites: Boolean = false,
+    homeTrigger: Int = 0,
+    obdMoving: Boolean = false,
     dash: DashState = DashState(),
     voiceTrigger: Int = 0,
     onAskKitt: (String) -> Unit = {},
@@ -273,6 +306,20 @@ fun LauncherRoot(
 ) {
     var overlay by rememberSaveable { mutableStateOf(LauncherOverlay.None) }
     var autoListen by remember { mutableStateOf(false) }
+    val pager = rememberPagerState { HomePage.entries.size }
+    val scope = rememberCoroutineScope()
+    val stream = remember { StreamSession() }
+    DisposableEffect(stream) { onDispose { stream.close() } }
+    // Back steps through the stream's pages, then returns to the map.
+    BackHandler(enabled = stream.visible && overlay == LauncherOverlay.None) {
+        if (stream.canGoBack()) stream.goBack() else stream.visible = false
+    }
+    LaunchedEffect(homeTrigger) {
+        if (homeTrigger > 0) {
+            overlay = LauncherOverlay.None
+            pager.animateScrollToPage(HomePage.Drive.ordinal)
+        }
+    }
     LaunchedEffect(voiceTrigger) {
         if (voiceTrigger > 0) {
             autoListen = true
@@ -317,8 +364,9 @@ fun LauncherRoot(
                 val dockHeight = (maxHeight * if (isTall) 0.15f else 0.20f).coerceIn(112.dp, 280.dp)
                 val portraitCellWidth = if (maxWidth >= 600.dp) 150.dp else 110.dp
                 val open = { target: LauncherOverlay -> overlay = target }
-                // The map stops tracking and redrawing while a full-screen overlay covers it.
-                val mapActive = overlay == LauncherOverlay.None
+                val onDrive = pager.currentPage == HomePage.Drive.ordinal
+                // The map stops tracking and redrawing while it's covered or paged away.
+                val mapActive = overlay == LauncherOverlay.None && onDrive && !stream.visible
 
                 val dock = @Composable {
                     ControlDock(
@@ -336,7 +384,8 @@ fun LauncherRoot(
                 }
                 val grid = @Composable { gridModifier: Modifier, cellWidth: androidx.compose.ui.unit.Dp ->
                     StatusGridPane(
-                        apps = apps,
+                        apps = homeApps,
+                        appsTitle = if (favorites) "Favorites" else "Applications",
                         onAppClick = onAppClick,
                         modifier = gridModifier,
                         minCellWidth = cellWidth,
@@ -347,27 +396,54 @@ fun LauncherRoot(
                     )
                 }
                 val navPane = @Composable { paneModifier: Modifier ->
-                    NavigationPane(paneModifier, dash.hud, showMap = showMap, mapActive = mapActive, nav = nav)
+                    Box(paneModifier) {
+                        NavigationPane(
+                            Modifier.fillMaxSize(),
+                            dash.hud,
+                            showMap = showMap,
+                            mapActive = mapActive,
+                            nav = nav,
+                            onStream = { stream.visible = true }
+                        )
+                        // The streaming window takes the map's place; the rest of home stays put.
+                        if (stream.visible) StreamWindow(stream, obdMoving, Modifier.fillMaxSize())
+                    }
                 }
 
-                if (isTall) {
-                    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
-                        // 50 : 35 of the space above the dock keeps the 50/35/15 split
-                        navPane(Modifier.fillMaxWidth().weight(0.50f))
-                        grid(Modifier.fillMaxWidth().weight(0.35f), portraitCellWidth)
-                        dock()
-                    }
-                } else {
-                    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().weight(1f),
-                            horizontalArrangement = Arrangement.spacedBy(gap)
-                        ) {
-                            navPane(Modifier.fillMaxHeight().weight(0.60f))
-                            grid(Modifier.fillMaxHeight().weight(0.40f), 120.dp)
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
+                    HorizontalPager(
+                        state = pager,
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        // The map and the stream need horizontal drags; use the page tabs from there.
+                        userScrollEnabled = !(onDrive && (showMap || stream.visible)),
+                        pageSpacing = gap
+                    ) { page ->
+                        when (HomePage.entries[page]) {
+                            HomePage.Drive -> if (isTall) {
+                                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
+                                    // 50 : 35 of the space above the dock keeps the 50/35/15 split
+                                    navPane(Modifier.fillMaxWidth().weight(0.50f))
+                                    grid(Modifier.fillMaxWidth().weight(0.35f), portraitCellWidth)
+                                }
+                            } else {
+                                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                                    navPane(Modifier.fillMaxHeight().weight(0.60f))
+                                    grid(Modifier.fillMaxHeight().weight(0.40f), 120.dp)
+                                }
+                            }
+                            HomePage.Gauges -> GaugeWallPane(
+                                gauges = dash.gauges,
+                                metric = dash.metric,
+                                reading = dash.reading,
+                                onGaugeClick = { open(LauncherOverlay.Diagnostics) },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            HomePage.Media -> MediaPane(Modifier.fillMaxSize())
+                            HomePage.Apps -> AppDrawerPane(apps, onAppClick, Modifier.fillMaxSize())
                         }
-                        dock()
                     }
+                    PageTabs(pager.currentPage) { scope.launch { pager.animateScrollToPage(it) } }
+                    dock()
                 }
 
                 dash.alert?.let { alert ->
@@ -395,6 +471,25 @@ fun LauncherRoot(
                     )
                 }
             }
+        }
+    }
+}
+
+/** Home pages, swiped or picked from the tabs above the dock. */
+private enum class HomePage(val label: String) { Drive("Drive"), Gauges("Gauges"), Media("Media"), Apps("Apps") }
+
+/** Page selector drawn as KITT console buttons: big targets, readable at a glance. */
+@Composable
+private fun PageTabs(current: Int, onSelect: (Int) -> Unit) {
+    Row(Modifier.fillMaxWidth().height(40.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        HomePage.entries.forEach { page ->
+            KittButton(
+                label = page.label,
+                onClick = { onSelect(page.ordinal) },
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                color = ScannerRed,
+                active = page.ordinal == current
+            )
         }
     }
 }
