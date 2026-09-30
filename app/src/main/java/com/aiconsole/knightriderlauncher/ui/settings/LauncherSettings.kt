@@ -1,6 +1,8 @@
 package com.aiconsole.knightriderlauncher.ui.settings
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.aiconsole.knightriderlauncher.KittApplication
 import com.aiconsole.knightriderlauncher.MainActivity
 import com.aiconsole.knightriderlauncher.data.HardwareKeys
@@ -34,6 +37,7 @@ import com.aiconsole.knightriderlauncher.data.KeyAction
 import com.aiconsole.knightriderlauncher.data.KeyBindings
 import com.aiconsole.knightriderlauncher.data.LauncherApp
 import com.aiconsole.knightriderlauncher.data.LauncherBackup
+import com.aiconsole.knightriderlauncher.data.ProblemReport
 import com.aiconsole.knightriderlauncher.ui.components.ChoiceRow
 import com.aiconsole.knightriderlauncher.ui.components.HelpText
 import com.aiconsole.knightriderlauncher.ui.components.KittButton
@@ -124,6 +128,26 @@ fun ButtonSettings(app: KittApplication) {
     }
 }
 
+/** "Hey KITT": asks for the microphone first if needed. */
+@Composable
+fun WakeWordToggle(app: KittApplication) {
+    val context = LocalContext.current
+    val on by app.settings.wakeWord.state.collectAsState()
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) app.settings.wakeWord.set(true)
+    }
+    KittToggle(
+        "\"Hey KITT\" wake word",
+        on,
+        { enable ->
+            val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+            if (enable && !granted) permission.launch(Manifest.permission.RECORD_AUDIO) else app.settings.wakeWord.set(enable)
+        },
+        description = "Listens while the home screen is showing. Uses the speech recognizer below; some chime " +
+            "each time they restart, and a network recognizer uses data. Say \"Hey KITT\", then your question or command."
+    )
+}
+
 /** Save or restore settings, gauges, custom PIDs and userscripts. */
 @Composable
 fun BackupSettings(app: KittApplication) {
@@ -131,6 +155,22 @@ fun BackupSettings(app: KittApplication) {
     val scope = rememberCoroutineScope()
     var message by remember { mutableStateOf<String?>(null) }
     val backup = remember { LauncherBackup(context) }
+    val report = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri: Uri? ->
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            message = try {
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)?.use { ProblemReport.write(context, app.obd, it) }
+                        ?: throw IOException("Couldn't open the file")
+                }
+                "Report saved. Send me the file."
+            } catch (e: IOException) {
+                "Report failed: ${e.message}"
+            } catch (e: SecurityException) {
+                "Report failed: ${e.message}"
+            }
+        }
+    }
 
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
         uri ?: return@rememberLauncherForActivityResult
@@ -173,8 +213,16 @@ fun BackupSettings(app: KittApplication) {
             KittButton("Save backup", { export.launch("kitt-launcher-backup.json") }, Modifier.weight(1f).fillMaxHeight(), LedGreen, active = true)
             KittButton("Restore…", { import.launch(arrayOf("application/json", "text/plain", "*/*")) }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
         }
+        KittButton(
+            "Report a problem",
+            { report.launch("kitt-report-${System.currentTimeMillis() / 1000}.txt") },
+            Modifier.fillMaxWidth().height(48.dp),
+            ScannerRed
+        )
         HelpText(
-            message ?: ("Saves settings, gauges, custom PIDs and userscripts to a file (USB stick, Downloads…). " +
+            message ?: ("Report a problem saves a text file with recent crashes, the OBD connection log, settings (no API keys) " +
+                "and this app's log. " +
+                "Save backup saves settings, gauges, custom PIDs and userscripts to a file (USB stick, Downloads…). " +
                 "API keys aren't included; re-enter them after restoring. Restoring restarts the launcher.")
         )
     }

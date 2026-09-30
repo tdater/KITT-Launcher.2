@@ -22,6 +22,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private val repository = app.assistantRepository
     private val voice = app.kittVoice
     val speech = SpeechToTextHelper(application) { app.settings.speechRecognizer.value }
+    private val commands = LauncherCommandRunner(app)
 
     val speaking: StateFlow<Boolean> = voice.speaking
     val voiceReply: StateFlow<Boolean> = app.settings.voiceReply.state
@@ -62,8 +63,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         _exchanges.update { (it + Exchange(id, trimmed, null)).takeLast(MAX_EXCHANGES) }
         _thinking.value = true
         viewModelScope.launch {
+            // Launcher commands ("open Waze", "read my codes") run locally; everything else asks the AI.
+            val command = if (diagnostic) null else VoiceCommands.parse(trimmed)
             val result = try {
-                repository.ask(trimmed, history, diagnostic)
+                if (command != null) AssistantResult.Answer(commands.run(command), engine = "KITT")
+                else repository.ask(trimmed, history, diagnostic)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

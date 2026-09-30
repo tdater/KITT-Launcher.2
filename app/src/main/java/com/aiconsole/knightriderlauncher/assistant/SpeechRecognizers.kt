@@ -89,6 +89,16 @@ object SpeechRecognizers {
             "System default: " + (installed(context).firstOrNull { it.systemDefault }?.label ?: "unknown")
     }
 
+    fun create(context: Context, target: RecognizerTarget): SpeechRecognizer = when (target) {
+        is RecognizerTarget.Service -> SpeechRecognizer.createSpeechRecognizer(context, target.component)
+        RecognizerTarget.OnDevice -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+        } else {
+            SpeechRecognizer.createSpeechRecognizer(context)
+        }
+        RecognizerTarget.SystemDefault -> SpeechRecognizer.createSpeechRecognizer(context)
+    }
+
     private fun preferredRank(packageName: String): Int =
         PREFERRED_PACKAGES.indexOf(packageName).let { if (it < 0) PREFERRED_PACKAGES.size else it }
 }

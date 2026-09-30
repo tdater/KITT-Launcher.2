@@ -356,6 +356,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                 )
             }
             item { KittToggle("Speak replies", voiceReply, { settings.voiceReply.set(it) }) }
+            item { WakeWordToggle(app) }
             item { KittToggle("Greeting on start", greeting, { settings.greeting.set(it) }) }
             item {
                 KittToggle(

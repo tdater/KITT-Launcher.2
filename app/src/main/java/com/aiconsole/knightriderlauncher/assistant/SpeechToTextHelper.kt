@@ -2,7 +2,6 @@ package com.aiconsole.knightriderlauncher.assistant
 
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -46,7 +45,7 @@ class SpeechToTextHelper(context: Context, private val recognizerChoice: () -> S
             recognizer?.destroy()
             recognizer = null
         }
-        val active = recognizer ?: create(target).also {
+        val active = recognizer ?: SpeechRecognizers.create(appContext, target).also {
             it.setRecognitionListener(this)
             recognizer = it
             boundTarget = target
@@ -78,15 +77,6 @@ class SpeechToTextHelper(context: Context, private val recognizerChoice: () -> S
         boundTarget = null
     }
 
-    private fun create(target: RecognizerTarget): SpeechRecognizer = when (target) {
-        is RecognizerTarget.Service -> SpeechRecognizer.createSpeechRecognizer(appContext, target.component)
-        RecognizerTarget.OnDevice -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            SpeechRecognizer.createOnDeviceSpeechRecognizer(appContext)
-        } else {
-            SpeechRecognizer.createSpeechRecognizer(appContext)
-        }
-        RecognizerTarget.SystemDefault -> SpeechRecognizer.createSpeechRecognizer(appContext)
-    }
 
     override fun onReadyForSpeech(params: Bundle?) {
         _state.value = SpeechState.Listening()

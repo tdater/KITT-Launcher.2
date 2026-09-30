@@ -124,6 +124,8 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
 - **Errors:** clients return the sealed `AssistantResult` instead of throwing.
 - **Persona:** `KittPersona` holds the personality (`PersonaStyle.Unfiltered`, the default and the owner's explicit choice: crude, sarcastic and profane on every reply; or `Classic`) plus non-negotiable accuracy and driving-safety rules. `KittAlerts` has matching spoken variants.
 - **Keys:** API keys are entered in-app and encrypted with an Android Keystore AES-GCM key (`SecureStore`). `BuildConfig.GEMINI_API_KEY` from `local.properties` is only a dev fallback.
+- **Voice commands:** `VoiceCommands` (pure parser) is tried before the AI; `LauncherCommandRunner` runs matches and sends home-screen changes over `LauncherBus`. `WakeWordListener` ("Hey KITT") restarts the recognizer in short sessions and pauses while an overlay or KITT's voice is active.
+- **Problem reports:** `ProblemReport` installs a crash handler (files in `filesDir/crashes`) and writes a text report (crashes, connection log, settings without keys, own logcat) from KITT Config.
 - **Subscriptions:** consumer subscriptions (Gemini/Claude/Perplexity Pro) can't be used via API; `AiAppHandoff` sends questions to those official apps instead.
 
 **Scanner (`ui/scanner/`):**

@@ -59,6 +59,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.aiconsole.knightriderlauncher.assistant.AssistantPrompt
 import com.aiconsole.knightriderlauncher.assistant.KittAlert
+import com.aiconsole.knightriderlauncher.assistant.LauncherBus
+import com.aiconsole.knightriderlauncher.assistant.LauncherEvent
 import com.aiconsole.knightriderlauncher.data.AppLists
 import com.aiconsole.knightriderlauncher.data.AppUsage
 import com.aiconsole.knightriderlauncher.data.HardwareKeys
@@ -191,6 +193,7 @@ class MainActivity : ComponentActivity() {
         // Some ROMs refuse widget hosting; the Widgets page then just shows nothing.
         runCatching { kitt.widgetHost.startListening() }
         kitt.startup.onLauncherShown()
+        kitt.wakeWord.setVisible(true)
         startVehicleSystems()
     }
 
@@ -198,6 +201,7 @@ class MainActivity : ComponentActivity() {
         LauncherVisibility.visible.value = false
         kitt.nightMode.setActive(false)
         kitt.gps.stop()
+        kitt.wakeWord.setVisible(false)
         runCatching { kitt.widgetHost.stopListening() }
         super.onStop()
     }
@@ -383,7 +387,37 @@ fun LauncherRoot(
             pager.animateScrollToPage(HomePage.Drive.ordinal)
         }
     }
-    val mediaControl = (LocalContext.current.applicationContext as? KittApplication)?.media
+    val kittApp = LocalContext.current.applicationContext as? KittApplication
+    val mediaControl = kittApp?.media
+    // "Hey KITT" pauses while an overlay is up (the assistant needs the microphone).
+    LaunchedEffect(overlay) { kittApp?.wakeWord?.setSuspended(overlay != LauncherOverlay.None) }
+    LaunchedEffect(Unit) {
+        kittApp?.wakeWord?.wakes?.collect {
+            saver = false
+            autoListen = true
+            overlay = LauncherOverlay.Assistant
+        }
+    }
+    // Voice commands that change the home screen.
+    LaunchedEffect(Unit) {
+        LauncherBus.events.collect { event ->
+            saver = false
+            when (event) {
+                is LauncherEvent.ShowPage -> {
+                    overlay = LauncherOverlay.None
+                    HomePage.entries.firstOrNull { it.name.equals(event.page, ignoreCase = true) }
+                        ?.let { pager.animateScrollToPage(it.ordinal) }
+                }
+                is LauncherEvent.OpenStream -> {
+                    overlay = LauncherOverlay.None
+                    pager.animateScrollToPage(HomePage.Drive.ordinal)
+                    stream.open(event.url, event.label)
+                }
+                LauncherEvent.CloseStream -> stream.visible = false
+                LauncherEvent.OpenDiagnostics -> overlay = LauncherOverlay.Diagnostics
+            }
+        }
+    }
     LaunchedEffect(Unit) {
         HardwareKeys.actions.collect { action ->
             saver = false

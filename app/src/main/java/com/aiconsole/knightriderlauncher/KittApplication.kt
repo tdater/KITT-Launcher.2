@@ -11,6 +11,8 @@ import com.aiconsole.knightriderlauncher.assistant.GeminiAssistantClient
 import com.aiconsole.knightriderlauncher.assistant.KittAlerts
 import com.aiconsole.knightriderlauncher.assistant.PerplexityAssistantClient
 import com.aiconsole.knightriderlauncher.assistant.TextToSpeechHelper
+import com.aiconsole.knightriderlauncher.assistant.WakeWordListener
+import com.aiconsole.knightriderlauncher.data.ProblemReport
 import com.aiconsole.knightriderlauncher.data.StartupRoutine
 import com.aiconsole.knightriderlauncher.data.settings.KittSettings
 import com.aiconsole.knightriderlauncher.data.trip.TripDatabase
@@ -68,6 +70,9 @@ class KittApplication : Application() {
     val widgetHost: AppWidgetHost by lazy { AppWidgetHost(this, WIDGET_HOST_ID) }
 
     val startup: StartupRoutine by lazy { StartupRoutine(this, settings, media, appScope) }
+
+    /** "Hey KITT" listener, active while the launcher is in front and idle. */
+    val wakeWord: WakeWordListener by lazy { WakeWordListener(this, settings, kittVoice, appScope) }
 
     /** Userscripts for the home-screen stream window. */
     val userscripts: UserscriptStore by lazy { UserscriptStore(this) }
@@ -139,6 +144,7 @@ class KittApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        ProblemReport.installCrashHandler(this)
         // Apply the saved look before the first frame, then follow changes from KITT Config.
         ThemeState.theme = settings.uiTheme.value
         appScope.launch(Dispatchers.Main) {
