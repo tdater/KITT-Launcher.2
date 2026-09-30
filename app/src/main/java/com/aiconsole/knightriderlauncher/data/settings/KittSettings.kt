@@ -137,6 +137,20 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val adapterType = stringPref("obd_adapter_type", "")
     val adapterAddress = stringPref("obd_adapter_address", "")
     val adapterName = stringPref("obd_adapter_name", "")
+    /** Every adapter used so far (AdapterProfiles format), most recent first. */
+    val adapterList = stringPref("obd_adapter_list", "")
+
+    // --- Vehicle ---
+    /** NHTSA decode of the VIN, cached (VehicleIdentity fields, one per line). */
+    val vehicleIdentity = stringPref("vehicle_identity", "")
+    /** Driver-entered odometer (km) and the integrated distance counter at that moment. */
+    val odometerBaseKm = stringPref("odometer_base_km", "")
+    val distanceCounterKm = stringPref("distance_counter_km", "0")
+    val maintenanceItems = stringPref("maintenance_items", "")
+    /** Price per litre (metric) or per gallon (imperial), as entered. */
+    val fuelPrice = stringPref("fuel_price", "")
+    /** Tank size in litres (metric) or gallons (imperial), as entered. */
+    val tankSize = stringPref("tank_size", "")
     val obdAutoConnect = boolPref("obd_auto_connect", true)
     val obdProtocol = stringPref("obd_protocol", "0")
     val obdFastPolling = boolPref("obd_fast_polling", true)

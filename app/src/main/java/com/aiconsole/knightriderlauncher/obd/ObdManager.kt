@@ -154,11 +154,26 @@ class ObdManager(
 
     private val watchers = MutableStateFlow<Map<String, Set<String>>>(emptyMap())
 
+    private val log = ConnectionLog()
+    private val _linkEvents = MutableStateFlow<List<LinkEvent>>(emptyList())
+
+    /** Connection steps and failures, tagged by layer (transport, adapter, ELM init, ECU, decode). */
+    val linkEvents: StateFlow<List<LinkEvent>> = _linkEvents.asStateFlow()
+
+    private fun logEvent(layer: LinkLayer, message: String, ok: Boolean = true) {
+        log.add(LinkEvent(System.currentTimeMillis(), layer, message, ok))
+        _linkEvents.value = log.snapshot()
+    }
+
     @Volatile
     private var elm: Elm327? = null
 
     @Volatile
     private var isCan = false
+
+    /** Which layer a failure right now belongs to, for the connection log. */
+    @Volatile
+    private var stageLayer = LinkLayer.Transport
 
     private var session: Job? = null
 
@@ -167,9 +182,13 @@ class ObdManager(
 
     fun unwatch(key: String) = watchers.update { it - key }
 
-    fun connect(config: AdapterConfig) {
+    fun connect(config: AdapterConfig) = connect(listOf(config))
+
+    /** Connects to the first adapter in [configs] that answers, rotating through them on failure. */
+    fun connect(configs: List<AdapterConfig>) {
+        if (configs.isEmpty()) return
         session?.cancel()
-        session = scope.launch(Dispatchers.IO) { runWithReconnect(config) }
+        session = scope.launch(Dispatchers.IO) { runWithReconnect(configs) }
     }
 
     fun disconnect() {
@@ -216,6 +235,95 @@ class ObdManager(
             }
             ObdResponseParser.errorOf(raw)?.let { return Result.failure(IOException("Clear failed: $it")) }
             Result.success(readCodesInternal(link))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            Result.failure(e)
+        }
+    }
+
+    data class AdapterDetails(val assessment: AdapterAssessment, val voltage: Double?, val raw: String)
+
+    /** Identification (ATI, AT@1, STI) and supply voltage; nothing is written to the adapter. */
+    suspend fun adapterDetails(): Result<AdapterDetails> = withLink { link ->
+        link.exclusive {
+            val ati = send("ATI").trim()
+            val desc = send("AT@1").trim()
+            val sti = send("STI").trim()
+            val volts = send("ATRV").trim()
+            AdapterDetails(
+                CloneCheck.assess(ati, desc, sti),
+                ObdResponseParser.voltage(volts),
+                "ATI: $ati\nAT@1: $desc\nSTI: $sti\nATRV: $volts"
+            )
+        }
+    }
+
+    data class ModuleCodes(val module: VehicleModule, val stored: List<String>, val pending: List<String>)
+
+    /** Which control modules answer on CAN, then each one's stored and pending codes. Read-only. */
+    suspend fun scanModules(): Result<List<ModuleCodes>> = withLink { link ->
+        if (!isCan) throw IOException("Module scan needs a CAN vehicle (2008+ in the US).")
+        link.exclusive {
+            useHeader(BROADCAST_HEADER)
+            send("ATH1")
+            val raw = try {
+                send("0100", 3_000)
+            } finally {
+                send("ATH0")
+            }
+            val modules = ModuleScan.responders(raw)
+            val result = modules.map { module ->
+                val header = module.requestHeader
+                if (header == null) {
+                    ModuleCodes(module, emptyList(), emptyList())
+                } else {
+                    useHeader(header)
+                    fun parse(r: String, service: Int) = ObdResponseParser.dtcs(ObdResponseParser.messages(r), service, true)
+                    ModuleCodes(module, parse(send("03", 3_000), 0x43), parse(send("07", 3_000), 0x47))
+                }
+            }
+            useDefaultHeader()
+            logEvent(LinkLayer.Ecu, "Module scan: ${modules.size} modules answered")
+            result
+        }
+    }
+
+    /** Mode 06 on-board monitor results from the engine ECU (CAN only). Read-only. */
+    suspend fun readMonitorTests(): Result<List<MonitorTest>> = withLink { link ->
+        if (!isCan) throw IOException("Mode 06 decoding here needs a CAN vehicle.")
+        link.exclusive {
+            useDefaultHeader()
+            val supported = mutableSetOf<Int>()
+            var base = 0x00
+            while (base <= 0xE0) {
+                val found = Mode06.supportedMids(ObdResponseParser.messages(send("06%02X".format(Locale.US, base), 2_000)), base)
+                supported += found
+                if (base + 0x20 !in found) break
+                base += 0x20
+            }
+            supported.filter { it % 0x20 != 0 }.sorted().flatMap { mid ->
+                Mode06.results(ObdResponseParser.messages(send("06%02X".format(Locale.US, mid), 2_000)))
+            }
+        }
+    }
+
+    /** Sends one console command if [ConsoleSafety] allows it; returns the raw reply. */
+    suspend fun console(command: String): Result<String> {
+        ConsoleSafety.check(command)?.let { return Result.failure(IOException(it)) }
+        return withLink { link ->
+            link.exclusive {
+                val cmd = command.trim().replace(" ", "").uppercase()
+                if (!cmd.startsWith("AT") && !cmd.startsWith("ST")) useDefaultHeader()
+                send(cmd, 5_000)
+            }
+        }
+    }
+
+    private suspend fun <T> withLink(block: suspend (Elm327) -> T): Result<T> {
+        val link = elm ?: return Result.failure(IOException("OBD adapter not connected"))
+        return try {
+            Result.success(block(link))
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
@@ -292,16 +400,20 @@ class ObdManager(
 
     // ---------------------------------------------------------------------------------------
 
-    private suspend fun runWithReconnect(config: AdapterConfig) {
+    private suspend fun runWithReconnect(configs: List<AdapterConfig>) {
         var attempt = 0
+        var index = 0
         while (currentCoroutineContext().isActive) {
+            val config = configs[index % configs.size]
             try {
                 runSession(config)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "OBD session ended", e)
+                logEvent(stageLayer, "${config.name}: ${e.message ?: e.javaClass.simpleName}", ok = false)
                 attempt++
+                index++ // Next time, try the next saved adapter.
                 val wait = (3 * attempt).coerceAtMost(30)
                 _state.value = ObdState.Error(e.message ?: e.javaClass.simpleName, wait)
                 _readings.value = emptyMap()
@@ -315,13 +427,19 @@ class ObdManager(
 
     private suspend fun runSession(config: AdapterConfig) {
         _state.value = ObdState.Connecting("Opening ${config.type.label} link to ${config.name}")
+        stageLayer = LinkLayer.Transport
+        logEvent(LinkLayer.Transport, "Opening ${config.type.label} link to ${config.name}")
         val transport = createTransport(context, config)
         try {
             transport.connect()
+            logEvent(LinkLayer.Adapter, "Connected to ${config.name}")
+            stageLayer = LinkLayer.ElmInit
             val link = Elm327(transport)
             _state.value = ObdState.Connecting("Initializing adapter")
             val init = link.initialize(settings.obdProtocol.value)
             isCan = init.isCan
+            logEvent(LinkLayer.ElmInit, "${init.version} · ${init.protocolName}")
+            stageLayer = LinkLayer.Ecu
 
             _state.value = ObdState.Connecting("Reading vehicle systems")
             _unavailable.value = emptySet()
@@ -330,6 +448,8 @@ class ObdManager(
             val vin = runCatching { link.exclusive { ObdResponseParser.vin(ObdResponseParser.messages(send("0902", 5_000))) } }
                 .getOrNull()
             _detected.value = ManufacturerProfiles.detect(vin)
+            logEvent(LinkLayer.Ecu, "ECU answered: ${supported.size} PIDs supported" + (vin?.let { ", VIN $it" } ?: ""))
+            stageLayer = LinkLayer.Decode
 
             elm = link
             _state.value = ObdState.Connected(

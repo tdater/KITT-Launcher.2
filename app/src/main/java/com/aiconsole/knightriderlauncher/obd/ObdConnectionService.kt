@@ -51,7 +51,7 @@ class ObdConnectionService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        app.obd.connect(config)
+        app.obd.connect(app.savedAdapters())
 
         statusJob?.cancel()
         statusJob = scope.launch {

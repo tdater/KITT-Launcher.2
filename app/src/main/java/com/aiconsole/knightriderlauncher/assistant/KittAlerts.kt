@@ -111,6 +111,11 @@ class KittAlerts(
         )
     }
 
+    /** Spoken maintenance reminder, at most twice a day. */
+    fun remindMaintenance(summary: String) {
+        raise("maintenance", line("Service reminder: $summary.", "Service reminder, before this heap falls apart: $summary."), severe = false, cooldownMs = 12 * 3_600_000L)
+    }
+
     fun dismiss() {
         _active.value = null
     }

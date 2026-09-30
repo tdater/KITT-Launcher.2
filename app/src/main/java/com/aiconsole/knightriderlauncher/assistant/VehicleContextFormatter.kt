@@ -15,7 +15,11 @@ data class VehicleContext(
     val freezeFrameCode: String? = null,
     val freezeFrame: List<String> = emptyList(),
     /** Emissions monitor summary from the last code scan, e.g. "2 incomplete: Catalyst, Evaporative system". */
-    val readiness: String? = null
+    val readiness: String? = null,
+    /** Service items due or overdue, e.g. "Oil change due in 120 miles". */
+    val maintenance: String? = null,
+    /** Battery/charging warnings from the voltage history. */
+    val battery: String? = null
 )
 
 /** Turns live OBD data and the Room baseline into compact prompt context. */
@@ -50,6 +54,8 @@ object VehicleContextFormatter {
             frame.forEach { appendLine("- $it") }
         }
         context?.readiness?.let { appendLine("EMISSIONS READINESS (last scan): $it") }
+        context?.maintenance?.let { appendLine("MAINTENANCE DUE: $it") }
+        context?.battery?.let { appendLine("BATTERY/CHARGING: $it") }
         appendLine("HISTORICAL BASELINE (last 30 days):")
         append(baselineSummary)
     }

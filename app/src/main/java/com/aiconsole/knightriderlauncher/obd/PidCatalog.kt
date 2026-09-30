@@ -157,6 +157,7 @@ object PidCatalog {
         std(0x2C, "Commanded EGR", "EGR", "A*100/255", Quantity.PERCENT, 0.0, 100.0),
         std(0x2F, "Fuel tank level", "Fuel", "A*100/255", Quantity.PERCENT, 0.0, 100.0),
         std(0x31, "Distance since codes cleared", "Since clr", "(A*256)+B", Quantity.DISTANCE, 0.0, 65535.0, bytes = 2),
+        std(0xA6, "Odometer", "Odometer", "((A*16777216)+(B*65536)+(C*256)+D)/10", Quantity.DISTANCE, 0.0, 2_000_000.0, bytes = 4),
         std(0x33, "Barometric pressure", "Baro", "A", Quantity.PRESSURE, 50.0, 110.0),
         std(0x3C, "Catalyst temperature, bank 1 sensor 1", "Cat B1S1", "((A*256)+B)/10-40", Quantity.TEMPERATURE, 0.0, 1000.0, bytes = 2),
         std(0x42, "Control module voltage", "ECU volts", "((A*256)+B)/1000", Quantity.VOLTAGE, 8.0, 16.0, bytes = 2),

@@ -36,6 +36,8 @@ enum class DiagTab(val label: String) {
     Gauges("Gauges"),
     Data("Data"),
     Codes("Codes"),
+    Vehicle("Vehicle"),
+    Tools("Tools"),
     Pids("PIDs"),
     Link("Link")
 }
@@ -91,6 +93,8 @@ fun DiagnosticsScreen(
                     })
                     DiagTab.Data -> DataTab(app, graphPid)
                     DiagTab.Codes -> CodesTab(app, onAskKitt)
+                    DiagTab.Vehicle -> VehicleTab(app)
+                    DiagTab.Tools -> ToolsTab(app)
                     DiagTab.Pids -> PidsTab(app)
                     DiagTab.Link -> LinkTab(app)
                 }

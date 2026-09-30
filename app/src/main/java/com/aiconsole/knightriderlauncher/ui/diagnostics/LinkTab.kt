@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
@@ -152,6 +153,32 @@ fun LinkTab(app: KittApplication) {
             }
         }
         item { KittToggle("Auto-connect", autoConnect, { app.settings.obdAutoConnect.set(it) }, description = "Reconnect whenever the launcher starts.") }
+
+        val savedList = app.savedAdapters()
+        if (savedList.size > 1 || (savedList.size == 1 && savedList[0].address != saved?.address)) {
+            item { SectionHeader("Saved adapters", color = DashAmber) }
+            item { HelpText("If the first one doesn't answer, the launcher tries the next on each retry.") }
+            items(savedList, key = { "s_${it.address}" }) { adapter ->
+                Row(Modifier.fillMaxWidth().height(44.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    KittButton(
+                        label = "${adapter.name} · ${adapter.type.label}",
+                        onClick = { choose(adapter) },
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        color = LedGreen,
+                        active = saved?.address == adapter.address
+                    )
+                    KittButton(
+                        label = "Forget",
+                        onClick = {
+                            app.forgetAdapter(adapter)
+                            saved = app.savedAdapter()
+                        },
+                        modifier = Modifier.width(96.dp).fillMaxHeight(),
+                        color = AlertRed
+                    )
+                }
+            }
+        }
 
         item { SectionHeader("Bluetooth adapters", color = DashAmber) }
         if (!hasPermission) {

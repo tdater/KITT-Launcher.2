@@ -15,12 +15,14 @@ import com.aiconsole.knightriderlauncher.data.trip.TripDatabase
 import com.aiconsole.knightriderlauncher.data.trip.TripMetricRecorder
 import com.aiconsole.knightriderlauncher.media.MediaBridge
 import com.aiconsole.knightriderlauncher.obd.AdapterConfig
+import com.aiconsole.knightriderlauncher.obd.AdapterProfiles
 import com.aiconsole.knightriderlauncher.obd.AdapterType
 import com.aiconsole.knightriderlauncher.obd.CustomPidStore
 import com.aiconsole.knightriderlauncher.obd.DataLogger
 import com.aiconsole.knightriderlauncher.obd.GaugeStore
 import com.aiconsole.knightriderlauncher.obd.ObdManager
 import com.aiconsole.knightriderlauncher.obd.PidHistory
+import com.aiconsole.knightriderlauncher.obd.VehicleService
 import com.aiconsole.knightriderlauncher.stream.UserscriptStore
 import com.aiconsole.knightriderlauncher.ui.theme.NightModeController
 import com.aiconsole.knightriderlauncher.ui.theme.ThemeState
@@ -53,6 +55,9 @@ class KittApplication : Application() {
     /** Now-playing from the active media session (needs notification access). */
     val media: MediaBridge by lazy { MediaBridge(this) }
 
+    /** VIN identity, odometer, maintenance, fuel range and battery health. */
+    val vehicle: VehicleService by lazy { VehicleService(obd, settings, pidHistory, appScope) }
+
     /** Userscripts for the home-screen stream window. */
     val userscripts: UserscriptStore by lazy { UserscriptStore(this) }
 
@@ -73,7 +78,16 @@ class KittApplication : Application() {
             perplexity = PerplexityAssistantClient(this),
             dao = tripDatabase.tripMetricDao(),
             recorder = tripRecorder,
-            vehicleContext = { obd.vehicleContext() }
+            vehicleContext = {
+                val identity = vehicle.identity.value
+                obd.vehicleContext().let { c ->
+                    c.copy(
+                        vehicle = listOfNotNull(identity?.summary(), identity?.engine, c.vehicle).joinToString(", ").ifEmpty { null },
+                        maintenance = vehicle.reminder(),
+                        battery = vehicle.battery().warnings.joinToString("; ").ifEmpty { null }
+                    )
+                }
+            }
         )
     }
 
@@ -83,6 +97,20 @@ class KittApplication : Application() {
     /** Night dimming (light sensor or clock); the activity turns the sensor on while visible. */
     val nightMode: NightModeController by lazy { NightModeController(this, settings, appScope) }
 
+    /** Every saved adapter, the preferred one first; connection rotates through them. */
+    fun savedAdapters(): List<AdapterConfig> =
+        (listOfNotNull(savedAdapter()) + AdapterProfiles.decode(settings.adapterList.value)).distinctBy { it.address }
+
+    fun forgetAdapter(config: AdapterConfig) {
+        settings.adapterList.set(AdapterProfiles.encode(AdapterProfiles.decode(settings.adapterList.value).filter { it.address != config.address }))
+        if (savedAdapter()?.address == config.address) {
+            val next = AdapterProfiles.decode(settings.adapterList.value).firstOrNull()
+            settings.adapterType.set(next?.type?.name.orEmpty())
+            settings.adapterAddress.set(next?.address.orEmpty())
+            settings.adapterName.set(next?.name.orEmpty())
+        }
+    }
+
     fun savedAdapter(): AdapterConfig? {
         val type = runCatching { AdapterType.valueOf(settings.adapterType.value) }.getOrNull() ?: return null
         val address = settings.adapterAddress.value.ifEmpty { return null }
@@ -90,6 +118,9 @@ class KittApplication : Application() {
     }
 
     fun saveAdapter(config: AdapterConfig) {
+        settings.adapterList.set(
+            AdapterProfiles.encode(listOf(config) + AdapterProfiles.decode(settings.adapterList.value).filter { it.address != config.address })
+        )
         settings.adapterType.set(config.type.name)
         settings.adapterAddress.set(config.address)
         settings.adapterName.set(config.name)
@@ -113,6 +144,9 @@ class KittApplication : Application() {
         // Dashboard gauges are always polled while connected, on screen or not (alerts need them).
         appScope.launch {
             gauges.gauges.collect { list -> obd.watch("dashboard", list.map { it.pidId }.toSet()) }
+        }
+        appScope.launch(Dispatchers.Main) {
+            vehicle.start()
         }
         appScope.launch(Dispatchers.IO) {
             try {

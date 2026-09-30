@@ -195,6 +195,7 @@ class MainActivity : ComponentActivity() {
             ScannerOverlayService.start(this)
         }
         kitt.alerts.greetOnce()
+        kitt.vehicle.reminder()?.let { kitt.alerts.remindMaintenance(it) }
     }
 
     private companion object {

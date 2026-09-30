@@ -102,6 +102,7 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
   - **Headers:** CAN polling targets the engine header `7E0`; code reads switch to broadcast `7DF`.
   - **Units and logging:** values are stored in **metric base units** and converted with `Quantity.toDisplay`. Readings feed `TripMetricRecorder` at 1 Hz.
 - **`ObdConnectionService`:** just holds the foreground lifetime (type `connectedDevice`).
+- **Diagnostics tools** (all read-only): `ReadinessDecoder`, `Mode06`, `ModuleScan`, `PerformanceTimer`, `BatteryHealth`, `VinDecoder` + NHTSA lookup, maintenance/fuel (`VehicleService`). The raw console goes through `ConsoleSafety`'s allow-list; keep it read-only. `ConnectionLog` tags events by `LinkLayer`. Saved adapters (`AdapterProfiles`) are tried in rotation.
 
 **PIDs:**
 - **`PidDefinition`** covers standard Mode 01, manufacturer (`ManufacturerProfiles`, detected from the VIN WMI prefix, longest match wins) and custom (`CustomPidStore`) PIDs.
