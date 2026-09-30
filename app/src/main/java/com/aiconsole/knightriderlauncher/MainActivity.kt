@@ -69,6 +69,7 @@ import com.aiconsole.knightriderlauncher.ui.panes.NavigationPane
 import com.aiconsole.knightriderlauncher.ui.panes.StatusGridPane
 import com.aiconsole.knightriderlauncher.ui.scanner.KittScanner
 import com.aiconsole.knightriderlauncher.ui.scanner.LauncherVisibility
+import com.aiconsole.knightriderlauncher.ui.scanner.ScannerEngine
 import com.aiconsole.knightriderlauncher.ui.scanner.ScannerOverlayService
 import com.aiconsole.knightriderlauncher.ui.settings.KittConfigScreen
 import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
@@ -180,6 +181,8 @@ enum class LauncherOverlay { None, Assistant, Diagnostics, Config, Trips }
 data class DashState(
     /** Read lazily so live OBD updates redraw only the HUD readouts, not the map. */
     val hud: () -> HudState = { HudState() },
+    /** Scanner shift-light fill (see [ScannerEngine.shiftLevel]); read in the draw pass. */
+    val shift: () -> Float? = { null },
     /** Gauge configuration only; live values come from [reading] so updates redraw just the tiles. */
     val gauges: List<GaugeUi> = emptyList(),
     val reading: (String) -> PidReading? = { null },
@@ -198,6 +201,8 @@ private fun rememberDashState(app: KittApplication): DashState {
     val alert by app.alerts.active.collectAsState()
     val speaking by app.kittVoice.speaking.collectAsState()
     val hz = app.obd.refreshHz.collectAsState()
+    val shiftOn = app.settings.shiftLight.state.collectAsState()
+    val shiftRpm = app.settings.shiftRpm.state.collectAsState()
 
     val hudState = remember {
         derivedStateOf {
@@ -223,8 +228,18 @@ private fun rememberDashState(app: KittApplication): DashState {
     }
     val hud = remember(hudState) { { hudState.value } }
     val reading = remember(readings) { { pidId: String -> readings.value[pidId] } }
+    val shift = remember(readings) {
+        {
+            if (shiftOn.value && state.value is ObdState.Connected) {
+                ScannerEngine.shiftLevel(readings.value[PidCatalog.RPM]?.value, shiftRpm.value)
+            } else {
+                null
+            }
+        }
+    }
     return DashState(
         hud = hud,
+        shift = shift,
         gauges = gaugeConfigs.map { GaugeUi(it, defs.value[it.pidId], null) },
         reading = reading,
         metric = metric.value,
@@ -289,7 +304,7 @@ fun LauncherRoot(
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
         ) {
-            KittScanner(Modifier.fillMaxWidth().height(ScannerHeight), alert = dash.alert?.severe == true)
+            KittScanner(Modifier.fillMaxWidth().height(ScannerHeight), alert = dash.alert?.severe == true, shift = dash.shift)
 
             BoxWithConstraints(
                 Modifier

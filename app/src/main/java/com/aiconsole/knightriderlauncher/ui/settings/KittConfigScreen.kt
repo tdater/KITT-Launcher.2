@@ -56,6 +56,7 @@ import com.aiconsole.knightriderlauncher.ui.theme.UiTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private val SHIFT_POINTS = (3000..7500 step 250).toList()
 private const val VOICE_CHECK = "Voice check. All systems functional."
 private val PERPLEXITY_PRESETS = listOf("fast", "low", "medium", "high")
 
@@ -93,6 +94,8 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val metric by settings.metricUnits.state.collectAsState()
     val overlay by settings.scannerOverlay.state.collectAsState()
     val theme by settings.uiTheme.state.collectAsState()
+    val shiftLight by settings.shiftLight.state.collectAsState()
+    val shiftRpm by settings.shiftRpm.state.collectAsState()
     val rain by settings.matrixRain.state.collectAsState()
     val nightMode by settings.nightMode.state.collectAsState()
     val showMap by settings.showMap.state.collectAsState()
@@ -364,6 +367,25 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                 )
             }
             item { ChoiceRow(listOf(false, true), metric, { if (it) "Metric" else "Imperial" }, { settings.metricUnits.set(it) }) }
+            item {
+                KittToggle(
+                    "Shift light",
+                    shiftLight,
+                    { settings.shiftLight.set(it) },
+                    description = "The scanner fills green, amber, then red as revs near your shift point, and flashes at it."
+                )
+            }
+            if (shiftLight) {
+                item {
+                    ChoiceRow(
+                        options = SHIFT_POINTS,
+                        selected = shiftRpm,
+                        label = { "$it RPM" },
+                        onSelect = { settings.shiftRpm.set(it) },
+                        color = ScannerRed
+                    )
+                }
+            }
             item {
                 KittToggle(
                     "Scanner over all apps",

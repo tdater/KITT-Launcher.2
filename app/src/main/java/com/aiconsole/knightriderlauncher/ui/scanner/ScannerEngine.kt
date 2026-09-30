@@ -33,6 +33,32 @@ class ScannerEngine(
             return if (alert) maxOf(1.8f, revs) else revs
         }
 
+        /** The shift light starts filling at this share of the shift point. */
+        const val SHIFT_START = 0.7f
+
+        /**
+         * Shift-light fill: null below the start band (the scanner sweeps normally), then 0..1
+         * as revs climb to [shiftRpm]; 1 means shift now.
+         */
+        fun shiftLevel(rpm: Double?, shiftRpm: Int): Float? {
+            if (rpm == null || shiftRpm <= 0) return null
+            val start = shiftRpm * SHIFT_START
+            if (rpm < start) return null
+            return ((rpm - start) / (shiftRpm - start)).toFloat().coerceIn(0f, 1f)
+        }
+
+        /** Lamps light from both ends inward, like a race shift light. 0 = outermost pair. */
+        fun shiftRank(index: Int, lamps: Int): Int = minOf(index, lamps - 1 - index)
+
+        fun shiftLampLit(index: Int, lamps: Int, level: Float): Boolean {
+            val perSide = (lamps + 1) / 2
+            val litPerSide = kotlin.math.ceil(level * perSide).toInt().coerceAtLeast(1)
+            return shiftRank(index, lamps) < litPerSide
+        }
+
+        /** At the shift point every lamp flashes about 8 times a second. */
+        fun shiftFlashOn(nowNanos: Long): Boolean = (nowNanos / 62_500_000L) % 2 == 0L
+
         /** Brightness multiplier while KITT talks: a quick 0.55..1 throb, like the voice box. */
         fun voicePulse(nowNanos: Long): Float {
             val t = (nowNanos / 1_000_000L % 360L) / 360.0

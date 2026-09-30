@@ -16,14 +16,17 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.lerp
+import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
 import com.aiconsole.knightriderlauncher.ui.theme.KittBezel
+import com.aiconsole.knightriderlauncher.ui.theme.LedGreen
 import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
 
 /**
  * The always-on KITT front scanner: a black slot with [lamps] lenses in the theme's accent
  * and a persistence trail. The sweep speeds up with engine revs ([rpmFraction], 0..1) and
- * the lamps pulse while KITT is [speaking]. Both are read in the draw pass, so frame and
- * OBD updates only trigger a redraw, never recomposition.
+ * the lamps pulse while KITT is [speaking]. With [shift] (0..1, null when off or below the
+ * band) it becomes a shift light. All three are read in the draw pass, so frame and OBD
+ * updates only trigger a redraw, never recomposition.
  */
 @Composable
 fun KittScanner(
@@ -32,7 +35,8 @@ fun KittScanner(
     color: Color = ScannerRed,
     alert: Boolean = false,
     rpmFraction: () -> Float = { 0f },
-    speaking: () -> Boolean = { false }
+    speaking: () -> Boolean = { false },
+    shift: () -> Float? = { null }
 ) {
     val engine = remember(lamps) { ScannerEngine(lamps) }
     var frameNanos by remember { mutableLongStateOf(0L) }
@@ -44,6 +48,25 @@ fun KittScanner(
         engine.speed = ScannerEngine.speedFor(alert, rpmFraction())
         val pulse = if (speaking()) ScannerEngine.voicePulse(frameNanos) else 1f
         val levels = engine.step(frameNanos)
+        // Shift light: lamps fill from both ends toward the middle (green, amber, then the
+        // accent) and all flash at the shift point. Otherwise the normal sweep.
+        val shiftLevel = shift()
+        val lampColor = { i: Int ->
+            if (shiftLevel == null) color
+            else when (ScannerEngine.shiftRank(i, lamps) * 3 / ((lamps + 1) / 2).coerceAtLeast(1)) {
+                0 -> LedGreen
+                1 -> DashAmber
+                else -> color
+            }
+        }
+        val lampLevel = { i: Int ->
+            when {
+                shiftLevel == null -> levels[i] * pulse
+                shiftLevel >= 1f -> if (ScannerEngine.shiftFlashOn(frameNanos)) 1f else 0f
+                ScannerEngine.shiftLampLit(i, lamps, shiftLevel) -> 1f
+                else -> 0f
+            }
+        }
         drawRect(Color.Black)
         clipRect {
             val gap = size.height * 0.22f
@@ -51,18 +74,18 @@ fun KittScanner(
             val lampHeight = size.height * 0.56f
             val top = (size.height - lampHeight) / 2
             val corner = CornerRadius(lampHeight * 0.18f)
-            val hot = lerp(color, Color.White, 0.45f)
-
             for (i in 0 until lamps) {
+                val tint = lampColor(i)
+                val hot = lerp(tint, Color.White, 0.45f)
                 val x = gap + i * (lampWidth + gap)
-                val level = levels[i] * pulse
+                val level = lampLevel(i)
                 // Unlit lens: dark ruby glass.
-                drawRoundRect(color.copy(alpha = 0.16f), Offset(x, top), Size(lampWidth, lampHeight), corner)
+                drawRoundRect(tint.copy(alpha = 0.16f), Offset(x, top), Size(lampWidth, lampHeight), corner)
                 if (level < 0.02f) continue
                 // Bloom spilling around the lens.
                 drawRect(
                     brush = Brush.radialGradient(
-                        colors = listOf(color.copy(alpha = 0.55f * level), Color.Transparent),
+                        colors = listOf(tint.copy(alpha = 0.55f * level), Color.Transparent),
                         center = Offset(x + lampWidth / 2, size.height / 2),
                         radius = lampWidth * 0.85f
                     ),
@@ -73,9 +96,9 @@ fun KittScanner(
                 drawRoundRect(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            color.copy(alpha = 0.75f * level),
+                            tint.copy(alpha = 0.75f * level),
                             hot.copy(alpha = level),
-                            color.copy(alpha = 0.75f * level)
+                            tint.copy(alpha = 0.75f * level)
                         ),
                         startY = top,
                         endY = top + lampHeight
