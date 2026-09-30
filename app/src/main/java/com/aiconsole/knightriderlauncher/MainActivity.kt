@@ -3,6 +3,7 @@ package com.aiconsole.knightriderlauncher
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
+import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -42,6 +43,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.coerceIn
@@ -58,6 +63,7 @@ import com.aiconsole.knightriderlauncher.obd.AdapterType
 import com.aiconsole.knightriderlauncher.obd.ObdConnectionService
 import com.aiconsole.knightriderlauncher.obd.ObdState
 import com.aiconsole.knightriderlauncher.obd.PidCatalog
+import com.aiconsole.knightriderlauncher.obd.PidReading
 import com.aiconsole.knightriderlauncher.ui.assistant.AssistantOverlay
 import com.aiconsole.knightriderlauncher.ui.components.VoiceModulator
 import com.aiconsole.knightriderlauncher.ui.diagnostics.DiagnosticsScreen
@@ -180,7 +186,9 @@ enum class LauncherOverlay { None, MultiView, Assistant, Diagnostics, Config, Tr
 data class DashState(
     /** Read lazily so live OBD updates redraw only the HUD readouts, not the map. */
     val hud: () -> HudState = { HudState() },
+    /** Gauge configuration only; live values come from [reading] so updates redraw just the tiles. */
     val gauges: List<GaugeUi> = emptyList(),
+    val reading: (String) -> PidReading? = { null },
     val metric: Boolean = false,
     val alert: KittAlert? = null,
     val kittSpeaking: Boolean = false
@@ -220,9 +228,11 @@ private fun rememberDashState(app: KittApplication): DashState {
         }
     }
     val hud = remember(hudState) { { hudState.value } }
+    val reading = remember(readings) { { pidId: String -> readings.value[pidId] } }
     return DashState(
         hud = hud,
-        gauges = gaugeConfigs.map { GaugeUi(it, defs.value[it.pidId], readings.value[it.pidId]) },
+        gauges = gaugeConfigs.map { GaugeUi(it, defs.value[it.pidId], null) },
+        reading = reading,
         metric = metric.value,
         alert = alert,
         kittSpeaking = speaking
@@ -254,6 +264,8 @@ fun LauncherRoot(
 ) {
     var overlay by rememberSaveable { mutableStateOf(LauncherOverlay.None) }
     var autoListen by remember { mutableStateOf(false) }
+    val view = LocalView.current
+    var mapArea by remember { mutableStateOf<android.graphics.Rect?>(null) }
     LaunchedEffect(voiceTrigger) {
         if (voiceTrigger > 0) {
             autoListen = true
@@ -324,11 +336,19 @@ fun LauncherRoot(
                         minCellWidth = cellWidth,
                         gauges = dash.gauges,
                         metric = dash.metric,
-                        onGaugeClick = { open(LauncherOverlay.Diagnostics) }
+                        onGaugeClick = { open(LauncherOverlay.Diagnostics) },
+                        reading = dash.reading
                     )
                 }
                 val navPane = @Composable { paneModifier: Modifier ->
-                    NavigationPane(paneModifier, dash.hud, showMap = showMap, mapActive = mapActive, nav = nav)
+                    NavigationPane(
+                        // Multi-View windows open over exactly this pane, leaving the rest of home usable.
+                        paneModifier.onGloballyPositioned { mapArea = it.screenRect(view) },
+                        dash.hud,
+                        showMap = showMap,
+                        mapActive = mapActive,
+                        nav = nav
+                    )
                 }
 
                 if (isTall) {
@@ -362,9 +382,7 @@ fun LauncherRoot(
                         apps = apps,
                         onDismiss = close,
                         modifier = Modifier.fillMaxSize(),
-                        reservedTop = ScannerHeight,
-                        // Dock + outer padding + a gap, so windows stop just above the dock.
-                        reservedBottom = dockHeight + gap * 2
+                        area = mapArea
                     )
                     LauncherOverlay.Assistant -> AssistantOverlay(
                         onDismiss = close,
@@ -386,6 +404,18 @@ fun LauncherRoot(
             }
         }
     }
+}
+
+/** This node's bounds in screen pixels, which is what freeform launch bounds are measured in. */
+private fun LayoutCoordinates.screenRect(view: View): android.graphics.Rect {
+    val origin = IntArray(2).also(view::getLocationOnScreen)
+    val b = boundsInRoot()
+    return android.graphics.Rect(
+        origin[0] + b.left.roundToInt(),
+        origin[1] + b.top.roundToInt(),
+        origin[0] + b.right.roundToInt(),
+        origin[1] + b.bottom.roundToInt()
+    )
 }
 
 /** How much the night mode darkens the whole launcher. */

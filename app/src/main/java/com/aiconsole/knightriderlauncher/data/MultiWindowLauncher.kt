@@ -81,29 +81,46 @@ object MultiWindowLauncher {
         return Rect(0, 0, dm.widthPixels, dm.heightPixels)
     }
 
+    /** Outcome of opening one window; [problem] is null when it opened as requested. */
+    data class WindowLaunch(val app: LauncherApp, val problem: String?)
+
     /**
-     * Opens [apps] in the slots of [layout], one after another, tiled inside [area] (pixels).
+     * Opens [apps] in the slots of [layout], one after another, tiled inside [area] (screen pixels).
      * With freeform support each app gets exact window bounds; otherwise the second app is
      * opened adjacent (split-screen) and [area] is not honoured.
+     *
+     * Never throws for a refused launch: head-unit ROMs reject some options with a
+     * SecurityException, and that must not take the launcher down with it.
      */
-    suspend fun launch(context: Context, layout: MultiViewLayout, apps: List<LauncherApp>, area: Rect) {
+    suspend fun launch(context: Context, layout: MultiViewLayout, apps: List<LauncherApp>, area: Rect): List<WindowLaunch> {
         val freeform = supportsFreeform(context)
         val gap = (WINDOW_GAP_DP * context.resources.displayMetrics.density).roundToInt()
 
-        apps.take(layout.slots.size).forEachIndexed { index, app ->
+        return apps.take(layout.slots.size).mapIndexed { index, app ->
             val intent = InstalledApps.launchIntent(app)
-            if (freeform) {
-                val options = ActivityOptions.makeBasic()
-                    .setLaunchBounds(layout.slots[index].toRect(area, gap))
-                requestFreeformMode(options)
-                start(context, intent, options)
+            val problem = if (freeform) {
+                launchFreeform(context, intent, layout.slots[index].toRect(area, gap))
             } else {
                 if (index > 0) intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
                 start(context, intent, null)
             }
+            problem?.let { Log.w(TAG, "${app.label}: $it") }
             // Give the window manager time to place each window before the next one opens.
             delay(LAUNCH_STAGGER_MS)
+            WindowLaunch(app, problem)
         }
+    }
+
+    /** Freeform launch at [bounds]; if the ROM refuses the windowing mode, retries with bounds alone. */
+    private fun launchFreeform(context: Context, intent: Intent, bounds: Rect): String? {
+        val options = ActivityOptions.makeBasic().setLaunchBounds(bounds)
+        val modeProblem = requestFreeformMode(options)
+        val problem = start(context, intent, options) ?: return modeProblem
+        if (modeProblem != null) return "$modeProblem; $problem"
+        // Some ROMs reject the windowing mode only at launch time.
+        val retry = start(context, Intent(intent), ActivityOptions.makeBasic().setLaunchBounds(bounds))
+            ?: return "freeform mode refused ($problem), opened with bounds only"
+        return "$problem; bounds only: $retry"
     }
 
     private fun SlotFraction.toRect(screen: Rect, gap: Int): Rect {
@@ -121,23 +138,34 @@ object MultiWindowLauncher {
      * ask for freeform windowing mode. That setter is a hidden API that Android 9+ blocks for
      * plain reflection, so it goes through HiddenApiBypass. (Samsung honours bare bounds.)
      */
-    private fun requestFreeformMode(options: ActivityOptions) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
-        try {
+    private fun requestFreeformMode(options: ActivityOptions): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
+        return try {
             HiddenApiBypass.invoke(
                 ActivityOptions::class.java, options, "setLaunchWindowingMode", WINDOWING_MODE_FREEFORM
             )
+            null
         } catch (e: Exception) {
-            // Windows will open fullscreen; leave a trace so it shows up in logcat.
             Log.w(TAG, "setLaunchWindowingMode(FREEFORM) unavailable", e)
+            "freeform mode unavailable (${e.describe()})"
+        } catch (e: LinkageError) {
+            // HiddenApiBypass failing to initialise on an unusual ROM surfaces as an Error.
+            Log.w(TAG, "HiddenApiBypass unavailable", e)
+            "freeform mode unavailable (${e.describe()})"
         }
     }
 
-    private fun start(context: Context, intent: Intent, options: ActivityOptions?) {
-        try {
-            context.startActivity(intent, options?.toBundle())
-        } catch (_: ActivityNotFoundException) {
-            // App was uninstalled since the list was loaded.
-        }
+    /** Starts [intent]; returns why it failed, or null on success. */
+    private fun start(context: Context, intent: Intent, options: ActivityOptions?): String? = try {
+        context.startActivity(intent, options?.toBundle())
+        null
+    } catch (_: ActivityNotFoundException) {
+        "app is no longer installed"
+    } catch (e: RuntimeException) {
+        // SecurityException / IllegalArgumentException from the system refusing the options.
+        Log.w(TAG, "startActivity refused", e)
+        e.describe()
     }
+
+    private fun Throwable.describe(): String = "${javaClass.simpleName}: ${message ?: "no details"}"
 }

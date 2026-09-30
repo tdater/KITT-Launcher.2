@@ -1,5 +1,6 @@
 package com.aiconsole.knightriderlauncher.ui.multiview
 
+import android.graphics.Rect
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -42,12 +43,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.aiconsole.knightriderlauncher.data.LauncherApp
 import com.aiconsole.knightriderlauncher.data.MultiViewLayout
@@ -69,30 +67,23 @@ private const val MAX_SLOTS = 4
 /**
  * Full-screen overlay: pick a layout, assign an app to each slot, then ENGAGE to
  * open them as positioned windows.
+ *
+ * [area] is where the windows go, in screen pixels: the home screen's map pane, so the
+ * scanner, gauges, apps and dock stay visible. Falls back to the whole screen until measured.
  */
 @Composable
 fun MultiViewScreen(
     apps: List<LauncherApp>,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
-    reservedTop: Dp = 0.dp,
-    reservedBottom: Dp = 0.dp
+    area: Rect? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val freeform = remember { MultiWindowLauncher.supportsFreeform(context) }
-    val configuration = LocalConfiguration.current
-    val density = LocalDensity.current
-    val topPx = with(density) { reservedTop.roundToPx() }
-    val bottomPx = with(density) { reservedBottom.roundToPx() }
-    // Windows tile between the scanner and the dock, so both stay visible and usable.
-    val area = remember(configuration, topPx, bottomPx) {
-        MultiWindowLauncher.screenBounds(context).apply {
-            top += topPx
-            bottom = (bottom - bottomPx).coerceAtLeast(top + 1)
-        }
-    }
-    val screenAspect = area.width().toFloat() / area.height()
+    val targetArea = area ?: remember(context) { MultiWindowLauncher.screenBounds(context) }
+    val screenAspect = targetArea.width().toFloat() / targetArea.height().coerceAtLeast(1)
+    var problems by remember { mutableStateOf<List<String>>(emptyList()) }
 
     var layout by rememberSaveable { mutableStateOf(MultiViewLayout.Stacked) }
     val assignments = remember { mutableStateListOf<LauncherApp?>().apply { repeat(MAX_SLOTS) { add(null) } } }
@@ -161,6 +152,15 @@ fun MultiViewScreen(
                     }
                 }
 
+                if (!freeform) {
+                    Text(
+                        text = "Freeform windows are off, so apps open in split-screen and cover the whole screen. " +
+                            "Turn on \"Enable freeform windows\" in Developer options, then reboot, to keep them in the map area.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = DashAmber
+                    )
+                }
+
                 if (wide) {
                     Row(
                         modifier = Modifier.fillMaxWidth().weight(1f),
@@ -172,6 +172,13 @@ fun MultiViewScreen(
                 } else {
                     slotMap(Modifier.fillMaxWidth().weight(0.45f))
                     appPicker(Modifier.fillMaxWidth().weight(0.55f))
+                }
+
+                if (problems.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("WINDOW PROBLEMS", style = MaterialTheme.typography.labelMedium, color = ScannerRed)
+                        problems.forEach { Text(it, style = MaterialTheme.typography.bodyMedium, color = DashWhite) }
+                    }
                 }
 
                 Row(
@@ -192,15 +199,18 @@ fun MultiViewScreen(
                         label = if (launching) "Engaging…" else "Engage",
                         onClick = {
                             launching = true
+                            problems = emptyList()
                             scope.launch {
-                                MultiWindowLauncher.launch(
+                                val results = MultiWindowLauncher.launch(
                                     context,
                                     layout,
                                     assignments.take(slotCount).filterNotNull(),
-                                    area
+                                    targetArea
                                 )
                                 launching = false
-                                onDismiss()
+                                problems = results.mapNotNull { r -> r.problem?.let { "${r.app.label}: $it" } }
+                                // Stay open on failure so the reason is readable on the head unit.
+                                if (problems.isEmpty()) onDismiss()
                             }
                         },
                         modifier = Modifier.weight(2f).fillMaxHeight(),
