@@ -3,6 +3,7 @@ package com.aiconsole.knightriderlauncher
 import android.app.Application
 import android.database.SQLException
 import android.util.Log
+import androidx.compose.ui.graphics.Color
 import com.aiconsole.knightriderlauncher.assistant.AssistantPrompt
 import com.aiconsole.knightriderlauncher.assistant.AssistantRepository
 import com.aiconsole.knightriderlauncher.assistant.GeminiAssistantClient
@@ -100,6 +101,11 @@ class KittApplication : Application() {
         ThemeState.theme = settings.uiTheme.value
         appScope.launch(Dispatchers.Main) {
             settings.uiTheme.state.collect { ThemeState.theme = it }
+        }
+        appScope.launch(Dispatchers.Main) {
+            settings.accentColor.state.collect { argb ->
+                ThemeState.accentOverride = if (argb == 0L) null else Color(argb.toInt())
+            }
         }
         appScope.launch {
             obd.readings.collect { readings -> readings.forEach { (id, reading) -> pidHistory.add(id, reading) } }

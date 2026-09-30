@@ -5,16 +5,23 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,7 +32,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -48,8 +58,12 @@ import com.aiconsole.knightriderlauncher.ui.components.KittTextField
 import com.aiconsole.knightriderlauncher.ui.components.KittToggle
 import com.aiconsole.knightriderlauncher.ui.components.SectionHeader
 import com.aiconsole.knightriderlauncher.ui.scanner.ScannerOverlayService
+import com.aiconsole.knightriderlauncher.ui.theme.AccentSwatches
 import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
 import com.aiconsole.knightriderlauncher.ui.theme.DashGrey
+import com.aiconsole.knightriderlauncher.ui.theme.DashWhite
+import com.aiconsole.knightriderlauncher.ui.theme.KittBezel
+import com.aiconsole.knightriderlauncher.ui.theme.KittBlack
 import com.aiconsole.knightriderlauncher.ui.theme.LedGreen
 import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
 import com.aiconsole.knightriderlauncher.ui.theme.UiTheme
@@ -94,6 +108,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val metric by settings.metricUnits.state.collectAsState()
     val overlay by settings.scannerOverlay.state.collectAsState()
     val theme by settings.uiTheme.state.collectAsState()
+    val accent by settings.accentColor.state.collectAsState()
     val shiftLight by settings.shiftLight.state.collectAsState()
     val shiftRpm by settings.shiftRpm.state.collectAsState()
     val rain by settings.matrixRain.state.collectAsState()
@@ -355,6 +370,25 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
             item { SectionHeader("Display") }
             item { Text("THEME", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
             item { ChoiceRow(UiTheme.entries, theme, { it.label }, { settings.uiTheme.set(it) }, color = ScannerRed) }
+            item { Text("ACCENT COLOUR", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
+            item {
+                LazyRow(Modifier.height(44.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(AccentSwatches) { argb ->
+                        val selected = argb == accent
+                        Box(
+                            Modifier
+                                .size(width = 56.dp, height = 44.dp)
+                                .clip(MaterialTheme.shapes.small)
+                                .background(if (argb == 0L) KittBlack else Color(argb.toInt()))
+                                .border(if (selected) 3.dp else 1.dp, if (selected) DashWhite else KittBezel, MaterialTheme.shapes.small)
+                                .clickable { settings.accentColor.set(argb) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (argb == 0L) Text("THEME", style = MaterialTheme.typography.labelSmall, color = DashGrey)
+                        }
+                    }
+                }
+            }
             if (theme == UiTheme.Colorado) {
                 item { KittToggle("Matrix rain", rain, { settings.matrixRain.set(it) }, description = "Falling glyphs behind the panels.") }
             }

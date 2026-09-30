@@ -63,7 +63,8 @@ private val ColoradoShapes = Shapes(
 @Composable
 fun KnightRiderLauncherTheme(content: @Composable () -> Unit) {
     val theme = ThemeState.theme
-    val scheme = remember(theme) { colorScheme(theme.palette()) }
+    val accent = ThemeState.accentOverride
+    val scheme = remember(theme, accent) { colorScheme(ThemeState.palette) }
     MaterialTheme(
         colorScheme = scheme,
         typography = if (theme == UiTheme.Colorado) ColoradoTypography else Typography,

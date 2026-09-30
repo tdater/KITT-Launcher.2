@@ -4,12 +4,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 
 /** The launcher's selectable looks. */
 enum class UiTheme(val label: String) {
     Kitt("KITT"),
     Karr("KARR"),
     NightVision("Night Vision"),
+    SuperPursuit("Super Pursuit"),
+    RetroVfd("Retro VFD"),
+    Outrun("Outrun"),
+    Stealth("Stealth"),
     Colorado("Colorado OS")
 }
 
@@ -117,12 +122,105 @@ val NightVisionPalette = KittPalette(
     grey = Color(0xFF7A2E2E)
 )
 
+// Super Pursuit Mode (season 4): blue-black panels, pursuit red with police blue secondary lights.
+val SuperPursuitPalette = KittPalette(
+    black = Color(0xFF03040A),
+    charcoal = Color(0xFF0A0D18),
+    graphite = Color(0xFF111626),
+    bezel = Color(0xFF26304D),
+    grid = Color(0xFF1A2138),
+    accent = Color(0xFFFF2233),
+    accentDim = Color(0xFF4A0A10),
+    danger = Color(0xFFFF2233),
+    amber = Color(0xFF3DA5FF),
+    amberDim = Color(0xFF0B2A4A),
+    green = Color(0xFF63F2FF),
+    greenDim = Color(0xFF0E3A42),
+    yellow = Color(0xFFFFE14D),
+    info = Color(0xFF3DA5FF),
+    white = Color(0xFFE6ECFA),
+    grey = Color(0xFF7F8AA6)
+)
+
+// Retro VFD: the teal-cyan glow of an 80s vacuum-fluorescent dashboard.
+val RetroVfdPalette = KittPalette(
+    black = Color(0xFF020605),
+    charcoal = Color(0xFF07100E),
+    graphite = Color(0xFF0C1816),
+    bezel = Color(0xFF1E3C38),
+    grid = Color(0xFF142A27),
+    accent = Color(0xFF3DF5E0),
+    accentDim = Color(0xFF0B3A35),
+    danger = Color(0xFFFF4040),
+    amber = Color(0xFF9CFFE8),
+    amberDim = Color(0xFF16403A),
+    green = Color(0xFF6BFFB8),
+    greenDim = Color(0xFF12402C),
+    yellow = Color(0xFFE6FF7A),
+    info = Color(0xFF3DC8F5),
+    white = Color(0xFFD9FFF8),
+    grey = Color(0xFF6E9C95)
+)
+
+// Outrun: synthwave neon, magenta and cyan on deep purple with a sunset yellow.
+val OutrunPalette = KittPalette(
+    black = Color(0xFF0B0014),
+    charcoal = Color(0xFF14041F),
+    graphite = Color(0xFF1D0A2E),
+    bezel = Color(0xFF3A1760),
+    grid = Color(0xFF2A0F46),
+    accent = Color(0xFFFF2BD6),
+    accentDim = Color(0xFF4A0A40),
+    danger = Color(0xFFFF3355),
+    amber = Color(0xFF2BE8FF),
+    amberDim = Color(0xFF0A3A45),
+    green = Color(0xFFFFD02B),
+    greenDim = Color(0xFF45380A),
+    yellow = Color(0xFFFFD02B),
+    info = Color(0xFF2BE8FF),
+    white = Color(0xFFF5E6FF),
+    grey = Color(0xFF9B83B5)
+)
+
+// Stealth: true black and greys, minimal glow; only warnings keep colour.
+val StealthPalette = KittPalette(
+    black = Color(0xFF000000),
+    charcoal = Color(0xFF050505),
+    graphite = Color(0xFF0B0B0B),
+    bezel = Color(0xFF222222),
+    grid = Color(0xFF161616),
+    accent = Color(0xFFD8D8D8),
+    accentDim = Color(0xFF2E2E2E),
+    danger = Color(0xFFFF3030),
+    amber = Color(0xFFB0B0B0),
+    amberDim = Color(0xFF262626),
+    green = Color(0xFFE6E6E6),
+    greenDim = Color(0xFF2A2A2A),
+    yellow = Color(0xFFCCCCCC),
+    info = Color(0xFF9E9E9E),
+    white = Color(0xFFEDEDED),
+    grey = Color(0xFF7A7A7A)
+)
+
 fun UiTheme.palette(): KittPalette = when (this) {
     UiTheme.Kitt -> KittClassicPalette
     UiTheme.Karr -> KarrPalette
     UiTheme.NightVision -> NightVisionPalette
+    UiTheme.SuperPursuit -> SuperPursuitPalette
+    UiTheme.RetroVfd -> RetroVfdPalette
+    UiTheme.Outrun -> OutrunPalette
+    UiTheme.Stealth -> StealthPalette
     UiTheme.Colorado -> ColoradoPalette
 }
+
+/** Swatches for the custom accent; 0 means "use the theme's own". */
+val AccentSwatches: List<Long> = listOf(
+    0xFFFF1E1E, 0xFFFF8A1A, 0xFFFFC21A, 0xFF3DFF3D, 0xFF3DF5E0, 0xFF3DA5FF, 0xFF9B5CFF, 0xFFFF2BD6, 0xFFE8E8E6
+)
+
+/** Replaces the brand accent (scanner, headers, active buttons) with [accent]. */
+fun KittPalette.withAccent(accent: Color?): KittPalette =
+    if (accent == null) this else copy(accent = accent, accentDim = lerp(black, accent, 0.25f))
 
 /**
  * The active theme. Snapshot state, so every composable and draw lambda that reads one of
@@ -130,7 +228,11 @@ fun UiTheme.palette(): KittPalette = when (this) {
  */
 object ThemeState {
     var theme by mutableStateOf(UiTheme.Kitt)
-    val palette: KittPalette get() = theme.palette()
+
+    /** Driver-picked accent overriding the theme's, or null. */
+    var accentOverride by mutableStateOf<Color?>(null)
+
+    val palette: KittPalette get() = theme.palette().withAccent(accentOverride)
 }
 
 // Surfaces

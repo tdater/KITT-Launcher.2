@@ -61,6 +61,9 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     private fun boolPref(key: String, default: Boolean) =
         Pref(key, default, { k, d -> getBoolean(k, d) }, { k, v -> putBoolean(k, v) })
 
+    private fun longPref(key: String, default: Long) =
+        Pref(key, default, { k, d -> getLong(k, d) }, { k, v -> putLong(k, v) })
+
     private fun intPref(key: String, default: Int) =
         Pref(key, default, { k, d -> getInt(k, d) }, { k, v -> putInt(k, v) })
 
@@ -108,6 +111,8 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
         { k, v -> putString(k, v.name) }
     )
     val matrixRain = boolPref("matrix_rain", true)
+    /** Custom accent as ARGB, 0 = the theme's own (see AccentSwatches). */
+    val accentColor = longPref("accent_color", 0L)
     /** Scanner doubles as a shift light near [shiftRpm]. */
     val shiftLight = boolPref("shift_light", false)
     val shiftRpm = intPref("shift_rpm", 5000)
