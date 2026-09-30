@@ -51,3 +51,21 @@ class StreamUrlsExtrasTest {
         )
     }
 }
+
+class StreamSitesTest {
+    @Test
+    fun savedSitesRoundTripAndBuiltInsAreHttps() {
+        val saved = listOf(
+            com.aiconsole.knightriderlauncher.stream.StreamSite("My | Radio", "https://example.org/live"),
+            com.aiconsole.knightriderlauncher.stream.StreamSite("Tube", "https://www.youtube.com/")
+        )
+        val back = com.aiconsole.knightriderlauncher.stream.StreamSites.decode(
+            com.aiconsole.knightriderlauncher.stream.StreamSites.encode(saved) + "\nnot a site\n|"
+        )
+        assertEquals(listOf("My / Radio", "Tube"), back.map { it.label })
+        assertEquals(saved.map { it.url }, back.map { it.url })
+        val all = com.aiconsole.knightriderlauncher.stream.StreamSites.video + com.aiconsole.knightriderlauncher.stream.StreamSites.audio
+        org.junit.Assert.assertTrue(all.all { it.url.startsWith("https://") })
+        assertEquals(all.size, all.map { it.url }.distinct().size)
+    }
+}

@@ -77,6 +77,7 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
     - Non-web schemes are dropped so apps can't take over the screen.
     - Desktop-UA mode (default) gives full desktop players; site fullscreen stays inside the pane.
     - Userscripts (`stream/Userscripts`, `UserscriptStore`) inject at document start via `androidx.webkit`; `.user.js` links prompt to install. Chrome extensions aren't possible in WebView.
+    - Site picker (`StreamSites`): built-ins are licensed free services only (don't add piracy sites); the owner's saved sites are theirs to choose.
     - Video plays while moving by the owner's explicit choice; don't add a driving gate.
   - **Swipe:** disabled on Drive while the map or stream needs horizontal drags; Home returns to Drive.
   - **Extras:** `StatusStrip` (clock/heading/radios/OBD/volts), GPS speed fallback (`GpsTracker`), `Screensaver` when parked and idle, `WidgetsPane` (`AppWidgetHost` in `KittApplication`), `StartupRoutine` (on start or wake after 5+ min), `HardwareKeys` button mapping via `onKeyUp`, `LauncherBackup` (API keys excluded on purpose).

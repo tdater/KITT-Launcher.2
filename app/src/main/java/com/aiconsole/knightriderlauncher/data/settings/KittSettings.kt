@@ -146,6 +146,8 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
 
     /** Stream window asks sites for their desktop layout (full players, more settings). */
     val streamDesktop = boolPref("stream_desktop", true)
+    /** The driver's saved one-tap sites (StreamSites format). */
+    val streamBookmarks = stringPref("stream_bookmarks", "")
     val navNotifications = boolPref("nav_notifications", true)
     val wakeWord = boolPref("wake_word", false)
 

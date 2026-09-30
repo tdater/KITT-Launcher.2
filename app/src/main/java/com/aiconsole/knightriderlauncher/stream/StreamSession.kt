@@ -19,12 +19,6 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.aiconsole.knightriderlauncher.data.settings.KittSettings
 
-/** Quick-pick streaming sites; anything else can be typed in. */
-enum class StreamSource(val label: String, val url: String) {
-    YouTube("YouTube", "https://www.youtube.com/"),
-    YouTubeMusic("YT Music", "https://music.youtube.com/")
-}
-
 /**
  * The home screen's streaming window: web video players (YouTube, YouTube Music, or any site the
  * driver enters) in a WebView that lives inside the map pane, so nothing takes over the screen.
@@ -66,6 +60,14 @@ class StreamSession(private val settings: KittSettings, private val userscripts:
         visible = true
         showScripts = false
         view?.loadUrl(address)
+    }
+
+    /** The page showing now, for saving it as a one-tap site. */
+    fun currentPage(): StreamSite? {
+        val web = view ?: return null
+        val address = web.url?.takeIf { it.startsWith("http") } ?: return null
+        val label = web.title?.takeIf { it.isNotBlank() && !it.startsWith("http") }?.take(40) ?: StreamUrls.titleOf(address)
+        return StreamSite(label, address)
     }
 
     /** Back to the site picker, keeping the page loaded. */
