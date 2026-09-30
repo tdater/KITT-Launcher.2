@@ -46,7 +46,7 @@ class KittApplication : Application() {
     val obd: ObdManager by lazy { ObdManager(this, settings, tripRecorder, customPids, appScope) }
 
     /** KITT's one voice, shared by the assistant and alerts. */
-    val kittVoice: TextToSpeechHelper by lazy { TextToSpeechHelper(this, settings.kittVoiceName.value) }
+    val kittVoice: TextToSpeechHelper by lazy { TextToSpeechHelper(this, settings, appScope) }
 
     val alerts: KittAlerts by lazy { KittAlerts(settings, obd, gauges, kittVoice, appScope) }
 

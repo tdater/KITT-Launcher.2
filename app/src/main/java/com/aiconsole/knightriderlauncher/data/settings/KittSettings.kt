@@ -3,6 +3,7 @@ package com.aiconsole.knightriderlauncher.data.settings
 import android.content.Context
 import android.content.SharedPreferences
 import com.aiconsole.knightriderlauncher.BuildConfig
+import com.aiconsole.knightriderlauncher.assistant.GeminiSpeechProtocol
 import com.aiconsole.knightriderlauncher.ui.theme.UiTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +20,11 @@ enum class AiProvider(val label: String) {
 enum class PersonaStyle(val label: String) {
     Unfiltered("Unfiltered KITT"),
     Classic("Classic KITT")
+}
+
+enum class VoiceEngine(val label: String) {
+    Gemini("Gemini neural"),
+    Device("Device TTS")
 }
 
 enum class NightMode(val label: String) {
@@ -77,7 +83,14 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val voiceReply = boolPref("voice_reply", true)
     val greeting = boolPref("greeting", true)
     val voiceAlerts = boolPref("voice_alerts", true)
+    /** Device TTS voice: the offline fallback, or the only voice when [voiceEngine] is Device. */
     val kittVoiceName = stringPref("kitt_voice", "")
+    val voiceEngine = Pref(
+        "voice_engine", VoiceEngine.Gemini,
+        { k, d -> runCatching { VoiceEngine.valueOf(getString(k, d.name)!!) }.getOrDefault(d) },
+        { k, v -> putString(k, v.name) }
+    )
+    val geminiVoice = stringPref("gemini_voice", GeminiSpeechProtocol.DEFAULT_VOICE)
 
     // --- Display ---
     val metricUnits = boolPref("metric_units", false)

@@ -1,31 +1,65 @@
 package com.aiconsole.knightriderlauncher.assistant
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.MediaPlayer
+import android.os.Build
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
+import android.util.Log
+import com.aiconsole.knightriderlauncher.data.settings.KittSettings
+import com.aiconsole.knightriderlauncher.data.settings.VoiceEngine
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
+import java.io.File
+import java.io.IOException
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /**
- * KITT's voice: one app-wide TTS engine shared by the assistant and proactive alerts.
- * Synthesis runs in the TTS engine's own process. Slightly lowered pitch and a measured
- * rate give it a calm, deliberate delivery.
+ * KITT's voice: one app-wide speaker shared by the assistant and proactive alerts.
+ *
+ * With [VoiceEngine.Gemini] each line is synthesised by Gemini's neural speech (see
+ * [GeminiSpeechClient]) in sentence chunks, so playback starts while the rest is generated.
+ * The device TTS engine takes over whenever that fails, times out or there's no key or network.
+ * Everything is queued and played on the main thread.
  */
-class TextToSpeechHelper(context: Context, initialVoice: String = "") {
+class TextToSpeechHelper(context: Context, private val settings: KittSettings, scope: CoroutineScope) {
+
+    private val neural = GeminiSpeechClient(context.applicationContext, settings)
+    private val main = CoroutineScope(scope.coroutineContext + Dispatchers.Main)
 
     @Volatile
     private var ready = false
-    private var preferredVoice = initialVoice
-
-    /** Spoken once the engine finishes starting (e.g. the greeting at boot). */
-    private var pending: String? = null
+    private var preferredVoice = settings.kittVoiceName.value
+    private val localReady = CompletableDeferred<Boolean>()
+    private val localDone = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
     private lateinit var tts: TextToSpeech
+
+    // Main thread only.
+    private val queue = ArrayDeque<Utterance>()
+    private var worker: Job? = null
 
     private val _speaking = MutableStateFlow(false)
     val speaking: StateFlow<Boolean> = _speaking.asStateFlow()
+
+    private data class Utterance(val text: String, val urgent: Boolean, val deviceOnly: Boolean)
 
     init {
         tts = TextToSpeech(context.applicationContext) { status -> onInit(status) }
@@ -33,33 +67,30 @@ class TextToSpeechHelper(context: Context, initialVoice: String = "") {
 
     private fun onInit(status: Int) {
         ready = status == TextToSpeech.SUCCESS
-        if (!ready) return
-        tts.setPitch(0.92f)
-        tts.setSpeechRate(0.96f)
-        applyVoice(preferredVoice)
-        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {
-                _speaking.value = true
-            }
+        if (ready) {
+            // Slightly lowered pitch and a measured rate: calmer than the engine's default.
+            tts.setPitch(0.92f)
+            tts.setSpeechRate(0.96f)
+            applyVoice(preferredVoice)
+            tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) = Unit
 
-            override fun onDone(utteranceId: String?) {
-                _speaking.value = false
-            }
+                override fun onDone(utteranceId: String?) = finished(utteranceId)
 
-            @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) {
-                _speaking.value = false
-            }
+                @Deprecated("Deprecated in Java")
+                override fun onError(utteranceId: String?) = finished(utteranceId)
 
-            override fun onError(utteranceId: String?, errorCode: Int) {
-                _speaking.value = false
-            }
-        })
-        pending?.let { speak(it) }
-        pending = null
+                override fun onError(utteranceId: String?, errorCode: Int) = finished(utteranceId)
+            })
+        }
+        localReady.complete(ready)
     }
 
-    /** Offline-capable English voices, for the voice picker. Empty until the engine is ready. */
+    private fun finished(utteranceId: String?) {
+        utteranceId?.let { localDone.remove(it)?.complete(Unit) }
+    }
+
+    /** Offline-capable English device voices, for the fallback picker. Empty until the engine is ready. */
     fun englishVoices(): List<String> = if (!ready) emptyList() else runCatching {
         tts.voices.orEmpty()
             .filter { it.locale.language == Locale.ENGLISH.language && !it.isNetworkConnectionRequired }
@@ -68,6 +99,7 @@ class TextToSpeechHelper(context: Context, initialVoice: String = "") {
             .sorted()
     }.getOrDefault(emptyList())
 
+    /** Selects the device TTS voice (the fallback when Gemini speech is on). */
     fun setVoice(name: String) {
         preferredVoice = name
         if (ready) applyVoice(name)
@@ -78,28 +110,154 @@ class TextToSpeechHelper(context: Context, initialVoice: String = "") {
         if (voice != null) tts.voice = voice else tts.language = Locale.getDefault()
     }
 
-    /** No-op when no TTS engine is installed; the answer is still shown on screen. */
-    fun speak(text: String, interrupt: Boolean = true) {
-        if (!ready) {
-            pending = text
-            return
-        }
-        if (text.isNotBlank()) {
-            tts.speak(
-                text.replace("•", ""),
-                if (interrupt) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD,
-                null,
-                "kitt-${System.nanoTime()}"
-            )
+    /**
+     * Queues [text]; [interrupt] drops whatever is playing or waiting first. [urgent] lines
+     * (safety alerts) get a firmer delivery and fall back to the device voice much sooner.
+     * [deviceOnly] skips Gemini, e.g. to preview the fallback voice.
+     */
+    fun speak(text: String, interrupt: Boolean = true, urgent: Boolean = false, deviceOnly: Boolean = false) {
+        if (text.isBlank()) return
+        main.launch {
+            if (interrupt) haltPlayback()
+            queue.addLast(Utterance(text, urgent, deviceOnly))
+            if (worker?.isActive != true) worker = main.launch { drain() }
         }
     }
 
     fun stop() {
+        main.launch { haltPlayback() }
+    }
+
+    fun shutdown() {
+        main.launch {
+            haltPlayback()
+            tts.shutdown()
+        }
+    }
+
+    private fun haltPlayback() {
+        queue.clear()
+        worker?.cancel()
+        worker = null
         if (ready) tts.stop()
         _speaking.value = false
     }
 
-    fun shutdown() {
-        tts.shutdown()
+    private suspend fun drain() {
+        try {
+            while (true) {
+                val next = queue.removeFirstOrNull() ?: break
+                say(next)
+            }
+        } finally {
+            _speaking.value = false
+        }
+    }
+
+    private suspend fun say(utterance: Utterance) {
+        val chunks = GeminiSpeechProtocol.chunks(GeminiSpeechProtocol.speakable(utterance.text))
+        if (chunks.isEmpty()) return
+        val spoken = if (!utterance.deviceOnly && useNeural()) sayNeural(chunks, utterance.urgent) else 0
+        if (spoken < chunks.size) sayLocal(chunks.drop(spoken))
+    }
+
+    private fun useNeural(): Boolean =
+        settings.voiceEngine.value == VoiceEngine.Gemini && settings.geminiKey.isNotEmpty()
+
+    /** Plays chunks through Gemini speech, prefetching the next while one plays. Returns how many were spoken. */
+    private suspend fun sayNeural(chunks: List<String>, urgent: Boolean): Int = supervisorScope {
+        val voice = settings.geminiVoice.value
+        val style = if (urgent) GeminiSpeechProtocol.URGENT_STYLE else GeminiSpeechProtocol.STYLE
+        val timeout = if (urgent) URGENT_TIMEOUT_MS else CHUNK_TIMEOUT_MS
+        fun fetch(index: Int) = async(Dispatchers.IO) { neural.synthesize(chunks[index], voice, style) }
+
+        var next = fetch(0)
+        for (index in chunks.indices) {
+            val file = try {
+                withTimeout(timeout) { next.await() }
+            } catch (e: TimeoutCancellationException) {
+                next.cancel()
+                Log.w(TAG, "Gemini speech timed out; using device voice")
+                return@supervisorScope index
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Gemini speech failed; using device voice: ${e.message}")
+                return@supervisorScope index
+            }
+            if (index + 1 < chunks.size) next = fetch(index + 1)
+            _speaking.value = true
+            try {
+                play(file)
+            } catch (e: IOException) {
+                Log.w(TAG, "Playback failed; using device voice", e)
+                next.cancel()
+                return@supervisorScope index
+            }
+        }
+        chunks.size
+    }
+
+    private suspend fun sayLocal(chunks: List<String>) {
+        val ok = withTimeoutOrNull(LOCAL_INIT_TIMEOUT_MS) { localReady.await() } ?: false
+        if (!ok) return // No TTS engine installed; the answer is still shown on screen.
+        for (chunk in chunks) {
+            val id = "kitt-${System.nanoTime()}"
+            val done = CompletableDeferred<Unit>()
+            localDone[id] = done
+            try {
+                _speaking.value = true
+                if (tts.speak(chunk, TextToSpeech.QUEUE_ADD, null, id) != TextToSpeech.SUCCESS) return
+                done.await()
+            } finally {
+                localDone.remove(id)
+            }
+        }
+    }
+
+    private suspend fun play(file: File) = suspendCancellableCoroutine { continuation ->
+        val player = MediaPlayer()
+        var released = false
+        fun release() {
+            if (!released) {
+                released = true
+                player.release()
+            }
+        }
+        player.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) AudioAttributes.USAGE_ASSISTANT
+                    else AudioAttributes.USAGE_MEDIA
+                )
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+        )
+        player.setOnPreparedListener { it.start() }
+        player.setOnCompletionListener {
+            release()
+            if (continuation.isActive) continuation.resume(Unit)
+        }
+        player.setOnErrorListener { _, what, extra ->
+            release()
+            if (continuation.isActive) continuation.resumeWithException(IOException("MediaPlayer error $what/$extra"))
+            true
+        }
+        // Cancellation comes from haltPlayback on the main thread, same as the player callbacks.
+        continuation.invokeOnCancellation { release() }
+        try {
+            player.setDataSource(file.path)
+            player.prepareAsync()
+        } catch (e: Exception) {
+            release()
+            continuation.resumeWithException(IOException("Couldn't play ${file.name}", e))
+        }
+    }
+
+    private companion object {
+        const val TAG = "KittVoice"
+        const val CHUNK_TIMEOUT_MS = 10_000L
+        const val URGENT_TIMEOUT_MS = 3_000L
+        const val LOCAL_INIT_TIMEOUT_MS = 5_000L
     }
 }

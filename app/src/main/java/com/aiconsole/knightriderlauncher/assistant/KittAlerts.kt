@@ -186,7 +186,7 @@ class KittAlerts(
         if (last != null && now - last < cooldownMs) return
         lastRaised[key] = now
         _active.value = KittAlert(message, severe, now)
-        if (settings.voiceAlerts.value) voice.speak(message, interrupt = severe)
+        if (settings.voiceAlerts.value) voice.speak(message, interrupt = severe, urgent = severe)
         clearJob?.cancel()
         clearJob = scope.launch(Dispatchers.Main) {
             delay(if (severe) 20_000 else 8_000)
