@@ -15,16 +15,18 @@ import com.aiconsole.knightriderlauncher.data.trip.TripMetricRecorder
 import com.aiconsole.knightriderlauncher.obd.AdapterConfig
 import com.aiconsole.knightriderlauncher.obd.AdapterType
 import com.aiconsole.knightriderlauncher.obd.CustomPidStore
+import com.aiconsole.knightriderlauncher.obd.DataLogger
 import com.aiconsole.knightriderlauncher.obd.GaugeStore
 import com.aiconsole.knightriderlauncher.obd.ObdManager
+import com.aiconsole.knightriderlauncher.obd.PidHistory
 import com.aiconsole.knightriderlauncher.ui.theme.NightModeController
 import com.aiconsole.knightriderlauncher.ui.theme.ThemeState
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-import java.util.concurrent.TimeUnit
 
 /** Holds app-wide singletons. The OBD session and KITT's voice outlive any single screen. */
 class KittApplication : Application() {
@@ -44,6 +46,11 @@ class KittApplication : Application() {
     val customPids: CustomPidStore by lazy { CustomPidStore(this) }
 
     val obd: ObdManager by lazy { ObdManager(this, settings, tripRecorder, customPids, appScope) }
+
+    /** Last few minutes of every polled sensor, for the live graphs. */
+    val pidHistory = PidHistory()
+
+    val dataLogger: DataLogger by lazy { DataLogger(this, obd, settings, appScope) }
 
     /** KITT's one voice, shared by the assistant and alerts. */
     val kittVoice: TextToSpeechHelper by lazy { TextToSpeechHelper(this, settings, appScope) }
@@ -85,6 +92,9 @@ class KittApplication : Application() {
         ThemeState.theme = settings.uiTheme.value
         appScope.launch(Dispatchers.Main) {
             settings.uiTheme.state.collect { ThemeState.theme = it }
+        }
+        appScope.launch {
+            obd.readings.collect { readings -> readings.forEach { (id, reading) -> pidHistory.add(id, reading) } }
         }
         // Dashboard gauges are always polled while connected, on screen or not (alerts need them).
         appScope.launch {

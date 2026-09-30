@@ -54,7 +54,7 @@ import java.util.Locale
 
 /** The custom gauge dashboard: live gauges with edit mode, an add-gauge picker and limit editor. */
 @Composable
-fun GaugesTab(app: KittApplication) {
+fun GaugesTab(app: KittApplication, onGraph: (String) -> Unit = {}) {
     val gauges by app.gauges.gauges.collectAsState()
     val readings by app.obd.displayReadings.collectAsState()
     val defs by app.obd.definitions.collectAsState()
@@ -98,7 +98,9 @@ fun GaugesTab(app: KittApplication) {
                         GaugeTile(
                             gauge = GaugeUi(config, defs[config.pidId], readings[config.pidId]),
                             metric = metric,
-                            modifier = Modifier.fillMaxWidth().height(160.dp)
+                            modifier = Modifier.fillMaxWidth().height(160.dp),
+                            // Tap a gauge for its live graph (editing uses the buttons below).
+                            onClick = if (editing) null else ({ onGraph(config.pidId) })
                         )
                         if (editing) {
                             Row(Modifier.fillMaxWidth().height(36.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -34,6 +34,7 @@ import java.util.Locale
 
 enum class DiagTab(val label: String) {
     Gauges("Gauges"),
+    Data("Data"),
     Codes("Codes"),
     Pids("PIDs"),
     Link("Link")
@@ -51,6 +52,7 @@ fun DiagnosticsScreen(
     val hz by app.obd.refreshHz.collectAsState()
     val initial = if (app.savedAdapter() == null) DiagTab.Link else DiagTab.Gauges
     var tab by rememberSaveable { mutableStateOf(initial) }
+    var graphPid by rememberSaveable { mutableStateOf<String?>(null) }
 
     BackHandler(onBack = onDismiss)
 
@@ -83,7 +85,11 @@ fun DiagnosticsScreen(
             }
             Box(Modifier.fillMaxWidth().weight(1f)) {
                 when (tab) {
-                    DiagTab.Gauges -> GaugesTab(app)
+                    DiagTab.Gauges -> GaugesTab(app, onGraph = { pid ->
+                        graphPid = pid
+                        tab = DiagTab.Data
+                    })
+                    DiagTab.Data -> DataTab(app, graphPid)
                     DiagTab.Codes -> CodesTab(app, onAskKitt)
                     DiagTab.Pids -> PidsTab(app)
                     DiagTab.Link -> LinkTab(app)
