@@ -138,6 +138,8 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val appUsage = stringPref("app_usage", "")
     /** Tint app icons in the theme's accent colour. */
     val themedIcons = boolPref("themed_icons", false)
+    /** Short console beep on KITT button presses. */
+    val buttonSounds = boolPref("button_sounds", false)
     /** Clock, connectivity, GPS and OBD status under the scanner. */
     val statusStrip = boolPref("status_strip", true)
     /** Minutes parked and untouched before the KITT screensaver shows; 0 = off. */

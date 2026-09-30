@@ -185,7 +185,10 @@ fun KittButton(
             .clip(shape)
             .background(if (active && enabled) tint.copy(alpha = 0.22f) else KittBlack)
             .border(1.dp, if (active && enabled) tint else tint.copy(alpha = 0.45f), shape)
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(enabled = enabled) {
+                UiSounds.click()
+                onClick()
+            }
             .padding(horizontal = 6.dp, vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {

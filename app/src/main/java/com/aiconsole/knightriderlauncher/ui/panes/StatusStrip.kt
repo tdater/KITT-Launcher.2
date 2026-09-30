@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -37,16 +38,16 @@ import com.aiconsole.knightriderlauncher.ui.theme.DashWhite
 import com.aiconsole.knightriderlauncher.ui.theme.KittBlack
 import com.aiconsole.knightriderlauncher.ui.theme.LedGreen
 import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
-import kotlinx.coroutines.delay
 import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 private data class Radios(val bluetooth: Boolean, val wifi: Boolean, val gps: Boolean)
 
 /** One glanceable row: clock, heading, Bluetooth, Wi-Fi, GPS, OBD link and battery voltage. */
 @Composable
-fun StatusStrip(modifier: Modifier = Modifier) {
+fun StatusStrip(modifier: Modifier = Modifier, onClick: () -> Unit = {}) {
     val context = LocalContext.current
     val app = context.applicationContext as KittApplication
     val obd by app.obd.state.collectAsState()
@@ -67,13 +68,14 @@ fun StatusStrip(modifier: Modifier = Modifier) {
     val volts = readings[PidCatalog.ADAPTER_VOLTAGE]?.value ?: readings[PidCatalog.MODULE_VOLTAGE]?.value
 
     Row(
-        modifier.fillMaxWidth().height(24.dp).background(KittBlack).padding(horizontal = 10.dp),
+        modifier.fillMaxWidth().height(28.dp).background(KittBlack).clickable(onClick = onClick).padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(now)), style = MaterialTheme.typography.labelLarge, color = DashWhite)
         fix?.bearing?.let { Text("HDG ${Compass.cardinal(it)}", style = MaterialTheme.typography.labelMedium, color = DashAmber) }
         Spacer(Modifier.weight(1f))
+        Text("▼ QUICK", style = MaterialTheme.typography.labelSmall, color = DashGrey)
         Indicator("BT", radios.bluetooth)
         Indicator("WIFI", radios.wifi)
         Indicator("GPS", radios.gps && fix != null)

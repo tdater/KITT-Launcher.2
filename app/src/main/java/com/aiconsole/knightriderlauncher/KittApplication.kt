@@ -29,6 +29,7 @@ import com.aiconsole.knightriderlauncher.obd.ObdManager
 import com.aiconsole.knightriderlauncher.obd.PidHistory
 import com.aiconsole.knightriderlauncher.obd.VehicleService
 import com.aiconsole.knightriderlauncher.stream.UserscriptStore
+import com.aiconsole.knightriderlauncher.ui.components.UiSounds
 import com.aiconsole.knightriderlauncher.ui.theme.NightModeController
 import com.aiconsole.knightriderlauncher.ui.theme.ThemeState
 import java.util.concurrent.TimeUnit
@@ -163,6 +164,7 @@ class KittApplication : Application() {
             gauges.gauges.collect { list -> obd.watch("dashboard", list.map { it.pidId }.toSet()) }
         }
         startup.register()
+        appScope.launch { settings.buttonSounds.state.collect { UiSounds.enabled = it } }
         appScope.launch(Dispatchers.Main) {
             vehicle.start()
         }

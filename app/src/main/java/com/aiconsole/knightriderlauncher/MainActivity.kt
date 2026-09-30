@@ -90,6 +90,7 @@ import com.aiconsole.knightriderlauncher.ui.panes.GaugeWallPane
 import com.aiconsole.knightriderlauncher.ui.panes.HudState
 import com.aiconsole.knightriderlauncher.ui.panes.MediaPane
 import com.aiconsole.knightriderlauncher.ui.panes.NavigationPane
+import com.aiconsole.knightriderlauncher.ui.panes.QuickSettingsPanel
 import com.aiconsole.knightriderlauncher.ui.panes.Screensaver
 import com.aiconsole.knightriderlauncher.ui.panes.StatusGridPane
 import com.aiconsole.knightriderlauncher.ui.panes.StatusStrip
@@ -368,6 +369,7 @@ fun LauncherRoot(
     val context = LocalContext.current
     var lastTouch by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     var saver by remember { mutableStateOf(false) }
+    var quickSettings by remember { mutableStateOf(false) }
     val driving = drivingLayout && moving
     // Pulling away brings the Drive page back, with the driving layout.
     LaunchedEffect(driving) {
@@ -488,7 +490,7 @@ fun LauncherRoot(
                 .windowInsetsPadding(WindowInsets.safeDrawing)
         ) {
             KittScanner(Modifier.fillMaxWidth().height(ScannerHeight), alert = dash.alert?.severe == true, shift = dash.shift)
-            if (statusStrip) StatusStrip()
+            if (statusStrip) StatusStrip(onClick = { quickSettings = !quickSettings })
 
             BoxWithConstraints(
                 Modifier
@@ -600,6 +602,10 @@ fun LauncherRoot(
 
                 dash.alert?.let { alert ->
                     AlertBanner(alert, onDismissAlert, Modifier.align(Alignment.TopCenter).fillMaxWidth())
+                }
+                if (quickSettings) {
+                    BackHandler { quickSettings = false }
+                    QuickSettingsPanel(onClose = { quickSettings = false }, modifier = Modifier.align(Alignment.TopCenter))
                 }
 
                 val close = { overlay = LauncherOverlay.None }
