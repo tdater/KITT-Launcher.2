@@ -2,7 +2,9 @@ package com.aiconsole.knightriderlauncher
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.Settings
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -36,6 +38,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,6 +49,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -55,12 +60,17 @@ import androidx.lifecycle.lifecycleScope
 import com.aiconsole.knightriderlauncher.assistant.AssistantPrompt
 import com.aiconsole.knightriderlauncher.assistant.KittAlert
 import com.aiconsole.knightriderlauncher.data.AppLists
+import com.aiconsole.knightriderlauncher.data.AppUsage
+import com.aiconsole.knightriderlauncher.data.HardwareKeys
 import com.aiconsole.knightriderlauncher.data.InstalledApps
+import com.aiconsole.knightriderlauncher.data.KeyAction
+import com.aiconsole.knightriderlauncher.data.KeyBindings
 import com.aiconsole.knightriderlauncher.data.LauncherApp
 import com.aiconsole.knightriderlauncher.nav.NavBridge
 import com.aiconsole.knightriderlauncher.nav.NavInstruction
 import com.aiconsole.knightriderlauncher.obd.AdapterDiscovery
 import com.aiconsole.knightriderlauncher.obd.AdapterType
+import com.aiconsole.knightriderlauncher.obd.DrivingRules
 import com.aiconsole.knightriderlauncher.obd.ObdConnectionService
 import com.aiconsole.knightriderlauncher.obd.ObdState
 import com.aiconsole.knightriderlauncher.obd.PidCatalog
@@ -77,8 +87,11 @@ import com.aiconsole.knightriderlauncher.ui.panes.GaugeWallPane
 import com.aiconsole.knightriderlauncher.ui.panes.HudState
 import com.aiconsole.knightriderlauncher.ui.panes.MediaPane
 import com.aiconsole.knightriderlauncher.ui.panes.NavigationPane
+import com.aiconsole.knightriderlauncher.ui.panes.Screensaver
 import com.aiconsole.knightriderlauncher.ui.panes.StatusGridPane
+import com.aiconsole.knightriderlauncher.ui.panes.StatusStrip
 import com.aiconsole.knightriderlauncher.ui.panes.StreamWindow
+import com.aiconsole.knightriderlauncher.ui.panes.WidgetsPane
 import com.aiconsole.knightriderlauncher.ui.scanner.KittScanner
 import com.aiconsole.knightriderlauncher.ui.scanner.LauncherVisibility
 import com.aiconsole.knightriderlauncher.ui.scanner.ScannerEngine
@@ -95,6 +108,7 @@ import com.aiconsole.knightriderlauncher.ui.theme.UiTheme
 import com.aiconsole.knightriderlauncher.ui.trip.TripScreen
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -128,6 +142,10 @@ class MainActivity : ComponentActivity() {
                 val night by kitt.nightMode.night.collectAsState()
                 val pinnedStored by settings.pinnedApps.state.collectAsState()
                 val hiddenStored by settings.hiddenApps.state.collectAsState()
+                val statusStrip by settings.statusStrip.state.collectAsState()
+                val screensaverMinutes by settings.screensaverMinutes.state.collectAsState()
+                val obdMoving by kitt.obd.moving.collectAsState()
+                val gpsFix by kitt.gps.fix.collectAsState()
                 val pinned = remember(pinnedStored) { AppLists.decode(pinnedStored) }
                 val homeApps = remember(apps, pinned, hiddenStored) {
                     AppLists.homeSelection(apps, LauncherApp::key, pinned, AppLists.decode(hiddenStored).toSet())
@@ -137,7 +155,13 @@ class MainActivity : ComponentActivity() {
                     homeApps = homeApps,
                     favorites = pinned.isNotEmpty(),
                     homeTrigger = homeTrigger,
-                    onAppClick = { InstalledApps.launch(this, it) },
+                    statusStrip = statusStrip,
+                    screensaverMinutes = screensaverMinutes,
+                    moving = obdMoving || (gpsFix?.speedKmh ?: 0.0) > DrivingRules.MOVING_ABOVE_KMH,
+                    onAppClick = {
+                        settings.appUsage.set(AppUsage.encode(AppUsage.record(AppUsage.decode(settings.appUsage.value), it.key)))
+                        InstalledApps.launch(this, it)
+                    },
                     dash = rememberDashState(kitt),
                     voiceTrigger = voiceTrigger,
                     onAskKitt = { kitt.assistantInbox.value = AssistantPrompt(it, diagnostic = true) },
@@ -163,12 +187,18 @@ class MainActivity : ComponentActivity() {
         kitt.nightMode.setActive(true)
         // Re-check media sessions: notification access may have just been granted in Settings.
         kitt.media.start()
+        kitt.gps.start()
+        // Some ROMs refuse widget hosting; the Widgets page then just shows nothing.
+        runCatching { kitt.widgetHost.startListening() }
+        kitt.startup.onLauncherShown()
         startVehicleSystems()
     }
 
     override fun onStop() {
         LauncherVisibility.visible.value = false
         kitt.nightMode.setActive(false)
+        kitt.gps.stop()
+        runCatching { kitt.widgetHost.stopListening() }
         super.onStop()
     }
 
@@ -177,6 +207,15 @@ class MainActivity : ComponentActivity() {
         // Refresh on every return to home so installs/uninstalls show up (icons are cached).
         lifecycleScope.launch { apps = InstalledApps.load(applicationContext) }
     }
+
+    /** Mapped steering-wheel buttons (and button learning) while the launcher is in front. */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
+        HardwareKeys.consumesDown(keyCode, keyBindings()) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
+        HardwareKeys.onKeyUp(keyCode, keyBindings()) || super.onKeyUp(keyCode, event)
+
+    private fun keyBindings() = KeyBindings.decode(kitt.settings.keyBindings.value)
 
     private fun handleVoiceIntent(intent: Intent?) {
         if (intent?.action in VOICE_ACTIONS) voiceTrigger++
@@ -231,6 +270,7 @@ private fun rememberDashState(app: KittApplication): DashState {
     val hz = app.obd.refreshHz.collectAsState()
     val shiftOn = app.settings.shiftLight.state.collectAsState()
     val shiftRpm = app.settings.shiftRpm.state.collectAsState()
+    val gps = app.gps.fix.collectAsState()
 
     val hudState = remember {
         derivedStateOf {
@@ -239,9 +279,16 @@ private fun rememberDashState(app: KittApplication): DashState {
             val speed = readings.value[PidCatalog.SPEED]?.value
             val rpm = readings.value[PidCatalog.RPM]?.value
             val link = state.value
+            // No OBD speed: fall back to GPS (fresh fixes only).
+            val gpsKmh = if (speed == null) gps.value?.takeIf { System.currentTimeMillis() - it.timestamp < 4_000 }?.speedKmh else null
+            val unit = if (isMetric) "KM/H" else "MPH"
             HudState(
-                speed = if (speed != null && speedDef != null) speedDef.displayValue(speed, isMetric).roundToInt().toString() else null,
-                speedUnit = if (isMetric) "KM/H" else "MPH",
+                speed = when {
+                    speed != null && speedDef != null -> speedDef.displayValue(speed, isMetric).roundToInt().toString()
+                    gpsKmh != null -> (if (isMetric) gpsKmh else gpsKmh * 0.621371).roundToInt().toString()
+                    else -> null
+                },
+                speedUnit = if (gpsKmh != null) "$unit · GPS" else unit,
                 rpmFraction = ((rpm ?: 0.0) / 7000.0).toFloat().coerceIn(0f, 1f),
                 rpmText = rpm?.roundToInt()?.toString(),
                 linkLabel = when (link) {
@@ -294,6 +341,9 @@ fun LauncherRoot(
     homeApps: List<LauncherApp> = apps,
     favorites: Boolean = false,
     homeTrigger: Int = 0,
+    statusStrip: Boolean = false,
+    screensaverMinutes: Int = 0,
+    moving: Boolean = false,
     dash: DashState = DashState(),
     voiceTrigger: Int = 0,
     onAskKitt: (String) -> Unit = {},
@@ -308,6 +358,16 @@ fun LauncherRoot(
     val pager = rememberPagerState { HomePage.entries.size }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    var lastTouch by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    var saver by remember { mutableStateOf(false) }
+    LaunchedEffect(screensaverMinutes, moving) {
+        if (moving) saver = false
+        while (screensaverMinutes > 0 && !moving) {
+            delay(5_000)
+            val idle = SystemClock.elapsedRealtime() - lastTouch
+            if (idle >= screensaverMinutes * 60_000L && overlay == LauncherOverlay.None) saver = true
+        }
+    }
     val stream = remember {
         val app = context.applicationContext as KittApplication
         StreamSession(app.settings, app.userscripts)
@@ -321,6 +381,27 @@ fun LauncherRoot(
         if (homeTrigger > 0) {
             overlay = LauncherOverlay.None
             pager.animateScrollToPage(HomePage.Drive.ordinal)
+        }
+    }
+    val mediaControl = (LocalContext.current.applicationContext as? KittApplication)?.media
+    LaunchedEffect(Unit) {
+        HardwareKeys.actions.collect { action ->
+            saver = false
+            when (action) {
+                KeyAction.OpenKitt -> {
+                    autoListen = true
+                    overlay = LauncherOverlay.Assistant
+                }
+                KeyAction.NextPage -> pager.animateScrollToPage((pager.currentPage + 1) % HomePage.entries.size)
+                KeyAction.PreviousPage -> pager.animateScrollToPage((pager.currentPage - 1 + HomePage.entries.size) % HomePage.entries.size)
+                KeyAction.DrivePage -> pager.animateScrollToPage(HomePage.Drive.ordinal)
+                KeyAction.ToggleStream -> {
+                    pager.animateScrollToPage(HomePage.Drive.ordinal)
+                    stream.visible = !stream.visible
+                }
+                KeyAction.PlayPause -> mediaControl?.playPause()
+                KeyAction.Diagnostics -> overlay = LauncherOverlay.Diagnostics
+            }
         }
     }
     LaunchedEffect(voiceTrigger) {
@@ -340,6 +421,15 @@ fun LauncherRoot(
         modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            // Any touch counts as activity for the screensaver; nothing is consumed.
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        awaitPointerEvent(PointerEventPass.Initial)
+                        lastTouch = SystemClock.elapsedRealtime()
+                    }
+                }
+            }
             // Night: dim everything, scanner included, without blocking touches.
             .drawWithContent {
                 drawContent()
@@ -355,6 +445,7 @@ fun LauncherRoot(
                 .windowInsetsPadding(WindowInsets.safeDrawing)
         ) {
             KittScanner(Modifier.fillMaxWidth().height(ScannerHeight), alert = dash.alert?.severe == true, shift = dash.shift)
+            if (statusStrip) StatusStrip()
 
             BoxWithConstraints(
                 Modifier
@@ -442,6 +533,7 @@ fun LauncherRoot(
                                 modifier = Modifier.fillMaxSize()
                             )
                             HomePage.Media -> MediaPane(Modifier.fillMaxSize())
+                            HomePage.Widgets -> WidgetsPane(Modifier.fillMaxSize())
                             HomePage.Apps -> AppDrawerPane(apps, onAppClick, Modifier.fillMaxSize())
                         }
                     }
@@ -475,11 +567,18 @@ fun LauncherRoot(
                 }
             }
         }
+
+        if (saver) {
+            Screensaver(onWake = {
+                saver = false
+                lastTouch = SystemClock.elapsedRealtime()
+            })
+        }
     }
 }
 
 /** Home pages, swiped or picked from the tabs above the dock. */
-private enum class HomePage(val label: String) { Drive("Drive"), Gauges("Gauges"), Media("Media"), Apps("Apps") }
+private enum class HomePage(val label: String) { Drive("Drive"), Gauges("Gauges"), Media("Media"), Widgets("Widgets"), Apps("Apps") }
 
 /** Page selector drawn as KITT console buttons: big targets, readable at a glance. */
 @Composable

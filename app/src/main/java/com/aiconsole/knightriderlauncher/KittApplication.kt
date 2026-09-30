@@ -1,6 +1,7 @@
 package com.aiconsole.knightriderlauncher
 
 import android.app.Application
+import android.appwidget.AppWidgetHost
 import android.database.SQLException
 import android.util.Log
 import androidx.compose.ui.graphics.Color
@@ -10,10 +11,12 @@ import com.aiconsole.knightriderlauncher.assistant.GeminiAssistantClient
 import com.aiconsole.knightriderlauncher.assistant.KittAlerts
 import com.aiconsole.knightriderlauncher.assistant.PerplexityAssistantClient
 import com.aiconsole.knightriderlauncher.assistant.TextToSpeechHelper
+import com.aiconsole.knightriderlauncher.data.StartupRoutine
 import com.aiconsole.knightriderlauncher.data.settings.KittSettings
 import com.aiconsole.knightriderlauncher.data.trip.TripDatabase
 import com.aiconsole.knightriderlauncher.data.trip.TripMetricRecorder
 import com.aiconsole.knightriderlauncher.media.MediaBridge
+import com.aiconsole.knightriderlauncher.nav.GpsTracker
 import com.aiconsole.knightriderlauncher.obd.AdapterConfig
 import com.aiconsole.knightriderlauncher.obd.AdapterProfiles
 import com.aiconsole.knightriderlauncher.obd.AdapterType
@@ -57,6 +60,14 @@ class KittApplication : Application() {
 
     /** VIN identity, odometer, maintenance, fuel range and battery health. */
     val vehicle: VehicleService by lazy { VehicleService(obd, settings, pidHistory, appScope) }
+
+    /** GPS speed/heading while the launcher shows: speedometer fallback and compass. */
+    val gps: GpsTracker by lazy { GpsTracker(this) }
+
+    /** Hosts home-screen widgets on the Widgets page. */
+    val widgetHost: AppWidgetHost by lazy { AppWidgetHost(this, WIDGET_HOST_ID) }
+
+    val startup: StartupRoutine by lazy { StartupRoutine(this, settings, media, appScope) }
 
     /** Userscripts for the home-screen stream window. */
     val userscripts: UserscriptStore by lazy { UserscriptStore(this) }
@@ -145,6 +156,7 @@ class KittApplication : Application() {
         appScope.launch {
             gauges.gauges.collect { list -> obd.watch("dashboard", list.map { it.pidId }.toSet()) }
         }
+        startup.register()
         appScope.launch(Dispatchers.Main) {
             vehicle.start()
         }
@@ -159,6 +171,7 @@ class KittApplication : Application() {
     }
 
     private companion object {
+        const val WIDGET_HOST_ID = 0x4B17
         const val RETENTION_DAYS = 90L
     }
 }

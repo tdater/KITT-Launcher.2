@@ -1,6 +1,5 @@
 package com.aiconsole.knightriderlauncher.ui.panes
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,6 +26,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.aiconsole.knightriderlauncher.data.LauncherApp
 import com.aiconsole.knightriderlauncher.obd.PidReading
+import com.aiconsole.knightriderlauncher.ui.components.AppIcon
 import com.aiconsole.knightriderlauncher.ui.components.KittPanel
 import com.aiconsole.knightriderlauncher.ui.gauges.GaugeTile
 import com.aiconsole.knightriderlauncher.ui.gauges.GaugeTileHeight
@@ -127,7 +127,7 @@ private fun AppTile(app: LauncherApp, height: Dp, onClick: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Image(bitmap = app.icon, contentDescription = null, modifier = Modifier.size(44.dp))
+        AppIcon(app, Modifier.size(44.dp))
         Spacer(Modifier.height(6.dp))
         Text(
             text = app.label,

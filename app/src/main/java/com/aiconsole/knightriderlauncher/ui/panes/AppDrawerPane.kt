@@ -4,7 +4,6 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -44,8 +43,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import com.aiconsole.knightriderlauncher.KittApplication
+import com.aiconsole.knightriderlauncher.data.AppGroup
 import com.aiconsole.knightriderlauncher.data.AppLists
+import com.aiconsole.knightriderlauncher.data.AppUsage
 import com.aiconsole.knightriderlauncher.data.LauncherApp
+import com.aiconsole.knightriderlauncher.ui.components.AppIcon
+import com.aiconsole.knightriderlauncher.ui.components.ChoiceRow
 import com.aiconsole.knightriderlauncher.ui.components.KittButton
 import com.aiconsole.knightriderlauncher.ui.components.KittPanel
 import com.aiconsole.knightriderlauncher.ui.components.KittTextField
@@ -75,10 +78,19 @@ fun AppDrawerPane(
     var query by remember { mutableStateOf("") }
     var showHidden by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<LauncherApp?>(null) }
+    var filter by remember { mutableStateOf(ALL) }
+    val usage = AppUsage.decode(settings.appUsage.state.collectAsState().value)
     val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
 
-    val shown = apps.filter { (showHidden || it.key !in hidden) && AppLists.matches(it.label, query) }
+    val visible = apps.filter { (showHidden || it.key !in hidden) && AppLists.matches(it.label, query) }
+    val filters = listOf(ALL) + (if (usage.isNotEmpty()) listOf(MOST_USED) else emptyList()) +
+        AppGroup.entries.filter { g -> visible.any { it.group == g } }.map { it.label }
+    val shown = when (filter) {
+        ALL -> visible
+        MOST_USED -> AppUsage.mostUsed(usage, 16).mapNotNull { key -> visible.firstOrNull { it.key == key } }
+        else -> visible.filter { it.group.label == filter }
+    }
     val sections = shown.map { AppLists.sectionOf(it.label) }.toSet()
 
     KittPanel(
@@ -99,6 +111,7 @@ fun AppDrawerPane(
                     enabled = hidden.isNotEmpty() || showHidden
                 )
             }
+            ChoiceRow(filters, filter, { it }, { filter = it }, color = DashAmber)
             selected?.let { app ->
                 AppActions(
                     app = app,
@@ -143,7 +156,7 @@ fun AppDrawerPane(
                         )
                     }
                 }
-                if (query.isBlank()) {
+                if (query.isBlank() && filter == ALL) {
                     Column(
                         Modifier.width(32.dp).fillMaxHeight().padding(start = 4.dp),
                         verticalArrangement = Arrangement.SpaceEvenly,
@@ -194,7 +207,7 @@ private fun AppActions(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Image(app.icon, null, Modifier.size(36.dp))
+        AppIcon(app, Modifier.size(36.dp))
         Text(app.label, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = DashWhite, maxLines = 1, overflow = TextOverflow.Ellipsis)
         KittButton(if (pinned) "Unpin" else "Pin to home", onPin, Modifier.fillMaxHeight(), LedGreen, active = true)
         KittButton(if (hidden) "Unhide" else "Hide", onHide, Modifier.fillMaxHeight(), DashAmber)
@@ -221,7 +234,7 @@ private fun DrawerTile(app: LauncherApp, pinned: Boolean, hidden: Boolean, onCli
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Image(app.icon, null, Modifier.size(48.dp))
+            AppIcon(app, Modifier.size(48.dp))
             Spacer(Modifier.height(6.dp))
             Text(
                 app.label,
@@ -237,3 +250,6 @@ private fun DrawerTile(app: LauncherApp, pinned: Boolean, hidden: Boolean, onCli
         }
     }
 }
+
+private const val ALL = "All"
+private const val MOST_USED = "Most used"

@@ -61,6 +61,10 @@
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
+        <!-- Home-screen widget providers for the Widgets page. -->
+        <intent>
+            <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        </intent>
         <!-- AI apps KITT can hand questions to (the driver's own subscriptions). -->
         <package android:name="com.google.android.apps.bard" />
         <package android:name="com.anthropic.claude" />

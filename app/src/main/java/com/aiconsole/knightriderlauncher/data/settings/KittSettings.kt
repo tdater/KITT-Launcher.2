@@ -128,6 +128,22 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val pinnedApps = stringPref("pinned_apps", "")
     val hiddenApps = stringPref("hidden_apps", "")
 
+    /** Launch counts for "most used" (AppUsage format). */
+    val appUsage = stringPref("app_usage", "")
+    /** Tint app icons in the theme's accent colour. */
+    val themedIcons = boolPref("themed_icons", false)
+    /** Clock, connectivity, GPS and OBD status under the scanner. */
+    val statusStrip = boolPref("status_strip", true)
+    /** Minutes parked and untouched before the KITT screensaver shows; 0 = off. */
+    val screensaverMinutes = intPref("screensaver_minutes", 0)
+    /** Start-up routine: app to open (LauncherApp key, "" = none) and whether to resume audio. */
+    val startupApp = stringPref("startup_app", "")
+    val startupResumeMedia = boolPref("startup_resume_media", false)
+    /** Hardware button bindings (KeyBindings format). */
+    val keyBindings = stringPref("key_bindings", "")
+    /** Home-screen widget ids, one per line. */
+    val widgetIds = stringPref("widget_ids", "")
+
     /** Stream window asks sites for their desktop layout (full players, more settings). */
     val streamDesktop = boolPref("stream_desktop", true)
     val navNotifications = boolPref("nav_notifications", true)

@@ -485,6 +485,10 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                 }
             }
 
+            item { HomeScreenSettings(app) }
+            item { ButtonSettings(app) }
+            item { BackupSettings(app) }
+
             // ---------------- Quick links ----------------
             item { SectionHeader("Quick links") }
             item {

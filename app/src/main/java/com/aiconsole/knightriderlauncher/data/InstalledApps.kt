@@ -16,7 +16,8 @@ data class LauncherApp(
     val label: String,
     val packageName: String,
     val activityName: String,
-    val icon: ImageBitmap
+    val icon: ImageBitmap,
+    val group: AppGroup = AppGroup.Other
 ) {
     val key: String get() = "$packageName/$activityName"
 }
@@ -43,11 +44,17 @@ object InstalledApps {
                     label = info.loadLabel(pm).toString(),
                     icon = info.loadIcon(pm).toBitmap(ICON_SIZE_PX, ICON_SIZE_PX).asImageBitmap()
                 ).also { cache[key] = it }
+                val category = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    info.activityInfo.applicationInfo.category.takeIf { it >= 0 }
+                } else {
+                    null
+                }
                 LauncherApp(
                     label = cached.label,
                     packageName = info.activityInfo.packageName,
                     activityName = info.activityInfo.name,
-                    icon = cached.icon
+                    icon = cached.icon,
+                    group = AppGroup.of(category, cached.label, info.activityInfo.packageName)
                 )
             }
             .sortedBy { it.label.lowercase() }
