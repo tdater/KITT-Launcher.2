@@ -122,6 +122,9 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     // --- Home & app drawer (newline-separated LauncherApp keys, see AppLists) ---
     val pinnedApps = stringPref("pinned_apps", "")
     val hiddenApps = stringPref("hidden_apps", "")
+
+    /** Stream window asks sites for their desktop layout (full players, more settings). */
+    val streamDesktop = boolPref("stream_desktop", true)
     val navNotifications = boolPref("nav_notifications", true)
     val wakeWord = boolPref("wake_word", false)
 

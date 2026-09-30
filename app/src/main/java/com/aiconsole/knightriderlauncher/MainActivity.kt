@@ -46,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.coerceIn
@@ -64,6 +65,7 @@ import com.aiconsole.knightriderlauncher.obd.ObdConnectionService
 import com.aiconsole.knightriderlauncher.obd.ObdState
 import com.aiconsole.knightriderlauncher.obd.PidCatalog
 import com.aiconsole.knightriderlauncher.obd.PidReading
+import com.aiconsole.knightriderlauncher.stream.StreamSession
 import com.aiconsole.knightriderlauncher.ui.assistant.AssistantOverlay
 import com.aiconsole.knightriderlauncher.ui.components.KittButton
 import com.aiconsole.knightriderlauncher.ui.components.VoiceModulator
@@ -76,7 +78,6 @@ import com.aiconsole.knightriderlauncher.ui.panes.HudState
 import com.aiconsole.knightriderlauncher.ui.panes.MediaPane
 import com.aiconsole.knightriderlauncher.ui.panes.NavigationPane
 import com.aiconsole.knightriderlauncher.ui.panes.StatusGridPane
-import com.aiconsole.knightriderlauncher.ui.panes.StreamSession
 import com.aiconsole.knightriderlauncher.ui.panes.StreamWindow
 import com.aiconsole.knightriderlauncher.ui.scanner.KittScanner
 import com.aiconsole.knightriderlauncher.ui.scanner.LauncherVisibility
@@ -305,7 +306,11 @@ fun LauncherRoot(
     var autoListen by remember { mutableStateOf(false) }
     val pager = rememberPagerState { HomePage.entries.size }
     val scope = rememberCoroutineScope()
-    val stream = remember { StreamSession() }
+    val context = LocalContext.current
+    val stream = remember {
+        val app = context.applicationContext as KittApplication
+        StreamSession(app.settings, app.userscripts)
+    }
     DisposableEffect(stream) { onDispose { stream.close() } }
     // Back steps through the stream's pages, then returns to the map.
     BackHandler(enabled = stream.visible && overlay == LauncherOverlay.None) {

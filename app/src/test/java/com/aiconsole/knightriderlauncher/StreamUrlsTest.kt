@@ -1,6 +1,6 @@
 package com.aiconsole.knightriderlauncher
 
-import com.aiconsole.knightriderlauncher.ui.panes.StreamUrls
+import com.aiconsole.knightriderlauncher.stream.StreamUrls
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -30,5 +30,24 @@ class StreamUrlsTest {
     fun titleIsTheBareHost() {
         assertEquals("twitch.tv", StreamUrls.titleOf("https://www.twitch.tv/directory"))
         assertEquals("youtube.com", StreamUrls.titleOf("https://m.youtube.com/"))
+    }
+}
+
+class StreamUrlsExtrasTest {
+
+    @Test
+    fun userscriptLinksAreRecognisedWithQueries() {
+        org.junit.Assert.assertTrue(StreamUrls.isUserscript("https://update.greasyfork.org/scripts/1/Foo.user.js"))
+        org.junit.Assert.assertTrue(StreamUrls.isUserscript("https://x.org/a.USER.JS?v=2#top"))
+        org.junit.Assert.assertFalse(StreamUrls.isUserscript("https://x.org/app.js"))
+    }
+
+    @Test
+    fun desktopUserAgentKeepsWebViewChromeVersion() {
+        val mobile = "Mozilla/5.0 (Linux; Android 13; HU wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/141.0.7390.44 Mobile Safari/537.36"
+        assertEquals(
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.7390.44 Safari/537.36",
+            StreamUrls.desktopUserAgent(mobile)
+        )
     }
 }

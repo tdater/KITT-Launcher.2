@@ -20,6 +20,7 @@ import com.aiconsole.knightriderlauncher.obd.DataLogger
 import com.aiconsole.knightriderlauncher.obd.GaugeStore
 import com.aiconsole.knightriderlauncher.obd.ObdManager
 import com.aiconsole.knightriderlauncher.obd.PidHistory
+import com.aiconsole.knightriderlauncher.stream.UserscriptStore
 import com.aiconsole.knightriderlauncher.ui.theme.NightModeController
 import com.aiconsole.knightriderlauncher.ui.theme.ThemeState
 import java.util.concurrent.TimeUnit
@@ -50,6 +51,9 @@ class KittApplication : Application() {
 
     /** Now-playing from the active media session (needs notification access). */
     val media: MediaBridge by lazy { MediaBridge(this) }
+
+    /** Userscripts for the home-screen stream window. */
+    val userscripts: UserscriptStore by lazy { UserscriptStore(this) }
 
     /** Last few minutes of every polled sensor, for the live graphs. */
     val pidHistory = PidHistory()

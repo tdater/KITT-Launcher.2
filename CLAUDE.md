@@ -73,7 +73,11 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
 - **`LauncherRoot`:** a permanent `KittScanner` strip (doubles as a shift light), then a `BoxWithConstraints` holding a `HorizontalPager` of `HomePage`s, page tabs, and the fixed dock.
   - **Drive:** tall screens (height ≥ 1.2× width) stack map 50% / grid 35%; wide screens put them side by side. The grid shows pinned favourites, else all non-hidden apps (`AppLists`).
   - **Gauges / Media / Apps:** `GaugeWallPane`, `MediaPane` (active `MediaSession` via `MediaBridge`, needs notification access), `AppDrawerPane` (search, A–Z rail, pin/hide).
-  - **Stream window:** `StreamSession`/`StreamWindow` put web video players (YouTube, YouTube Music, or any site typed in) in a WebView over the map pane only. Non-web schemes are dropped so apps can't take over the screen. Video plays while moving by the owner's explicit choice; don't add a driving gate.
+  - **Stream window:** `stream/StreamSession` + `ui/panes/StreamWindow` put web video players (YouTube, YouTube Music, or any site typed in) in a WebView over the map pane only.
+    - Non-web schemes are dropped so apps can't take over the screen.
+    - Desktop-UA mode (default) gives full desktop players; site fullscreen stays inside the pane.
+    - Userscripts (`stream/Userscripts`, `UserscriptStore`) inject at document start via `androidx.webkit`; `.user.js` links prompt to install. Chrome extensions aren't possible in WebView.
+    - Video plays while moving by the owner's explicit choice; don't add a driving gate.
   - **Swipe:** disabled on Drive while the map or stream needs horizontal drags; Home returns to Drive.
 - **Overlays:** full-screen features are selected by the `LauncherOverlay` enum and drawn inside that box, below the scanner. The scanner is always visible. Each overlay swallows taps and registers its own `BackHandler`.
   - `Assistant`

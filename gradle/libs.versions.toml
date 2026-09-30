@@ -12,8 +12,10 @@ ksp = "2.3.12"
 room = "2.8.5"
 okhttp = "5.5.0"
 osmdroid = "6.1.20"
+webkit = "1.17.1"
 
 [libraries]
+androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
