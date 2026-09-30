@@ -1,6 +1,8 @@
 package com.aiconsole.knightriderlauncher.ui.trip
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -20,7 +22,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,6 +35,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.aiconsole.knightriderlauncher.KittApplication
+import com.aiconsole.knightriderlauncher.data.trip.TripCsv
 import com.aiconsole.knightriderlauncher.data.trip.TripMetricDao
 import com.aiconsole.knightriderlauncher.data.trip.TripSummarizer
 import com.aiconsole.knightriderlauncher.data.trip.TripSummary
@@ -44,15 +51,16 @@ import com.aiconsole.knightriderlauncher.ui.theme.KittBezel
 import com.aiconsole.knightriderlauncher.ui.theme.KittBlack
 import com.aiconsole.knightriderlauncher.ui.theme.LedGreen
 import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Trips from the last [days] days, newest first. Refreshes every 15 s while shown. */
 @Composable
@@ -82,6 +90,26 @@ fun TripScreen(onDismiss: () -> Unit, onAskKitt: (String) -> Unit, modifier: Mod
     val app = LocalContext.current.applicationContext as KittApplication
     val metric by app.settings.metricUnits.state.collectAsState()
     val trips = rememberRecentTrips(app.tripDatabase.tripMetricDao())
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var exportMessage by remember { mutableStateOf<String?>(null) }
+    val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            exportMessage = try {
+                val all = loadTrips(app.tripDatabase.tripMetricDao(), EXPORT_DAYS)
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)?.use { it.write(TripCsv.build(all, metric).toByteArray()) }
+                        ?: throw java.io.IOException("Couldn't open the file")
+                }
+                "Exported ${all.size} trips."
+            } catch (e: java.io.IOException) {
+                "Export failed: ${e.message}"
+            } catch (e: SecurityException) {
+                "Export failed: ${e.message}"
+            }
+        }
+    }
 
     BackHandler(onBack = onDismiss)
 
@@ -89,10 +117,16 @@ fun TripScreen(onDismiss: () -> Unit, onAskKitt: (String) -> Unit, modifier: Mod
         title = "Trip Computer",
         modifier = modifier.pointerInput(Unit) { detectTapGestures {} },
         accent = DashAmber,
-        trailing = { KittButton("Close", onDismiss, Modifier.height(32.dp).width(80.dp), DashGrey) }
+        trailing = {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                KittButton("Export CSV", { export.launch("kitt-trips.csv") }, Modifier.height(32.dp), DashAmber)
+                KittButton("Close", onDismiss, Modifier.height(32.dp).width(80.dp), DashGrey)
+            }
+        }
     ) {
         val latest = trips?.firstOrNull()
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            exportMessage?.let { HelpText(it) }
             when {
                 trips == null -> HelpText("Reading the trip log…")
                 latest == null -> HelpText(
@@ -208,3 +242,6 @@ private fun TripRow(trip: TripSummary, metric: Boolean) {
         Text(economy ?: "--", style = MaterialTheme.typography.bodyMedium, color = LedGreen)
     }
 }
+
+/** Trip log retention is 90 days; export all of it. */
+private const val EXPORT_DAYS = 90L

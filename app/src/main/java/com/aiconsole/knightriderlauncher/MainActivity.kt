@@ -198,6 +198,7 @@ class MainActivity : ComponentActivity() {
         runCatching { kitt.widgetHost.startListening() }
         kitt.startup.onLauncherShown()
         kitt.wakeWord.setVisible(true)
+        kitt.weather.start()
         startVehicleSystems()
     }
 
@@ -206,6 +207,7 @@ class MainActivity : ComponentActivity() {
         kitt.nightMode.setActive(false)
         kitt.gps.stop()
         kitt.wakeWord.setVisible(false)
+        kitt.weather.stop()
         runCatching { kitt.widgetHost.stopListening() }
         super.onStop()
     }

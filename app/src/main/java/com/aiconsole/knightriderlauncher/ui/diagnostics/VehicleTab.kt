@@ -29,6 +29,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.aiconsole.knightriderlauncher.KittApplication
+import com.aiconsole.knightriderlauncher.obd.FillUp
+import com.aiconsole.knightriderlauncher.obd.FuelLog
 import com.aiconsole.knightriderlauncher.obd.FuelMath
 import com.aiconsole.knightriderlauncher.obd.MaintenanceItem
 import com.aiconsole.knightriderlauncher.obd.ObdState
@@ -59,6 +61,7 @@ fun VehicleTab(app: KittApplication) {
         item { IdentityCard(app) }
         item { BatteryCard(app) }
         item { FuelCard(app, metric) }
+        item { FuelLogCard(app, metric) }
         item { MaintenanceCard(app, metric) }
     }
 }
@@ -245,5 +248,81 @@ private fun MaintenanceCard(app: KittApplication, metric: Boolean) {
             "Uses the ECU odometer when the vehicle reports it; otherwise your reading plus distance driven with the adapter " +
                 "connected. KITT reminds you when something is due."
         )
+    }
+}
+
+/** Fill-up log: real economy full-to-full, and cost per distance. */
+@Composable
+private fun FuelLogCard(app: KittApplication, metric: Boolean) {
+    val stored by app.settings.fuelLog.state.collectAsState()
+    val fills = FuelLog.decode(stored)
+    val economy = FuelLog.economy(fills)
+    var odometer by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf("") }
+    var cost by remember { mutableStateOf("") }
+    var full by remember { mutableStateOf(true) }
+    val unit = if (metric) "km" else "mi"
+    val volume = if (metric) "L" else "gal"
+    fun toKm(x: Double) = if (metric) x else x * KM_PER_MI
+    fun toLiters(x: Double) = if (metric) x else x * FuelMath.LITERS_PER_GALLON
+    fun econ(l100: Double) = if (metric) "%.1f L/100 km".format(Locale.US, l100) else "%.1f mpg".format(Locale.US, 235.215 / l100)
+
+    Card("Fuel log", DashAmber) {
+        val current = app.vehicle.odometerKm()
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            KittTextField(
+                odometer,
+                { odometer = it.filter(Char::isDigit) },
+                current?.let { "Odometer (%.0f)".format(Locale.US, if (metric) it else it / KM_PER_MI) } ?: "Odometer ($unit)",
+                Modifier.weight(1f),
+                keyboardType = KeyboardType.Number
+            )
+            KittTextField(amount, { amount = it.filter { c -> c.isDigit() || c == '.' } }, "Fuel ($volume)", Modifier.weight(1f), keyboardType = KeyboardType.Decimal)
+            KittTextField(cost, { cost = it.filter { c -> c.isDigit() || c == '.' } }, "Total cost", Modifier.weight(1f), keyboardType = KeyboardType.Decimal)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            KittButton(if (full) "Filled to full" else "Partial fill", { full = !full }, Modifier.weight(1f).height(44.dp), LedGreen, active = full)
+            KittButton(
+                "Add fill-up",
+                {
+                    val odo = odometer.toDoubleOrNull()?.let(::toKm) ?: current
+                    val liters = amount.toDoubleOrNull()?.let(::toLiters)
+                    if (odo != null && liters != null && liters > 0) {
+                        app.settings.fuelLog.set(FuelLog.encode(fills + FillUp(System.currentTimeMillis(), odo, liters, cost.toDoubleOrNull(), full)))
+                        odometer = ""
+                        amount = ""
+                        cost = ""
+                    }
+                },
+                Modifier.weight(1f).height(44.dp),
+                DashAmber,
+                active = true,
+                enabled = amount.toDoubleOrNull() != null && (odometer.isNotEmpty() || current != null)
+            )
+        }
+        FuelLog.average(economy)?.let { Line("Measured average", econ(it), LedGreen) }
+        FuelLog.costPerKm(fills)?.let { perKm -> Line("Cost per $unit", "%.3f".format(Locale.US, if (metric) perKm else perKm * KM_PER_MI)) }
+        fills.takeLast(6).reversed().forEach { f ->
+            val e = economy.firstOrNull { it.endedAt == f.timestamp }
+            Line(
+                java.text.DateFormat.getDateInstance(java.text.DateFormat.SHORT).format(java.util.Date(f.timestamp)),
+                "%.1f %s at %,.0f %s%s%s".format(
+                    Locale.US,
+                    if (metric) f.liters else f.liters / FuelMath.LITERS_PER_GALLON, volume,
+                    if (metric) f.odometerKm else f.odometerKm / KM_PER_MI, unit,
+                    if (f.full) "" else " (partial)",
+                    e?.let { " · " + econ(it.litersPer100Km) } ?: ""
+                )
+            )
+        }
+        if (fills.isNotEmpty()) {
+            KittButton(
+                "Remove last entry",
+                { app.settings.fuelLog.set(FuelLog.encode(fills.dropLast(1))) },
+                Modifier.fillMaxWidth().height(40.dp),
+                AlertRed
+            )
+        }
+        HelpText("Economy is measured between full fill-ups, including partial fills in between. Leave odometer empty to use the current estimate.")
     }
 }

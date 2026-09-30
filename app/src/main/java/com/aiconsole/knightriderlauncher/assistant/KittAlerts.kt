@@ -123,6 +123,11 @@ class KittAlerts(
         }
     }
 
+    /** Road weather warning; each distinct warning at most every 3 hours. */
+    fun weatherWarning(text: String) {
+        raise("weather_$text", line("Weather advisory: $text", "Weather advisory, so pay attention for once: $text"), severe = false, cooldownMs = 3 * 3_600_000L)
+    }
+
     /** Spoken maintenance reminder, at most twice a day. */
     fun remindMaintenance(summary: String) {
         raise("maintenance", line("Service reminder: $summary.", "Service reminder, before this heap falls apart: $summary."), severe = false, cooldownMs = 12 * 3_600_000L)

@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.aiconsole.knightriderlauncher.KittApplication
 import com.aiconsole.knightriderlauncher.data.Compass
+import com.aiconsole.knightriderlauncher.nav.WeatherRules
 import com.aiconsole.knightriderlauncher.obd.ObdState
 import com.aiconsole.knightriderlauncher.obd.PidCatalog
 import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
@@ -53,6 +54,8 @@ fun StatusStrip(modifier: Modifier = Modifier, onClick: () -> Unit = {}) {
     val obd by app.obd.state.collectAsState()
     val readings by app.obd.displayReadings.collectAsState()
     val fix by app.gps.fix.collectAsState()
+    val weather by app.weather.weather.collectAsState()
+    val metric by app.settings.metricUnits.state.collectAsState()
     val now by produceState(System.currentTimeMillis()) {
         while (true) {
             value = System.currentTimeMillis()
@@ -74,6 +77,15 @@ fun StatusStrip(modifier: Modifier = Modifier, onClick: () -> Unit = {}) {
     ) {
         Text(DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(now)), style = MaterialTheme.typography.labelLarge, color = DashWhite)
         fix?.bearing?.let { Text("HDG ${Compass.cardinal(it)}", style = MaterialTheme.typography.labelMedium, color = DashAmber) }
+        weather?.let { w ->
+            val temp = if (metric) w.tempC else w.tempC * 9 / 5 + 32
+            Text(
+                "%.0f° %s".format(Locale.US, temp, WeatherRules.describe(w.code).uppercase()),
+                style = MaterialTheme.typography.labelMedium,
+                color = if (WeatherRules.roadWarning(w) != null) ScannerRed else DashWhite,
+                maxLines = 1
+            )
+        }
         Spacer(Modifier.weight(1f))
         Text("▼ QUICK", style = MaterialTheme.typography.labelSmall, color = DashGrey)
         Indicator("BT", radios.bluetooth)

@@ -65,6 +65,7 @@ fun HomeScreenSettings(app: KittApplication) {
     val strip by settings.statusStrip.state.collectAsState()
     val themedIcons by settings.themedIcons.state.collectAsState()
     val sounds by settings.buttonSounds.state.collectAsState()
+    val weatherAlerts by settings.weatherAlerts.state.collectAsState()
     val saver by settings.screensaverMinutes.state.collectAsState()
     val startupApp by settings.startupApp.state.collectAsState()
     val resume by settings.startupResumeMedia.state.collectAsState()
@@ -75,6 +76,12 @@ fun HomeScreenSettings(app: KittApplication) {
         KittToggle("Status strip", strip, { settings.statusStrip.set(it) }, description = "Clock, heading, Bluetooth, Wi-Fi, GPS, OBD and battery voltage under the scanner.")
         KittToggle("Themed app icons", themedIcons, { settings.themedIcons.set(it) }, description = "Recolour every app icon in the theme's accent.")
         KittToggle("Button sounds", sounds, { settings.buttonSounds.set(it) }, description = "A short console blip on every KITT button press.")
+        KittToggle(
+            "Weather warnings",
+            weatherAlerts,
+            { settings.weatherAlerts.set(it) },
+            description = "KITT warns about ice, freezing rain, fog, storms and strong wind (Open-Meteo, no account needed). Needs location."
+        )
         Text("SCREENSAVER WHEN PARKED", style = MaterialTheme.typography.labelMedium, color = DashGrey)
         ChoiceRow(SCREENSAVER_OPTIONS, saver, { if (it == 0) "Off" else "$it min" }, { settings.screensaverMinutes.set(it) })
         Text("ON START OR WAKE", style = MaterialTheme.typography.labelMedium, color = DashGrey)

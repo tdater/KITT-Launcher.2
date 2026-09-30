@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** A GPS fix reduced to what the dash shows. */
-data class GpsFix(val speedKmh: Double?, val bearing: Float?, val timestamp: Long)
+data class GpsFix(val speedKmh: Double?, val bearing: Float?, val timestamp: Long, val lat: Double = 0.0, val lon: Double = 0.0)
 
 /**
  * GPS speed and heading while the launcher is showing: the speedometer's fallback when OBD
@@ -34,7 +34,9 @@ class GpsTracker(context: Context) {
             _fix.value = GpsFix(
                 speedKmh = if (location.hasSpeed()) location.speed * 3.6 else null,
                 bearing = if (location.hasBearing() && location.speed > 1.5f) location.bearing else _fix.value?.bearing,
-                timestamp = System.currentTimeMillis()
+                timestamp = System.currentTimeMillis(),
+                lat = location.latitude,
+                lon = location.longitude
             )
         }
 
@@ -63,6 +65,19 @@ class GpsTracker(context: Context) {
         if (!running) return
         manager?.removeUpdates(listener)
         running = false
+    }
+
+    /** Best known position (current fix, else the system's last known), for weather. */
+    fun position(): Pair<Double, Double>? {
+        _fix.value?.let { return it.lat to it.lon }
+        val allowed = ContextCompat.checkSelfPermission(appContext, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(appContext, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (!allowed || manager == null) return null
+        return try {
+            manager.getProviders(true).mapNotNull { manager.getLastKnownLocation(it) }.maxByOrNull { it.time }?.let { it.latitude to it.longitude }
+        } catch (_: SecurityException) {
+            null
+        }
     }
 
     /** Speed from a fix no older than a few seconds. */
