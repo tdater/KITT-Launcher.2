@@ -3,7 +3,6 @@ package com.aiconsole.knightriderlauncher
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
-import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -43,10 +42,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.coerceIn
@@ -68,7 +63,6 @@ import com.aiconsole.knightriderlauncher.ui.assistant.AssistantOverlay
 import com.aiconsole.knightriderlauncher.ui.components.VoiceModulator
 import com.aiconsole.knightriderlauncher.ui.diagnostics.DiagnosticsScreen
 import com.aiconsole.knightriderlauncher.ui.gauges.GaugeUi
-import com.aiconsole.knightriderlauncher.ui.multiview.MultiViewScreen
 import com.aiconsole.knightriderlauncher.ui.panes.ControlDock
 import com.aiconsole.knightriderlauncher.ui.panes.HudState
 import com.aiconsole.knightriderlauncher.ui.panes.NavigationPane
@@ -180,7 +174,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-enum class LauncherOverlay { None, MultiView, Assistant, Diagnostics, Config, Trips }
+enum class LauncherOverlay { None, Assistant, Diagnostics, Config, Trips }
 
 /** Live vehicle state for the home screen. */
 data class DashState(
@@ -264,8 +258,6 @@ fun LauncherRoot(
 ) {
     var overlay by rememberSaveable { mutableStateOf(LauncherOverlay.None) }
     var autoListen by remember { mutableStateOf(false) }
-    val view = LocalView.current
-    var mapArea by remember { mutableStateOf<android.graphics.Rect?>(null) }
     LaunchedEffect(voiceTrigger) {
         if (voiceTrigger > 0) {
             autoListen = true
@@ -311,11 +303,10 @@ fun LauncherRoot(
                 val portraitCellWidth = if (maxWidth >= 600.dp) 150.dp else 110.dp
                 val open = { target: LauncherOverlay -> overlay = target }
                 // The map stops tracking and redrawing while a full-screen overlay covers it.
-                val mapActive = overlay == LauncherOverlay.None || overlay == LauncherOverlay.MultiView
+                val mapActive = overlay == LauncherOverlay.None
 
                 val dock = @Composable {
                     ControlDock(
-                        onMultiView = { open(LauncherOverlay.MultiView) },
                         onAssistant = {
                             autoListen = false
                             open(LauncherOverlay.Assistant)
@@ -341,14 +332,7 @@ fun LauncherRoot(
                     )
                 }
                 val navPane = @Composable { paneModifier: Modifier ->
-                    NavigationPane(
-                        // Multi-View windows open over exactly this pane, leaving the rest of home usable.
-                        paneModifier.onGloballyPositioned { mapArea = it.screenRect(view) },
-                        dash.hud,
-                        showMap = showMap,
-                        mapActive = mapActive,
-                        nav = nav
-                    )
+                    NavigationPane(paneModifier, dash.hud, showMap = showMap, mapActive = mapActive, nav = nav)
                 }
 
                 if (isTall) {
@@ -378,12 +362,6 @@ fun LauncherRoot(
                 val close = { overlay = LauncherOverlay.None }
                 when (overlay) {
                     LauncherOverlay.None -> Unit
-                    LauncherOverlay.MultiView -> MultiViewScreen(
-                        apps = apps,
-                        onDismiss = close,
-                        modifier = Modifier.fillMaxSize(),
-                        area = mapArea
-                    )
                     LauncherOverlay.Assistant -> AssistantOverlay(
                         onDismiss = close,
                         modifier = Modifier.fillMaxSize(),
@@ -404,18 +382,6 @@ fun LauncherRoot(
             }
         }
     }
-}
-
-/** This node's bounds in screen pixels, which is what freeform launch bounds are measured in. */
-private fun LayoutCoordinates.screenRect(view: View): android.graphics.Rect {
-    val origin = IntArray(2).also(view::getLocationOnScreen)
-    val b = boundsInRoot()
-    return android.graphics.Rect(
-        origin[0] + b.left.roundToInt(),
-        origin[1] + b.top.roundToInt(),
-        origin[0] + b.right.roundToInt(),
-        origin[1] + b.bottom.roundToInt()
-    )
 }
 
 /** How much the night mode darkens the whole launcher. */

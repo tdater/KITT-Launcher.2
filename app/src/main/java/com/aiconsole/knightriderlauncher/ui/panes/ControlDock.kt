@@ -50,7 +50,6 @@ import java.util.Locale
 /** Bottom pane: stationary dock with climate, media and vehicle shortcuts. */
 @Composable
 fun ControlDock(
-    onMultiView: () -> Unit,
     onAssistant: () -> Unit,
     onDiagnostics: () -> Unit,
     onConfig: () -> Unit,
@@ -82,7 +81,7 @@ fun ControlDock(
             VehicleSection(
                 modifier = Modifier.weight(1f).fillMaxHeight(),
                 onSystemSettings = { openSettings(context, Settings.ACTION_SETTINGS) },
-                onMultiView = onMultiView,
+                onTrips = onTrip,
                 onDiagnostics = onDiagnostics,
                 onConfig = onConfig
             )
@@ -228,7 +227,7 @@ private fun MediaSection(onMediaKey: (Int) -> Unit, modifier: Modifier = Modifie
 @Composable
 private fun VehicleSection(
     onSystemSettings: () -> Unit,
-    onMultiView: () -> Unit,
+    onTrips: () -> Unit,
     onDiagnostics: () -> Unit,
     onConfig: () -> Unit,
     modifier: Modifier = Modifier
@@ -236,7 +235,7 @@ private fun VehicleSection(
     DockSection("Vehicle", LedGreen, modifier) {
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             KittButton("Diagnostics", onDiagnostics, Modifier.weight(1f).fillMaxHeight(), LedGreen, active = true)
-            KittButton("Multi-View", onMultiView, Modifier.weight(1f).fillMaxHeight(), ScannerRed, active = true)
+            KittButton("Trips", onTrips, Modifier.weight(1f).fillMaxHeight(), ScannerRed, active = true)
         }
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             KittButton("KITT Config", onConfig, Modifier.weight(1f).fillMaxHeight(), DashAmber)

@@ -30,7 +30,7 @@ This is the owner's personal project, and they vibe code it. Deliver complete, w
 
 ## What this is
 
-A Knight Rider (KITT) themed Android **home-screen launcher** for aftermarket car head units, primarily a 12.1" portrait (9:16) Tesla-style unit with freeform-window support. It includes:
+A Knight Rider (KITT) themed Android **home-screen launcher** for aftermarket car head units, primarily a 12.1" portrait (9:16) Tesla-style unit. It includes:
 - an ELM327 OBD-II scanner (Car Scanner-style gauges, codes and custom PIDs);
 - a voice/text AI copilot ("KITT") that sees live vehicle data;
 - an always-on red scanner light.
@@ -72,10 +72,10 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
 **UI shell** (`MainActivity.kt`):
 - **`LauncherRoot`:** a permanent `KittScanner` strip, then a `BoxWithConstraints`. Tall screens (height ≥ 1.2× width) stack map 50% / grid 35% / dock 15%. Wide screens put map and grid side by side above the dock.
 - **Overlays:** full-screen features are selected by the `LauncherOverlay` enum and drawn inside that box, below the scanner. The scanner is always visible. Each overlay swallows taps and registers its own `BackHandler`.
-  - `MultiView`
   - `Assistant`
   - `Diagnostics`
   - `Config`
+  - `Trips`
 - **Live dash state:** `rememberDashState` collects the OBD, gauge and alert flows into `DashState`.
 - **No recreation on rotation:** the manifest `configChanges` means the activity isn't recreated, and some state relies on that.
 - **Voice button:** `VOICE_COMMAND`/`ASSIST` intents (steering-wheel voice button) bump `voiceTrigger`, which opens the assistant with `autoListen`.
@@ -118,7 +118,6 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
 **Scanner (`ui/scanner/`):**
 - **`ScannerEngine`:** pure-Kotlin light simulation (eased head plus exponential lamp decay) shared by the Compose `KittScanner` and the overlay's plain `View`.
 - **`ScannerOverlayService`:** a non-touchable `TYPE_APPLICATION_OVERLAY` at alpha 0.8, the Android 12+ pass-through-touch limit. It hides while `LauncherVisibility.visible` is true.
-- **Multi-View:** `MultiWindowLauncher` tiles freeform windows between the scanner (`reservedTop`) and the dock (`reservedBottom`) so both stay visible.
 
 ## Conventions
 
