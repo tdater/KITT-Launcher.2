@@ -24,8 +24,10 @@ android {
         applicationId = "com.aiconsole.knightriderlauncher"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        // CI builds number themselves so in-app updates always see a newer version.
+        val ciBuild = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+        versionCode = ciBuild ?: 1
+        versionName = if (ciBuild != null) "1.0.$ciBuild" else "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -36,11 +38,26 @@ android {
         )
     }
 
+    // Release signing from the environment (CI secrets); unsigned release builds without it.
+    // In-app updates only install over a build signed with the same key.
+    val keystore = System.getenv("KITT_KEYSTORE")?.let(::file)?.takeIf { it.exists() }
+    signingConfigs {
+        if (keystore != null) {
+            create("release") {
+                storeFile = keystore
+                storePassword = System.getenv("KITT_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KITT_KEY_ALIAS")
+                keyPassword = System.getenv("KITT_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             optimization {
                 enable = false
             }
+            if (keystore != null) signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {

@@ -142,6 +142,8 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val buttonSounds = boolPref("button_sounds", false)
     /** Speak road warnings from the weather (ice, fog, storms). */
     val weatherAlerts = boolPref("weather_alerts", true)
+    /** GitHub repository (owner/name) whose releases the in-app updater checks. */
+    val updateRepo = stringPref("update_repo", "")
     /** Fill-up log (FuelLog format). */
     val fuelLog = stringPref("fuel_log", "")
     /** Clock, connectivity, GPS and OBD status under the scanner. */

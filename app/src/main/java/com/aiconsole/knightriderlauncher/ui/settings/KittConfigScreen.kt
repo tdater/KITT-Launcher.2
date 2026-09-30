@@ -506,6 +506,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
             item { ButtonSettings(app) }
             item { DriverProfileSettings() }
             item { BackupSettings(app) }
+            item { UpdateSettings(app) }
 
             // ---------------- Quick links ----------------
             item { SectionHeader("Quick links") }

@@ -49,6 +49,8 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 .\gradlew.bat lintDebug    # text report: app/build/intermediates/lint_intermediate_text_report/
 ```
 
+CI: `.github/workflows/android.yml` runs tests, lint and the debug build; with signing secrets (`KITT_KEYSTORE_BASE64` etc.) it also builds a signed release, published on `v*` tags for the in-app updater. CI sets `versionCode` from the run number.
+
 Toolchain: AGP 9.x with **built-in Kotlin** (no `kotlin-android` plugin), Compose BOM, KSP 2.3.x (decoupled from Kotlin version) for Room, OkHttp 5. Versions live in `gradle/libs.versions.toml`. minSdk 24, target/compile 37.
 
 Don't rewrite source files with PowerShell `Get-Content`/`Set-Content`. Windows PowerShell 5.1 reads them as ANSI and corrupts `°`, `·`, `…`. Use the editor tools.
@@ -80,6 +82,7 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
     - Site picker (`StreamSites`): built-ins are licensed free services only (don't add piracy sites); the owner's saved sites are theirs to choose.
     - Video plays while moving by the owner's explicit choice; don't add a driving gate.
   - **Swipe:** disabled on Drive while the map or stream needs horizontal drags; Home returns to Drive.
+  - **More:** `DrivingPanel` (driving layout while moving), `QuickSettingsPanel` (tap the status strip), `WeatherService` (Open-Meteo + spoken road warnings), messages read aloud via `NavNotificationListener` + `MessageRules`, `DriverProfiles` (personal vs shared keys in `ProfileRules`), `SelfUpdate` (GitHub releases, `PackageInstaller`).
   - **Extras:** `StatusStrip` (clock/heading/radios/OBD/volts), GPS speed fallback (`GpsTracker`), `Screensaver` when parked and idle, `WidgetsPane` (`AppWidgetHost` in `KittApplication`), `StartupRoutine` (on start or wake after 5+ min), `HardwareKeys` button mapping via `onKeyUp`, `LauncherBackup` (API keys excluded on purpose).
 - **Overlays:** full-screen features are selected by the `LauncherOverlay` enum and drawn inside that box, below the scanner. The scanner is always visible. Each overlay swallows taps and registers its own `BackHandler`.
   - `Assistant`

@@ -73,3 +73,22 @@ class ProfileRulesTest {
         assertEquals(null, com.aiconsole.knightriderlauncher.data.ProfileRules.sanitize("../"))
     }
 }
+
+class VersionsTest {
+    private val v = com.aiconsole.knightriderlauncher.data.Versions
+
+    @Test
+    fun comparesNumericSegments() {
+        assertTrue(v.isNewer("v1.0.42", "1.0"))
+        assertTrue(v.isNewer("1.0.10", "1.0.9"))
+        assertFalse(v.isNewer("v1.0.9", "1.0.10"))
+        assertFalse(v.isNewer("1.0", "1.0.0"))
+    }
+
+    @Test
+    fun repoFormat() {
+        assertTrue(v.isValidRepo("travisdater/KnightRiderLauncher"))
+        assertFalse(v.isValidRepo("https://github.com/x/y"))
+        assertFalse(v.isValidRepo("justname"))
+    }
+}

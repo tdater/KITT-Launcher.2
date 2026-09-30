@@ -40,6 +40,9 @@ import com.aiconsole.knightriderlauncher.data.LauncherApp
 import com.aiconsole.knightriderlauncher.data.LauncherBackup
 import com.aiconsole.knightriderlauncher.data.ProblemReport
 import com.aiconsole.knightriderlauncher.data.ProfileRules
+import com.aiconsole.knightriderlauncher.data.ReleaseInfo
+import com.aiconsole.knightriderlauncher.data.SelfUpdate
+import com.aiconsole.knightriderlauncher.data.Versions
 import com.aiconsole.knightriderlauncher.ui.components.ChoiceRow
 import com.aiconsole.knightriderlauncher.ui.components.HelpText
 import com.aiconsole.knightriderlauncher.ui.components.KittButton
@@ -229,6 +232,73 @@ private fun restartLauncher(context: android.content.Context) {
         Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
     )
     exitProcess(0)
+}
+
+/** Check the project's GitHub releases and install a newer signed build. */
+@Composable
+fun UpdateSettings(app: KittApplication) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val updater = remember { SelfUpdate(context) }
+    val repo by app.settings.updateRepo.state.collectAsState()
+    var release by remember { mutableStateOf<ReleaseInfo?>(null) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val current = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?" }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SectionHeader("Updates")
+        Text("INSTALLED: $current", style = MaterialTheme.typography.labelLarge, color = DashWhite)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            KittTextField(repo, { app.settings.updateRepo.set(it.trim()) }, "GitHub repo, e.g. owner/KnightRiderLauncher", Modifier.weight(1f))
+            KittButton(
+                if (busy) "Checking…" else "Check",
+                {
+                    busy = true
+                    scope.launch {
+                        message = try {
+                            val latest = updater.latest(repo)
+                            release = latest.takeIf { Versions.isNewer(it.tag, current) }
+                            if (release == null) "Up to date (latest is ${latest.tag})." else "Version ${latest.tag} is available."
+                        } catch (e: IOException) {
+                            release = null
+                            e.message
+                        }
+                        busy = false
+                    }
+                },
+                Modifier.height(48.dp).width(104.dp),
+                LedGreen,
+                enabled = !busy && Versions.isValidRepo(repo)
+            )
+        }
+        release?.let { r ->
+            KittButton(
+                "Install ${r.tag}",
+                {
+                    busy = true
+                    scope.launch {
+                        message = try {
+                            updater.install(r)
+                            "Confirm the install on screen. The launcher restarts after updating."
+                        } catch (e: IOException) {
+                            "Update failed: ${e.message}"
+                        }
+                        busy = false
+                    }
+                },
+                Modifier.fillMaxWidth().height(48.dp),
+                ScannerRed,
+                active = true,
+                enabled = !busy
+            )
+        }
+        HelpText(
+            message ?: ("Installs signed releases built by the project's GitHub workflow. Android only accepts an update " +
+                "signed with the same key as the installed app, so switch to a CI-built release once; after that, " +
+                "updates install from here. Android asks you to allow installs from the launcher the first time.")
+        )
+    }
 }
 
 /** Save or restore settings, gauges, custom PIDs and userscripts. */
