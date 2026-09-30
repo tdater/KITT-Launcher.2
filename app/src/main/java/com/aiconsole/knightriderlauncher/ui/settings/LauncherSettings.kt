@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.aiconsole.knightriderlauncher.KittApplication
 import com.aiconsole.knightriderlauncher.MainActivity
+import com.aiconsole.knightriderlauncher.data.DriverProfiles
 import com.aiconsole.knightriderlauncher.data.HardwareKeys
 import com.aiconsole.knightriderlauncher.data.InstalledApps
 import com.aiconsole.knightriderlauncher.data.KeyAction
@@ -38,9 +39,11 @@ import com.aiconsole.knightriderlauncher.data.KeyBindings
 import com.aiconsole.knightriderlauncher.data.LauncherApp
 import com.aiconsole.knightriderlauncher.data.LauncherBackup
 import com.aiconsole.knightriderlauncher.data.ProblemReport
+import com.aiconsole.knightriderlauncher.data.ProfileRules
 import com.aiconsole.knightriderlauncher.ui.components.ChoiceRow
 import com.aiconsole.knightriderlauncher.ui.components.HelpText
 import com.aiconsole.knightriderlauncher.ui.components.KittButton
+import com.aiconsole.knightriderlauncher.ui.components.KittTextField
 import com.aiconsole.knightriderlauncher.ui.components.KittToggle
 import com.aiconsole.knightriderlauncher.ui.components.SectionHeader
 import com.aiconsole.knightriderlauncher.ui.theme.AlertRed
@@ -157,6 +160,77 @@ fun WakeWordToggle(app: KittApplication) {
     )
 }
 
+/** Per-driver setups; switching restarts the launcher with the other driver's settings. */
+@Composable
+fun DriverProfileSettings() {
+    val context = LocalContext.current
+    val profiles = remember { DriverProfiles(context) }
+    var names by remember { mutableStateOf(profiles.names()) }
+    var active by remember { mutableStateOf(profiles.active) }
+    var newName by remember { mutableStateOf("") }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SectionHeader("Driver profiles")
+        Text("ACTIVE: ${active ?: "none saved yet"}".uppercase(), style = MaterialTheme.typography.labelLarge, color = LedGreen)
+        names.forEach { name ->
+            Row(Modifier.fillMaxWidth().height(44.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                KittButton(
+                    if (name == active) "$name (active)" else "Switch to $name",
+                    {
+                        if (name != active) {
+                            try {
+                                profiles.switchTo(name)
+                                restartLauncher(context)
+                            } catch (e: IOException) {
+                                message = e.message
+                            }
+                        }
+                    },
+                    Modifier.weight(1f).fillMaxHeight(),
+                    LedGreen,
+                    active = name == active
+                )
+                KittButton("Delete", {
+                    profiles.delete(name)
+                    names = profiles.names()
+                    active = profiles.active
+                }, Modifier.width(96.dp).fillMaxHeight(), AlertRed)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            KittTextField(newName, { newName = it }, "Driver name", Modifier.weight(1f))
+            KittButton(
+                "Save current as",
+                {
+                    ProfileRules.sanitize(newName)?.let {
+                        profiles.saveCurrent(it)
+                        names = profiles.names()
+                        active = profiles.active
+                        newName = ""
+                        message = "Saved profile $it."
+                    }
+                },
+                Modifier.height(48.dp),
+                LedGreen,
+                enabled = ProfileRules.sanitize(newName) != null
+            )
+        }
+        HelpText(
+            message ?: ("Each profile keeps its own theme, KITT persona and voice, gauges, favourites and saved sites. " +
+                "The truck's adapter, VIN, odometer, maintenance and fuel log are shared. Switching restarts the launcher.")
+        )
+    }
+}
+
+/** Relaunches the launcher so settings read at start pick up new values. */
+private fun restartLauncher(context: android.content.Context) {
+    context.startActivity(
+        Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+    )
+    exitProcess(0)
+}
+
 /** Save or restore settings, gauges, custom PIDs and userscripts. */
 @Composable
 fun BackupSettings(app: KittApplication) {
@@ -204,10 +278,7 @@ fun BackupSettings(app: KittApplication) {
                     context.contentResolver.openInputStream(uri)?.use(backup::import) ?: throw IOException("Couldn't open the file")
                 }
                 // Settings are read once at start: relaunch so everything picks up the restored values.
-                context.startActivity(
-                    Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                )
-                exitProcess(0)
+                restartLauncher(context)
             } catch (e: IOException) {
                 message = "Restore failed: ${e.message}"
             } catch (e: SecurityException) {

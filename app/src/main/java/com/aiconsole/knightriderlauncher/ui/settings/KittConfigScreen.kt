@@ -504,6 +504,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
 
             item { HomeScreenSettings(app) }
             item { ButtonSettings(app) }
+            item { DriverProfileSettings() }
             item { BackupSettings(app) }
 
             // ---------------- Quick links ----------------

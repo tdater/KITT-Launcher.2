@@ -20,22 +20,7 @@ class LauncherBackup(private val context: Context) {
 
     fun export(out: OutputStream) {
         val prefs = JSONObject()
-        PREFS.forEach { name ->
-            val values = JSONObject()
-            context.getSharedPreferences(name, Context.MODE_PRIVATE).all.forEach { (key, value) ->
-                val entry = when (value) {
-                    is Boolean -> JSONObject().put("t", "b").put("v", value)
-                    is Int -> JSONObject().put("t", "i").put("v", value)
-                    is Long -> JSONObject().put("t", "l").put("v", value)
-                    is Float -> JSONObject().put("t", "f").put("v", value.toDouble())
-                    is String -> JSONObject().put("t", "s").put("v", value)
-                    is Set<*> -> JSONObject().put("t", "ss").put("v", JSONArray(value.filterIsInstance<String>()))
-                    else -> null
-                }
-                entry?.let { values.put(key, it) }
-            }
-            prefs.put(name, values)
-        }
+        PREFS.forEach { name -> prefs.put(name, snapshot(context, name) { true }) }
         val scripts = JSONObject()
         scriptsDir.listFiles { f -> f.name.endsWith(".user.js") }?.forEach { scripts.put(it.name, it.readText()) }
         val root = JSONObject().put("format", FORMAT).put("version", 1).put("prefs", prefs).put("userscripts", scripts)
@@ -51,10 +36,51 @@ class LauncherBackup(private val context: Context) {
         }
         if (root.optString("format") != FORMAT) throw IOException("Not a KITT backup file")
         val prefs = root.getJSONObject("prefs")
-        PREFS.filter(prefs::has).forEach { name ->
-            val values = prefs.getJSONObject(name)
-            val editor = context.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear()
+        PREFS.filter(prefs::has).forEach { name -> restore(context, name, prefs.getJSONObject(name)) { true } }
+        root.optJSONObject("userscripts")?.let { scripts ->
+            scriptsDir.mkdirs()
+            scripts.keys().forEach { fileName ->
+                // Only plain file names; never paths from the backup.
+                if (fileName.endsWith(".user.js") && '/' !in fileName && '\\' !in fileName) {
+                    File(scriptsDir, fileName).writeText(scripts.getString(fileName))
+                }
+            }
+        }
+    }
+
+    companion object {
+        private const val FORMAT = "kitt-launcher-backup"
+        private val PREFS = listOf("kitt_settings", "kitt_gauges", "kitt_custom_pids", "userscripts")
+
+        /** Typed JSON copy of one SharedPreferences file, limited to keys [include] accepts. */
+        fun snapshot(context: Context, name: String, include: (String) -> Boolean): JSONObject {
+            val values = JSONObject()
+            context.getSharedPreferences(name, Context.MODE_PRIVATE).all.forEach { (key, value) ->
+                if (!include(key)) return@forEach
+                val entry = when (value) {
+                    is Boolean -> JSONObject().put("t", "b").put("v", value)
+                    is Int -> JSONObject().put("t", "i").put("v", value)
+                    is Long -> JSONObject().put("t", "l").put("v", value)
+                    is Float -> JSONObject().put("t", "f").put("v", value.toDouble())
+                    is String -> JSONObject().put("t", "s").put("v", value)
+                    is Set<*> -> JSONObject().put("t", "ss").put("v", JSONArray(value.filterIsInstance<String>()))
+                    else -> null
+                }
+                entry?.let { values.put(key, it) }
+            }
+            return values
+        }
+
+        /**
+         * Replaces the keys [include] accepts with [values]; other keys are left alone.
+         * Throws [IOException] if the write fails.
+         */
+        fun restore(context: Context, name: String, values: JSONObject, include: (String) -> Boolean) {
+            val prefs = context.getSharedPreferences(name, Context.MODE_PRIVATE)
+            val editor = prefs.edit()
+            prefs.all.keys.filter(include).forEach(editor::remove)
             values.keys().forEach { key ->
+                if (!include(key)) return@forEach
                 val entry = values.getJSONObject(key)
                 when (entry.getString("t")) {
                     "b" -> editor.putBoolean(key, entry.getBoolean("v"))
@@ -70,19 +96,5 @@ class LauncherBackup(private val context: Context) {
             }
             if (!editor.commit()) throw IOException("Couldn't write $name")
         }
-        root.optJSONObject("userscripts")?.let { scripts ->
-            scriptsDir.mkdirs()
-            scripts.keys().forEach { fileName ->
-                // Only plain file names; never paths from the backup.
-                if (fileName.endsWith(".user.js") && '/' !in fileName && '\\' !in fileName) {
-                    File(scriptsDir, fileName).writeText(scripts.getString(fileName))
-                }
-            }
-        }
-    }
-
-    private companion object {
-        const val FORMAT = "kitt-launcher-backup"
-        val PREFS = listOf("kitt_settings", "kitt_gauges", "kitt_custom_pids", "userscripts")
     }
 }

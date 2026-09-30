@@ -57,3 +57,19 @@ class LauncherRulesTest {
         assertFalse(StartupRule.shouldRun(false, null))
     }
 }
+
+class ProfileRulesTest {
+    @Test
+    fun truckSettingsAreSharedAndDriverSettingsPersonal() {
+        listOf("obd_adapter_type", "vehicle_identity", "odometer_base_km", "distance_counter_km", "maintenance_items", "fuel_log", "tank_size", "widget_ids")
+            .forEach { assertFalse(it, com.aiconsole.knightriderlauncher.data.ProfileRules.isPersonal(it)) }
+        listOf("ui_theme", "persona", "gemini_voice", "pinned_apps", "stream_bookmarks", "accent_color")
+            .forEach { assertTrue(it, com.aiconsole.knightriderlauncher.data.ProfileRules.isPersonal(it)) }
+    }
+
+    @Test
+    fun profileNamesAreFileSafe() {
+        assertEquals("Travis 2", com.aiconsole.knightriderlauncher.data.ProfileRules.sanitize("  Travis/../ 2 "))
+        assertEquals(null, com.aiconsole.knightriderlauncher.data.ProfileRules.sanitize("../"))
+    }
+}
