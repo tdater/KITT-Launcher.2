@@ -72,7 +72,9 @@ data class DtcReport(
     val pending: List<String>,
     val permanent: List<String>,
     val milOn: Boolean,
-    val readAt: Long
+    val readAt: Long,
+    /** Emissions monitors from the same Mode 01 PID 01 reply; null if the ECU didn't answer. */
+    val readiness: Readiness? = null
 ) {
     val all: List<String> get() = (stored + pending + permanent).distinct()
 }
@@ -277,6 +279,13 @@ class ObdManager(
             freezeFrameCode = frame?.dtc,
             freezeFrame = frame?.values.orEmpty().map { (def, value) ->
                 "${def.name}: ${formatValue(def.displayValue(value, metric), def)} ${def.unit(metric)}".trim()
+            },
+            readiness = dtc?.readiness?.let { r ->
+                if (r.incomplete.isEmpty()) {
+                    "all ${r.monitors.size} supported monitors complete"
+                } else {
+                    "${r.incomplete.size} of ${r.monitors.size} incomplete: ${r.incomplete.joinToString { it.name }}"
+                }
             }
         )
     }
@@ -380,7 +389,8 @@ class ObdManager(
                 pending = pending,
                 permanent = permanent,
                 milOn = status?.let { it[0].toInt() and 0x80 != 0 } ?: stored.isNotEmpty(),
-                readAt = System.currentTimeMillis()
+                readAt = System.currentTimeMillis(),
+                readiness = status?.let(ReadinessDecoder::decode)
             )
         }
         _dtcs.value = report

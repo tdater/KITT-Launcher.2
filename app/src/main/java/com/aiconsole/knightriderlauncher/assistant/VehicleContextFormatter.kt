@@ -13,7 +13,9 @@ data class VehicleContext(
     val pendingCodes: List<String>,
     /** Code that stored the freeze frame, and its readings formatted like [liveReadings]. */
     val freezeFrameCode: String? = null,
-    val freezeFrame: List<String> = emptyList()
+    val freezeFrame: List<String> = emptyList(),
+    /** Emissions monitor summary from the last code scan, e.g. "2 incomplete: Catalyst, Evaporative system". */
+    val readiness: String? = null
 )
 
 /** Turns live OBD data and the Room baseline into compact prompt context. */
@@ -47,6 +49,7 @@ object VehicleContextFormatter {
             appendLine("FREEZE FRAME (conditions when $frameCode set):")
             frame.forEach { appendLine("- $it") }
         }
+        context?.readiness?.let { appendLine("EMISSIONS READINESS (last scan): $it") }
         appendLine("HISTORICAL BASELINE (last 30 days):")
         append(baselineSummary)
     }

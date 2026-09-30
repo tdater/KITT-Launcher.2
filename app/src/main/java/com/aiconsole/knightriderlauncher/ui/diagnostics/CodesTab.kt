@@ -3,13 +3,16 @@ package com.aiconsole.knightriderlauncher.ui.diagnostics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -28,25 +31,25 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.aiconsole.knightriderlauncher.KittApplication
-import androidx.compose.foundation.layout.Spacer
 import com.aiconsole.knightriderlauncher.obd.DtcDecoder
 import com.aiconsole.knightriderlauncher.obd.FreezeFrame
 import com.aiconsole.knightriderlauncher.obd.ObdManager
 import com.aiconsole.knightriderlauncher.obd.ObdState
-import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
+import com.aiconsole.knightriderlauncher.obd.Readiness
 import com.aiconsole.knightriderlauncher.ui.components.HelpText
 import com.aiconsole.knightriderlauncher.ui.components.KittButton
 import com.aiconsole.knightriderlauncher.ui.components.SectionHeader
 import com.aiconsole.knightriderlauncher.ui.gauges.SegmentDisplay
+import com.aiconsole.knightriderlauncher.ui.theme.AlertRed
 import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
 import com.aiconsole.knightriderlauncher.ui.theme.DashGrey
 import com.aiconsole.knightriderlauncher.ui.theme.DashWhite
 import com.aiconsole.knightriderlauncher.ui.theme.KittBlack
 import com.aiconsole.knightriderlauncher.ui.theme.LedGreen
-import com.aiconsole.knightriderlauncher.ui.theme.AlertRed
-import kotlinx.coroutines.launch
+import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
 import java.text.DateFormat
 import java.util.Date
+import kotlinx.coroutines.launch
 
 /** Read and clear trouble codes; any code can be handed to KITT for a diagnosis. */
 @Composable
@@ -167,6 +170,7 @@ fun CodesTab(app: KittApplication, onAskKitt: (String) -> Unit) {
                 if (current.all.isEmpty()) {
                     item { HelpText("No trouble codes. Every emissions module reports clean.", color = LedGreen) }
                 }
+                current.readiness?.let { readiness -> item(key = "readiness") { ReadinessPanel(readiness) } }
                 if (current.stored.isNotEmpty()) {
                     item(key = "freeze") {
                         FreezeFramePanel(
@@ -280,6 +284,64 @@ private fun FreezeFramePanel(
                     }
                     if (pair.size == 1) Spacer(Modifier.weight(1f))
                 }
+            }
+        }
+    }
+}
+
+/** Emissions readiness ("is it ready for inspection?") from the monitor status the scan read. */
+@Composable
+private fun ReadinessPanel(readiness: Readiness) {
+    val (verdict, color) = when (readiness.verdict) {
+        Readiness.Verdict.Ready -> "READY FOR INSPECTION" to LedGreen
+        Readiness.Verdict.LikelyReady -> "LIKELY READY" to DashAmber
+        Readiness.Verdict.NotReady -> "NOT READY" to AlertRed
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.small)
+            .background(KittBlack)
+            .border(1.dp, color.copy(alpha = 0.6f), MaterialTheme.shapes.small)
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SectionHeader("Emissions readiness", Modifier.weight(1f), color = color)
+            Text(verdict, style = MaterialTheme.typography.labelLarge, color = color)
+        }
+        HelpText(
+            when (readiness.verdict) {
+                Readiness.Verdict.Ready -> "Every supported self-test has completed since codes were last cleared."
+                Readiness.Verdict.LikelyReady ->
+                    "One monitor hasn't finished. Most US states allow one incomplete on 2001+ gasoline vehicles; check your state's rule."
+                Readiness.Verdict.NotReady -> if (readiness.milOn) {
+                    "The check engine light is on, which fails inspection regardless of monitors."
+                } else {
+                    "Several monitors haven't finished. Drive normally (mixed city and highway, a cold start) for a few days, then re-scan."
+                }
+            }
+        )
+        readiness.monitors.chunked(2).forEach { pair ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                pair.forEach { monitor ->
+                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(10.dp)
+                                .clip(MaterialTheme.shapes.extraSmall)
+                                .background(if (monitor.complete) LedGreen else DashAmber)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(monitor.name.uppercase(), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = DashWhite)
+                        Text(
+                            if (monitor.complete) "DONE" else "INCOMPLETE",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (monitor.complete) LedGreen else DashAmber
+                        )
+                    }
+                }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }
