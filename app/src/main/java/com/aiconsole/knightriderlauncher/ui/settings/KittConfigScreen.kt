@@ -49,6 +49,7 @@ import com.aiconsole.knightriderlauncher.data.settings.KittSettings
 import com.aiconsole.knightriderlauncher.data.settings.NightMode
 import com.aiconsole.knightriderlauncher.data.settings.PersonaStyle
 import com.aiconsole.knightriderlauncher.data.settings.VoiceEngine
+import com.aiconsole.knightriderlauncher.nav.MessageReadout
 import com.aiconsole.knightriderlauncher.nav.NavBridge
 import com.aiconsole.knightriderlauncher.ui.components.ChoiceRow
 import com.aiconsole.knightriderlauncher.ui.components.HelpText
@@ -97,6 +98,8 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val voiceAlerts by settings.voiceAlerts.state.collectAsState()
     val voiceName by settings.kittVoiceName.state.collectAsState()
     val voiceEngine by settings.voiceEngine.state.collectAsState()
+    val readMessages by settings.readMessages.state.collectAsState()
+    val drivingLayout by settings.drivingMode.state.collectAsState()
     val geminiVoice by settings.geminiVoice.state.collectAsState()
     val recognizerChoice by settings.speechRecognizer.state.collectAsState()
     val recognizers = remember { SpeechRecognizers.installed(context) }
@@ -357,6 +360,11 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
             }
             item { KittToggle("Speak replies", voiceReply, { settings.voiceReply.set(it) }) }
             item { WakeWordToggle(app) }
+            item { Text("READ INCOMING MESSAGES", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
+            item {
+                ChoiceRow(MessageReadout.entries, readMessages, { it.label }, { settings.readMessages.set(it) })
+            }
+            item { HelpText("Texts and chat apps, read aloud with a banner. Uses the same notification access as the map.") }
             item { KittToggle("Greeting on start", greeting, { settings.greeting.set(it) }) }
             item {
                 KittToggle(
@@ -402,6 +410,14 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                 )
             }
             item { ChoiceRow(listOf(false, true), metric, { if (it) "Metric" else "Imperial" }, { settings.metricUnits.set(it) }) }
+            item {
+                KittToggle(
+                    "Driving layout",
+                    drivingLayout,
+                    { settings.drivingMode.set(it) },
+                    description = "While moving, the Drive page swaps the app grid for big media controls, KITT and your top favourites."
+                )
+            }
             item {
                 KittToggle(
                     "Shift light",

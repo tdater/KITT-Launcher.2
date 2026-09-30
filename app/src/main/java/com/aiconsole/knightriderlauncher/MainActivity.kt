@@ -85,6 +85,7 @@ import com.aiconsole.knightriderlauncher.ui.diagnostics.DiagnosticsScreen
 import com.aiconsole.knightriderlauncher.ui.gauges.GaugeUi
 import com.aiconsole.knightriderlauncher.ui.panes.AppDrawerPane
 import com.aiconsole.knightriderlauncher.ui.panes.ControlDock
+import com.aiconsole.knightriderlauncher.ui.panes.DrivingPanel
 import com.aiconsole.knightriderlauncher.ui.panes.GaugeWallPane
 import com.aiconsole.knightriderlauncher.ui.panes.HudState
 import com.aiconsole.knightriderlauncher.ui.panes.MediaPane
@@ -146,6 +147,7 @@ class MainActivity : ComponentActivity() {
                 val hiddenStored by settings.hiddenApps.state.collectAsState()
                 val statusStrip by settings.statusStrip.state.collectAsState()
                 val screensaverMinutes by settings.screensaverMinutes.state.collectAsState()
+                val drivingLayout by settings.drivingMode.state.collectAsState()
                 val obdMoving by kitt.obd.moving.collectAsState()
                 val gpsFix by kitt.gps.fix.collectAsState()
                 val pinned = remember(pinnedStored) { AppLists.decode(pinnedStored) }
@@ -159,6 +161,7 @@ class MainActivity : ComponentActivity() {
                     homeTrigger = homeTrigger,
                     statusStrip = statusStrip,
                     screensaverMinutes = screensaverMinutes,
+                    drivingLayout = drivingLayout,
                     moving = obdMoving || (gpsFix?.speedKmh ?: 0.0) > DrivingRules.MOVING_ABOVE_KMH,
                     onAppClick = {
                         settings.appUsage.set(AppUsage.encode(AppUsage.record(AppUsage.decode(settings.appUsage.value), it.key)))
@@ -347,6 +350,7 @@ fun LauncherRoot(
     homeTrigger: Int = 0,
     statusStrip: Boolean = false,
     screensaverMinutes: Int = 0,
+    drivingLayout: Boolean = false,
     moving: Boolean = false,
     dash: DashState = DashState(),
     voiceTrigger: Int = 0,
@@ -364,6 +368,11 @@ fun LauncherRoot(
     val context = LocalContext.current
     var lastTouch by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     var saver by remember { mutableStateOf(false) }
+    val driving = drivingLayout && moving
+    // Pulling away brings the Drive page back, with the driving layout.
+    LaunchedEffect(driving) {
+        if (driving) pager.animateScrollToPage(HomePage.Drive.ordinal)
+    }
     LaunchedEffect(screensaverMinutes, moving) {
         if (moving) saver = false
         while (screensaverMinutes > 0 && !moving) {
@@ -523,6 +532,18 @@ fun LauncherRoot(
                         reading = dash.reading
                     )
                 }
+                val drivingPanel = @Composable { panelModifier: Modifier ->
+                    DrivingPanel(
+                        favorites = homeApps,
+                        onAppClick = onAppClick,
+                        onKitt = {
+                            autoListen = true
+                            open(LauncherOverlay.Assistant)
+                        },
+                        kittSpeaking = dash.kittSpeaking,
+                        modifier = panelModifier
+                    )
+                }
                 val navPane = @Composable { paneModifier: Modifier ->
                     Box(paneModifier) {
                         NavigationPane(
@@ -551,12 +572,14 @@ fun LauncherRoot(
                                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
                                     // 50 : 35 of the space above the dock keeps the 50/35/15 split
                                     navPane(Modifier.fillMaxWidth().weight(0.50f))
-                                    grid(Modifier.fillMaxWidth().weight(0.35f), portraitCellWidth)
+                                    if (driving) drivingPanel(Modifier.fillMaxWidth().weight(0.35f))
+                                    else grid(Modifier.fillMaxWidth().weight(0.35f), portraitCellWidth)
                                 }
                             } else {
                                 Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(gap)) {
                                     navPane(Modifier.fillMaxHeight().weight(0.60f))
-                                    grid(Modifier.fillMaxHeight().weight(0.40f), 120.dp)
+                                    if (driving) drivingPanel(Modifier.fillMaxHeight().weight(0.40f))
+                                    else grid(Modifier.fillMaxHeight().weight(0.40f), 120.dp)
                                 }
                             }
                             HomePage.Gauges -> GaugeWallPane(

@@ -111,6 +111,18 @@ class KittAlerts(
         )
     }
 
+    /** Reads out an incoming message (the driver chose this in KITT Config). */
+    fun announceMessage(text: String) {
+        val now = System.currentTimeMillis()
+        _active.value = KittAlert(text, false, now)
+        voice.speak(text, interrupt = false)
+        clearJob?.cancel()
+        clearJob = scope.launch(Dispatchers.Main) {
+            delay(10_000)
+            if (_active.value?.at == now) _active.value = null
+        }
+    }
+
     /** Spoken maintenance reminder, at most twice a day. */
     fun remindMaintenance(summary: String) {
         raise("maintenance", line("Service reminder: $summary.", "Service reminder, before this heap falls apart: $summary."), severe = false, cooldownMs = 12 * 3_600_000L)

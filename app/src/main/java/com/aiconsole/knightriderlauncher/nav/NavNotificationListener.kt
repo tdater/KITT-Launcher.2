@@ -10,6 +10,7 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.graphics.drawable.toBitmap
+import com.aiconsole.knightriderlauncher.KittApplication
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -67,8 +68,30 @@ class NavNotificationListener : NotificationListenerService() {
         NavBridge.post(null)
     }
 
+    private val announced = LinkedHashSet<String>()
+
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        if (isNavigation(sbn)) NavBridge.post(parse(sbn))
+        if (isNavigation(sbn)) NavBridge.post(parse(sbn)) else announceMessage(sbn)
+    }
+
+    /** Chat and SMS notifications, read out by KITT if the driver turned that on. */
+    private fun announceMessage(sbn: StatusBarNotification) {
+        val n = sbn.notification
+        val isMessage = n.category == Notification.CATEGORY_MESSAGE || sbn.packageName in MessageRules.MESSAGING_PACKAGES
+        if (!isMessage || n.flags and Notification.FLAG_GROUP_SUMMARY != 0 || n.flags and Notification.FLAG_ONGOING_EVENT != 0) return
+        val app = application as? KittApplication ?: return
+        val mode = app.settings.readMessages.value
+        if (mode == MessageReadout.Off) return
+        val extras = n.extras
+        val sender = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+        val key = MessageRules.dedupeKey(sbn.packageName, sender, text)
+        if (!announced.add(key)) return
+        while (announced.size > 50) announced.remove(announced.first())
+        val appLabel = runCatching {
+            packageManager.getApplicationLabel(packageManager.getApplicationInfo(sbn.packageName, 0)).toString()
+        }.getOrDefault("")
+        MessageRules.announcement(mode, appLabel, sender, text)?.let(app.alerts::announceMessage)
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {

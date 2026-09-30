@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import com.aiconsole.knightriderlauncher.BuildConfig
 import com.aiconsole.knightriderlauncher.assistant.GeminiSpeechProtocol
 import com.aiconsole.knightriderlauncher.assistant.SpeechRecognizers
+import com.aiconsole.knightriderlauncher.nav.MessageReadout
 import com.aiconsole.knightriderlauncher.ui.theme.UiTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -90,6 +91,11 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val voiceReply = boolPref("voice_reply", true)
     val greeting = boolPref("greeting", true)
     val voiceAlerts = boolPref("voice_alerts", true)
+    val readMessages = Pref(
+        "read_messages", MessageReadout.Off,
+        { k, d -> runCatching { MessageReadout.valueOf(getString(k, d.name)!!) }.getOrDefault(d) },
+        { k, v -> putString(k, v.name) }
+    )
     /** Device TTS voice: the offline fallback, or the only voice when [voiceEngine] is Device. */
     val kittVoiceName = stringPref("kitt_voice", "")
     val voiceEngine = Pref(
