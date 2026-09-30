@@ -127,7 +127,6 @@ class MainActivity : ComponentActivity() {
                 val night by kitt.nightMode.night.collectAsState()
                 val pinnedStored by settings.pinnedApps.state.collectAsState()
                 val hiddenStored by settings.hiddenApps.state.collectAsState()
-                val obdMoving by kitt.obd.moving.collectAsState()
                 val pinned = remember(pinnedStored) { AppLists.decode(pinnedStored) }
                 val homeApps = remember(apps, pinned, hiddenStored) {
                     AppLists.homeSelection(apps, LauncherApp::key, pinned, AppLists.decode(hiddenStored).toSet())
@@ -137,7 +136,6 @@ class MainActivity : ComponentActivity() {
                     homeApps = homeApps,
                     favorites = pinned.isNotEmpty(),
                     homeTrigger = homeTrigger,
-                    obdMoving = obdMoving,
                     onAppClick = { InstalledApps.launch(this, it) },
                     dash = rememberDashState(kitt),
                     voiceTrigger = voiceTrigger,
@@ -294,7 +292,6 @@ fun LauncherRoot(
     homeApps: List<LauncherApp> = apps,
     favorites: Boolean = false,
     homeTrigger: Int = 0,
-    obdMoving: Boolean = false,
     dash: DashState = DashState(),
     voiceTrigger: Int = 0,
     onAskKitt: (String) -> Unit = {},
@@ -406,7 +403,7 @@ fun LauncherRoot(
                             onStream = { stream.visible = true }
                         )
                         // The streaming window takes the map's place; the rest of home stays put.
-                        if (stream.visible) StreamWindow(stream, obdMoving, Modifier.fillMaxSize())
+                        if (stream.visible) StreamWindow(stream, Modifier.fillMaxSize())
                     }
                 }
 
