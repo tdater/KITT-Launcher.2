@@ -2,6 +2,7 @@ package com.aiconsole.knightriderlauncher.assistant
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -25,23 +26,30 @@ sealed interface SpeechState {
  * main thread; audio capture and recognition run in the recognition service's own process,
  * so nothing heavy happens on the UI thread. Callbacks just update [state].
  */
-class SpeechToTextHelper(context: Context) : RecognitionListener {
+class SpeechToTextHelper(context: Context, private val recognizerChoice: () -> String) : RecognitionListener {
 
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
     private var recognizer: SpeechRecognizer? = null
+    private var boundTarget: RecognizerTarget? = null
 
     private val _state = MutableStateFlow<SpeechState>(SpeechState.Idle)
     val state: StateFlow<SpeechState> = _state.asStateFlow()
 
     fun start() = onMain {
-        if (!SpeechRecognizer.isRecognitionAvailable(appContext)) {
+        val target = SpeechRecognizers.resolve(appContext, recognizerChoice())
+        if (target == RecognizerTarget.SystemDefault && !SpeechRecognizer.isRecognitionAvailable(appContext)) {
             _state.value = SpeechState.Error("Voice input isn't available on this head unit. Type your question instead.")
             return@onMain
         }
-        val active = recognizer ?: SpeechRecognizer.createSpeechRecognizer(appContext).also {
+        if (target != boundTarget) {
+            recognizer?.destroy()
+            recognizer = null
+        }
+        val active = recognizer ?: create(target).also {
             it.setRecognitionListener(this)
             recognizer = it
+            boundTarget = target
         }
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -67,6 +75,17 @@ class SpeechToTextHelper(context: Context) : RecognitionListener {
     fun release() = onMain {
         recognizer?.destroy()
         recognizer = null
+        boundTarget = null
+    }
+
+    private fun create(target: RecognizerTarget): SpeechRecognizer = when (target) {
+        is RecognizerTarget.Service -> SpeechRecognizer.createSpeechRecognizer(appContext, target.component)
+        RecognizerTarget.OnDevice -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            SpeechRecognizer.createOnDeviceSpeechRecognizer(appContext)
+        } else {
+            SpeechRecognizer.createSpeechRecognizer(appContext)
+        }
+        RecognizerTarget.SystemDefault -> SpeechRecognizer.createSpeechRecognizer(appContext)
     }
 
     override fun onReadyForSpeech(params: Bundle?) {
@@ -109,7 +128,9 @@ class SpeechToTextHelper(context: Context) : RecognitionListener {
         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is needed for voice input."
         SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Voice engine is busy. Try again."
         SpeechRecognizer.ERROR_AUDIO -> "Microphone error."
-        else -> "Voice input failed (code $error)."
+        SpeechRecognizer.ERROR_SERVER_DISCONNECTED, SpeechRecognizer.ERROR_CLIENT ->
+            "Speech recognizer stopped. Pick a different one in KITT Config → Voice."
+        else -> "Voice input failed (code $error). Try a different speech recognizer in KITT Config."
     }
 
     private fun onMain(block: () -> Unit) {

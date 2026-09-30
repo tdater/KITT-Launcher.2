@@ -33,6 +33,7 @@ import com.aiconsole.knightriderlauncher.KittApplication
 import com.aiconsole.knightriderlauncher.assistant.AiAppHandoff
 import com.aiconsole.knightriderlauncher.assistant.GeminiAssistantClient
 import com.aiconsole.knightriderlauncher.assistant.GeminiSpeechProtocol
+import com.aiconsole.knightriderlauncher.assistant.SpeechRecognizers
 import com.aiconsole.knightriderlauncher.data.settings.AiProvider
 import com.aiconsole.knightriderlauncher.data.settings.KittSettings
 import com.aiconsole.knightriderlauncher.data.settings.NightMode
@@ -82,6 +83,13 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val voiceName by settings.kittVoiceName.state.collectAsState()
     val voiceEngine by settings.voiceEngine.state.collectAsState()
     val geminiVoice by settings.geminiVoice.state.collectAsState()
+    val recognizerChoice by settings.speechRecognizer.state.collectAsState()
+    val recognizers = remember { SpeechRecognizers.installed(context) }
+    val recognizerOptions = remember(recognizers) {
+        listOf(SpeechRecognizers.AUTO) +
+            (if (SpeechRecognizers.onDeviceAvailable(context)) listOf(SpeechRecognizers.ON_DEVICE) else emptyList()) +
+            recognizers.map { it.component.flattenToString() }
+    }
     val metric by settings.metricUnits.state.collectAsState()
     val overlay by settings.scannerOverlay.state.collectAsState()
     val theme by settings.uiTheme.state.collectAsState()
@@ -306,6 +314,29 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                 )
             }
             if (voices.isEmpty()) item { HelpText("Voices appear once the text-to-speech engine is ready; reopen this screen if the list is empty.") }
+            item { Text("SPEECH RECOGNIZER (MICROPHONE)", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
+            item {
+                ChoiceRow(
+                    options = recognizerOptions,
+                    selected = recognizerChoice,
+                    label = { choice ->
+                        when (choice) {
+                            SpeechRecognizers.AUTO -> "Auto"
+                            SpeechRecognizers.ON_DEVICE -> "Android on-device"
+                            else -> recognizers.firstOrNull { it.component.flattenToString() == choice }
+                                ?.let { if (it.systemDefault) "${it.label} · system default" else it.label }
+                                ?: choice
+                        }
+                    },
+                    onSelect = { settings.speechRecognizer.set(it) }
+                )
+            }
+            item {
+                HelpText(
+                    "In use: ${SpeechRecognizers.describe(context, recognizerChoice)}. If tapping SPEAK switches the " +
+                        "head unit to another app, its built-in voice assistant is the recognizer: pick a different one here."
+                )
+            }
             item { KittToggle("Speak replies", voiceReply, { settings.voiceReply.set(it) }) }
             item { KittToggle("Greeting on start", greeting, { settings.greeting.set(it) }) }
             item {

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.aiconsole.knightriderlauncher.BuildConfig
 import com.aiconsole.knightriderlauncher.assistant.GeminiSpeechProtocol
+import com.aiconsole.knightriderlauncher.assistant.SpeechRecognizers
 import com.aiconsole.knightriderlauncher.ui.theme.UiTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -91,6 +92,9 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
         { k, v -> putString(k, v.name) }
     )
     val geminiVoice = stringPref("gemini_voice", GeminiSpeechProtocol.DEFAULT_VOICE)
+
+    /** Flattened ComponentName, [SpeechRecognizers.AUTO] or [SpeechRecognizers.ON_DEVICE]. */
+    val speechRecognizer = stringPref("speech_recognizer", SpeechRecognizers.AUTO)
 
     // --- Display ---
     val metricUnits = boolPref("metric_units", false)
