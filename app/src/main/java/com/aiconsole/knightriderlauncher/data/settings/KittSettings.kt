@@ -175,6 +175,12 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val streamDesktop = boolPref("stream_desktop", true)
     /** The driver's saved one-tap sites (StreamSites format). */
     val streamBookmarks = stringPref("stream_bookmarks", "")
+    /** Per-site browser options (SiteSettings format). */
+    val siteSettings = stringPref("site_settings", "")
+    /** Darken pages that have no dark theme of their own (default for sites without an override). */
+    val darkPages = boolPref("dark_pages", false)
+    /** Block known ad and tracker hosts (default for sites without an override). */
+    val blockAds = boolPref("block_ads", true)
     val navNotifications = boolPref("nav_notifications", true)
     val wakeWord = boolPref("wake_word", false)
 

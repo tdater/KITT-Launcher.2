@@ -61,6 +61,7 @@ import com.aiconsole.knightriderlauncher.assistant.AssistantPrompt
 import com.aiconsole.knightriderlauncher.assistant.KittAlert
 import com.aiconsole.knightriderlauncher.assistant.LauncherBus
 import com.aiconsole.knightriderlauncher.assistant.LauncherEvent
+import com.aiconsole.knightriderlauncher.browser.BrowserSession
 import com.aiconsole.knightriderlauncher.data.AppLists
 import com.aiconsole.knightriderlauncher.data.AppUsage
 import com.aiconsole.knightriderlauncher.data.HardwareKeys
@@ -77,7 +78,6 @@ import com.aiconsole.knightriderlauncher.obd.ObdConnectionService
 import com.aiconsole.knightriderlauncher.obd.ObdState
 import com.aiconsole.knightriderlauncher.obd.PidCatalog
 import com.aiconsole.knightriderlauncher.obd.PidReading
-import com.aiconsole.knightriderlauncher.stream.StreamSession
 import com.aiconsole.knightriderlauncher.ui.assistant.AssistantOverlay
 import com.aiconsole.knightriderlauncher.ui.components.KittButton
 import com.aiconsole.knightriderlauncher.ui.components.VoiceModulator
@@ -395,7 +395,7 @@ fun LauncherRoot(
     }
     val stream = remember {
         val app = context.applicationContext as KittApplication
-        StreamSession(app.settings, app.userscripts)
+        BrowserSession("stream", app.settings, app.userscripts)
     }
     DisposableEffect(stream) { onDispose { stream.close() } }
     // Back steps through the stream's pages, then returns to the map.
