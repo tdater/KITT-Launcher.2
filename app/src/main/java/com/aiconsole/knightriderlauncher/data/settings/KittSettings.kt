@@ -151,6 +151,8 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val appUsage = stringPref("app_usage", "")
     /** Tint app icons in the theme's accent colour. */
     val themedIcons = boolPref("themed_icons", false)
+    /** Icon pack package name; "" = the apps' own icons. */
+    val iconPack = stringPref("icon_pack", "")
     /** Short console beep on KITT button presses. */
     val buttonSounds = boolPref("button_sounds", false)
     /** Speak road warnings from the weather (ice, fog, storms). */

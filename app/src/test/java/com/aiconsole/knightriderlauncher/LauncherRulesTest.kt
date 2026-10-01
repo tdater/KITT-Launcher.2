@@ -92,3 +92,22 @@ class VersionsTest {
         assertFalse(v.isValidRepo("justname"))
     }
 }
+
+class AppFilterTest {
+    @Test
+    fun parsesComponentsIncludingShortClassNames() {
+        val xml = """
+            <resources>
+              <item component="ComponentInfo{com.waze/com.waze.FreeMapAppActivity}" drawable="waze" />
+              <item drawable="ignored" />
+              <item component="ComponentInfo{com.spotify.music/.MainActivity}" drawable="spotify"/>
+              <item component=":CALENDAR" drawable="calendar" />
+            </resources>
+        """.trimIndent()
+        val map = com.aiconsole.knightriderlauncher.data.AppFilter.parse(xml)
+        assertEquals(
+            mapOf("com.waze/com.waze.FreeMapAppActivity" to "waze", "com.spotify.music/com.spotify.music.MainActivity" to "spotify"),
+            map
+        )
+    }
+}

@@ -75,12 +75,13 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
 - **`LauncherRoot`:** a permanent `KittScanner` strip (doubles as a shift light), then a `BoxWithConstraints` holding a `HorizontalPager` of `HomePage`s, page tabs, and the fixed dock.
   - **Drive:** tall screens (height ≥ 1.2× width) stack map 50% / grid 35%; wide screens put them side by side. The grid shows pinned favourites, else all non-hidden apps (`AppLists`).
   - **Gauges / Media / Apps:** `GaugeWallPane`, `MediaPane` (active `MediaSession` via `MediaBridge`, needs notification access), `AppDrawerPane` (search, A–Z rail, pin/hide).
-  - **Stream window:** `stream/StreamSession` + `ui/panes/StreamWindow` put web video players (YouTube, YouTube Music, or any site typed in) in a WebView over the map pane only.
-    - Non-web schemes are dropped so apps can't take over the screen.
-    - Desktop-UA mode (default) gives full desktop players; site fullscreen stays inside the pane.
-    - Userscripts (`stream/Userscripts`, `UserscriptStore`) inject at document start via `androidx.webkit`; `.user.js` links prompt to install. Chrome extensions aren't possible in WebView.
-    - Site picker (`StreamSites`): built-ins are licensed free services only (don't add piracy sites); the owner's saved sites are theirs to choose.
-    - Video plays while moving by the owner's explicit choice; don't add a driving gate.
+  - **Browser (`browser/`, `ui/browser/BrowserView`):** one tabbed WebView browser behind the stream window and the AI and Games pages. Each `BrowserSession` has its own WebView profile (sandboxed sign-ins) where `MULTI_PROFILE` is supported.
+    - Per-site options (`SiteSettings`): desktop/mobile, dark pages, ad blocking (`AdBlock`, never on YouTube), text size.
+    - Pop-ups the driver triggers open as tabs. Non-web schemes are dropped so apps can't take over the screen.
+    - Userscripts (`stream/Userscripts`, `UserscriptStore`) inject at document start. `.user.js` links and downloads prompt to install.
+    - `PageScripts` holds the toolbar's JS (close pop-ups, scroll, find install link).
+    - Stream window: site picker built-ins are licensed services only (`StreamSites`; don't add piracy sites). Video plays while moving by the owner's choice; don't add a driving gate.
+    - AI page (`AiSites`): the driver's own accounts; voice prompts typed into every open AI tab. Games page: controller input remapped to emulator keys (`Gamepad`); `GameSites` are legal sources only.
   - **Swipe:** disabled on Drive while the map or stream needs horizontal drags; Home returns to Drive.
   - **More:** `DrivingPanel` (driving layout while moving), `QuickSettingsPanel` (tap the status strip), `WeatherService` (Open-Meteo + spoken road warnings), messages read aloud via `NavNotificationListener` + `MessageRules`, `DriverProfiles` (personal vs shared keys in `ProfileRules`), `SelfUpdate` (GitHub releases, `PackageInstaller`).
   - **Extras:** `StatusStrip` (clock/heading/radios/OBD/volts), GPS speed fallback (`GpsTracker`), `Screensaver` when parked and idle, `WidgetsPane` (`AppWidgetHost` in `KittApplication`), `StartupRoutine` (on start or wake after 5+ min), `HardwareKeys` button mapping via `onKeyUp`, `LauncherBackup` (API keys excluded on purpose).

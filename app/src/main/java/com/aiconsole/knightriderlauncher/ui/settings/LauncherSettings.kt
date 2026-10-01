@@ -33,6 +33,7 @@ import com.aiconsole.knightriderlauncher.KittApplication
 import com.aiconsole.knightriderlauncher.MainActivity
 import com.aiconsole.knightriderlauncher.data.DriverProfiles
 import com.aiconsole.knightriderlauncher.data.HardwareKeys
+import com.aiconsole.knightriderlauncher.data.IconPacks
 import com.aiconsole.knightriderlauncher.data.InstalledApps
 import com.aiconsole.knightriderlauncher.data.KeyAction
 import com.aiconsole.knightriderlauncher.data.KeyBindings
@@ -75,12 +76,22 @@ fun HomeScreenSettings(app: KittApplication) {
     val saver by settings.screensaverMinutes.state.collectAsState()
     val startupApp by settings.startupApp.state.collectAsState()
     val resume by settings.startupResumeMedia.state.collectAsState()
-    val apps by produceState(emptyList<LauncherApp>()) { value = InstalledApps.load(context) }
+    val apps by produceState(emptyList<LauncherApp>()) { value = InstalledApps.load(context, settings.iconPack.value) }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         SectionHeader("Home screen")
         KittToggle("Status strip", strip, { settings.statusStrip.set(it) }, description = "Clock, heading, Bluetooth, Wi-Fi, GPS, OBD and battery voltage under the scanner.")
         KittToggle("Themed app icons", themedIcons, { settings.themedIcons.set(it) }, description = "Recolour every app icon in the theme's accent.")
+        Text("ICON PACK", style = MaterialTheme.typography.labelMedium, color = DashGrey)
+        val packs = remember { IconPacks.installed(context) }
+        val pack by settings.iconPack.state.collectAsState()
+        ChoiceRow(
+            options = listOf("") + packs.map { it.packageName },
+            selected = pack,
+            label = { p -> if (p.isEmpty()) "App icons" else packs.firstOrNull { it.packageName == p }?.label ?: p },
+            onSelect = { settings.iconPack.set(it) }
+        )
+        if (packs.isEmpty()) HelpText("Install any ADW/Nova-compatible icon pack from the Play Store and it appears here.")
         KittToggle("Button sounds", sounds, { settings.buttonSounds.set(it) }, description = "A short console blip on every KITT button press.")
         KittToggle(
             "Weather warnings",

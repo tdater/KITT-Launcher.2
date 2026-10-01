@@ -26,12 +26,13 @@ object InstalledApps {
 
     private const val ICON_SIZE_PX = 144
 
-    /** Rendered icon + label per component, keyed by the APK path so app updates refresh it. */
-    private class Cached(val apkPath: String, val label: String, val icon: ImageBitmap)
+    /** Rendered icon + label per component, keyed by the APK path and icon pack so changes refresh it. */
+    private class Cached(val apkPath: String, val pack: String, val label: String, val icon: ImageBitmap)
 
     private val cache = java.util.concurrent.ConcurrentHashMap<String, Cached>()
 
-    suspend fun load(context: Context): List<LauncherApp> = withContext(Dispatchers.IO) {
+    /** All launchable apps; with [iconPack] (a package name), icons come from that pack where it has one. */
+    suspend fun load(context: Context, iconPack: String = ""): List<LauncherApp> = withContext(Dispatchers.IO) {
         val pm = context.packageManager
         queryLauncherActivities(pm)
             .asSequence()
@@ -39,10 +40,12 @@ object InstalledApps {
             .map { info ->
                 val key = "${info.activityInfo.packageName}/${info.activityInfo.name}"
                 val apkPath = info.activityInfo.applicationInfo.sourceDir.orEmpty()
-                val cached = cache[key]?.takeIf { it.apkPath == apkPath } ?: Cached(
+                val cached = cache[key]?.takeIf { it.apkPath == apkPath && it.pack == iconPack } ?: Cached(
                     apkPath = apkPath,
+                    pack = iconPack,
                     label = info.loadLabel(pm).toString(),
-                    icon = info.loadIcon(pm).toBitmap(ICON_SIZE_PX, ICON_SIZE_PX).asImageBitmap()
+                    icon = (iconPack.takeIf { it.isNotEmpty() }?.let { IconPacks.icon(context, it, info.activityInfo.packageName, info.activityInfo.name) }
+                        ?: info.loadIcon(pm)).toBitmap(ICON_SIZE_PX, ICON_SIZE_PX).asImageBitmap()
                 ).also { cache[key] = it }
                 val category = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     info.activityInfo.applicationInfo.category.takeIf { it >= 0 }

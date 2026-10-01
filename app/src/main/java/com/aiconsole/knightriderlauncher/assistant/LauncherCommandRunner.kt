@@ -64,7 +64,7 @@ class LauncherCommandRunner(private val app: KittApplication) {
     }
 
     private suspend fun openApp(query: String): String {
-        val apps = InstalledApps.load(app)
+        val apps = InstalledApps.load(app, app.settings.iconPack.value)
         val index = VoiceCommands.bestMatch(query, apps.map { it.label })
             ?: return say("I can't find an app called $query.", "There's no app called $query. Try again, slower.")
         val target = apps[index]

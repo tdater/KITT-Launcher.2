@@ -136,6 +136,10 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
         )
         handleVoiceIntent(intent)
+        // Re-render the app icons when the driver picks another icon pack.
+        lifecycleScope.launch {
+            kitt.settings.iconPack.state.collect { pack -> apps = InstalledApps.load(applicationContext, pack) }
+        }
         setContent {
             KnightRiderLauncherTheme {
                 // This is the home screen: there is nothing to go back to.
@@ -217,7 +221,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         // Refresh on every return to home so installs/uninstalls show up (icons are cached).
-        lifecycleScope.launch { apps = InstalledApps.load(applicationContext) }
+        lifecycleScope.launch { apps = InstalledApps.load(applicationContext, kitt.settings.iconPack.value) }
     }
 
     /** Mapped steering-wheel buttons (and button learning) while the launcher is in front. */
