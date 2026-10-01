@@ -18,6 +18,9 @@ sealed interface RecognizerTarget {
     data class Service(val component: ComponentName) : RecognizerTarget
     data object OnDevice : RecognizerTarget
     data object SystemDefault : RecognizerTarget
+
+    /** Nothing safe to use: Auto never falls back to the manufacturer's default recognizer. */
+    data object Unavailable : RecognizerTarget
 }
 
 /**
@@ -68,7 +71,7 @@ object SpeechRecognizers {
     fun resolve(context: Context, choice: String): RecognizerTarget {
         when (choice) {
             AUTO -> Unit
-            ON_DEVICE -> return if (onDeviceAvailable(context)) RecognizerTarget.OnDevice else RecognizerTarget.SystemDefault
+            ON_DEVICE -> return if (onDeviceAvailable(context)) RecognizerTarget.OnDevice else RecognizerTarget.Unavailable
             else -> {
                 val chosen = ComponentName.unflattenFromString(choice)
                 if (chosen != null && installed(context).any { it.component == chosen }) return RecognizerTarget.Service(chosen)
@@ -77,7 +80,9 @@ object SpeechRecognizers {
         installed(context).firstOrNull { preferredRank(it.component.packageName) < PREFERRED_PACKAGES.size }
             ?.let { return RecognizerTarget.Service(it.component) }
         if (onDeviceAvailable(context)) return RecognizerTarget.OnDevice
-        return RecognizerTarget.SystemDefault
+        // The head unit's default is often the manufacturer's assistant, which can switch to its own
+        // app (and on one unit looped with the launcher). Only used when the driver picks it.
+        return RecognizerTarget.Unavailable
     }
 
     /** Human-readable name of what [choice] resolves to, for the settings screen. */
@@ -87,6 +92,7 @@ object SpeechRecognizers {
         RecognizerTarget.OnDevice -> "Android on-device recognizer"
         RecognizerTarget.SystemDefault ->
             "System default: " + (installed(context).firstOrNull { it.systemDefault }?.label ?: "unknown")
+        RecognizerTarget.Unavailable -> "None suitable (Google speech services or Android 12+ on-device recognition needed)"
     }
 
     fun create(context: Context, target: RecognizerTarget): SpeechRecognizer = when (target) {
@@ -96,7 +102,7 @@ object SpeechRecognizers {
         } else {
             SpeechRecognizer.createSpeechRecognizer(context)
         }
-        RecognizerTarget.SystemDefault -> SpeechRecognizer.createSpeechRecognizer(context)
+        RecognizerTarget.SystemDefault, RecognizerTarget.Unavailable -> SpeechRecognizer.createSpeechRecognizer(context)
     }
 
     private fun preferredRank(packageName: String): Int =

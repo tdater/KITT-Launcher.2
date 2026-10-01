@@ -36,6 +36,9 @@ class KittAlerts(
     val active: StateFlow<KittAlert?> = _active.asStateFlow()
 
     private val lastRaised = HashMap<String, Long>()
+
+    /** How often each alert has been spoken this drive; after [MAX_SPOKEN] it's banner-only. */
+    private val spokenCount = HashMap<String, Int>()
     private var knownCodes: Set<String>? = null
     private var linkAnnounced = false
     private var greeted = false
@@ -47,6 +50,7 @@ class KittAlerts(
             obd.state.collect { state ->
                 if (state is ObdState.Connected && !linkAnnounced) {
                     linkAnnounced = true
+                    spokenCount.clear() // A new connection is a new drive.
                     val codes = obd.dtcs.value?.all.orEmpty()
                     knownCodes = codes.toSet()
                     val status = when (codes.size) {
@@ -164,8 +168,12 @@ class KittAlerts(
         }
 
         val rpm = fresh(PidCatalog.RPM)
-        val volts = fresh(PidCatalog.ADAPTER_VOLTAGE)
-        if (rpm != null && volts != null && rpm > 600 && volts < LOW_CHARGING_V) {
+        // The ECU's own supply voltage (01 42) is accurate; the adapter's ATRV reads low on many
+        // dongles (drop across the port and its own circuitry), so it only counts with a margin.
+        val moduleVolts = fresh(PidCatalog.MODULE_VOLTAGE)
+        val volts = moduleVolts ?: fresh(PidCatalog.ADAPTER_VOLTAGE)
+        val limit = if (moduleVolts != null) LOW_CHARGING_V else LOW_CHARGING_ADAPTER_V
+        if (rpm != null && volts != null && rpm > 600 && volts < limit) {
             if (lowVoltageSince == 0L) lowVoltageSince = now
             if (now - lowVoltageSince > 20_000) {
                 val reading = "%.1f".format(java.util.Locale.US, volts)
@@ -208,7 +216,11 @@ class KittAlerts(
         if (last != null && now - last < cooldownMs) return
         lastRaised[key] = now
         _active.value = KittAlert(message, severe, now)
-        if (settings.voiceAlerts.value) voice.speak(message, interrupt = severe, urgent = severe)
+        val spoken = spokenCount[key] ?: 0
+        if (settings.voiceAlerts.value && spoken < MAX_SPOKEN) {
+            spokenCount[key] = spoken + 1
+            voice.speak(message, interrupt = severe, urgent = severe)
+        }
         clearJob?.cancel()
         clearJob = scope.launch(Dispatchers.Main) {
             delay(if (severe) 20_000 else 8_000)
@@ -236,5 +248,11 @@ class KittAlerts(
     private companion object {
         const val OVERHEAT_C = 110.0
         const val LOW_CHARGING_V = 12.6
+
+        /** Adapter-measured fallback: ATRV commonly reads 0.3-0.8 V under the battery. */
+        const val LOW_CHARGING_ADAPTER_V = 11.8
+
+        /** Each alert is spoken at most this many times per drive, then shown silently. */
+        const val MAX_SPOKEN = 2
     }
 }

@@ -68,7 +68,7 @@ fun StatusStrip(modifier: Modifier = Modifier, onClick: () -> Unit = {}) {
             delay(5_000)
         }
     }
-    val volts = readings[PidCatalog.ADAPTER_VOLTAGE]?.value ?: readings[PidCatalog.MODULE_VOLTAGE]?.value
+    val volts = readings[PidCatalog.MODULE_VOLTAGE]?.value ?: readings[PidCatalog.ADAPTER_VOLTAGE]?.value
 
     Row(
         modifier.fillMaxWidth().height(28.dp).background(KittBlack).clickable(onClick = onClick).padding(horizontal = 10.dp),

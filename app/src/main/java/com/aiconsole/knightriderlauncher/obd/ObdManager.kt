@@ -734,6 +734,8 @@ class ObdManager(
         /** Needed for logging, the HUD and KITT's alerts regardless of what's on screen. */
         val ALWAYS_POLLED = setOf(
             PidCatalog.RPM, PidCatalog.SPEED, PidCatalog.COOLANT, PidCatalog.THROTTLE, PidCatalog.ADAPTER_VOLTAGE,
+            // ECU supply voltage: accurate battery/charging reading for alerts and the status strip.
+            PidCatalog.MODULE_VOLTAGE,
             // Trip fuel economy; unsupported ones are skipped by the supported-PID filter.
             PidCatalog.FUEL_RATE, PidCatalog.MAF
         )

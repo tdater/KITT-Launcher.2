@@ -227,8 +227,18 @@ class MainActivity : ComponentActivity() {
 
     private fun keyBindings() = KeyBindings.decode(kitt.settings.keyBindings.value)
 
+    private var lastVoiceIntent = 0L
+
+    /**
+     * Steering-wheel voice button. Repeats within [VOICE_DEBOUNCE_MS] are ignored: on one head
+     * unit the manufacturer's assistant re-fired this intent whenever it took over, looping.
+     */
     private fun handleVoiceIntent(intent: Intent?) {
-        if (intent?.action in VOICE_ACTIONS) voiceTrigger++
+        if (intent?.action !in VOICE_ACTIONS) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastVoiceIntent < VOICE_DEBOUNCE_MS) return
+        lastVoiceIntent = now
+        voiceTrigger++
     }
 
     /** Services must be started while an activity is visible, so the launcher kicks them off. */
@@ -249,6 +259,7 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         val VOICE_ACTIONS = setOf(Intent.ACTION_VOICE_COMMAND, Intent.ACTION_ASSIST)
+        const val VOICE_DEBOUNCE_MS = 20_000L
     }
 }
 
@@ -372,11 +383,8 @@ fun LauncherRoot(
     var lastTouch by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     var saver by remember { mutableStateOf(false) }
     var quickSettings by remember { mutableStateOf(false) }
+    // Applies on the Drive page only; the launcher never changes page by itself while driving.
     val driving = drivingLayout && moving
-    // Pulling away brings the Drive page back, with the driving layout.
-    LaunchedEffect(driving) {
-        if (driving) pager.animateScrollToPage(HomePage.Drive.ordinal)
-    }
     LaunchedEffect(screensaverMinutes, moving) {
         if (moving) saver = false
         while (screensaverMinutes > 0 && !moving) {

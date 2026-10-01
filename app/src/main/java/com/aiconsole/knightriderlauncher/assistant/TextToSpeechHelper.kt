@@ -3,7 +3,6 @@ package com.aiconsole.knightriderlauncher.assistant
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.MediaPlayer
-import android.os.Build
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
@@ -43,6 +42,7 @@ import kotlin.coroutines.resumeWithException
 class TextToSpeechHelper(context: Context, private val settings: KittSettings, scope: CoroutineScope) {
 
     private val neural = GeminiSpeechClient(context.applicationContext, settings)
+    private val ducker = AudioDucker(context)
     private val main = CoroutineScope(scope.coroutineContext + Dispatchers.Main)
 
     @Volatile
@@ -69,6 +69,7 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
         ready = status == TextToSpeech.SUCCESS
         if (ready) {
             // Slightly lowered pitch and a measured rate: calmer than the engine's default.
+            tts.setAudioAttributes(ducker.attributes)
             tts.setPitch(0.92f)
             tts.setSpeechRate(0.96f)
             applyVoice(preferredVoice)
@@ -144,6 +145,8 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
     }
 
     private suspend fun drain() {
+        // Duck music/video for the whole queue so KITT is always heard.
+        ducker.duck()
         try {
             while (true) {
                 val next = queue.removeFirstOrNull() ?: break
@@ -151,6 +154,7 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
             }
         } finally {
             _speaking.value = false
+            ducker.release()
         }
     }
 
@@ -224,15 +228,7 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
                 player.release()
             }
         }
-        player.setAudioAttributes(
-            AudioAttributes.Builder()
-                .setUsage(
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) AudioAttributes.USAGE_ASSISTANT
-                    else AudioAttributes.USAGE_MEDIA
-                )
-                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                .build()
-        )
+        player.setAudioAttributes(ducker.attributes)
         player.setOnPreparedListener { it.start() }
         player.setOnCompletionListener {
             release()

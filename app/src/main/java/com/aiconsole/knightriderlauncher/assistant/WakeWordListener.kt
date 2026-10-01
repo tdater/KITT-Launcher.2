@@ -85,6 +85,10 @@ class WakeWordListener(
     private fun startSession() {
         if (!shouldListen()) return
         val target = SpeechRecognizers.resolve(appContext, settings.speechRecognizer.value)
+        if (target == RecognizerTarget.Unavailable) {
+            Log.w(TAG, "No safe speech recognizer; \"Hey KITT\" stays off")
+            return
+        }
         val active = recognizer ?: SpeechRecognizers.create(appContext, target).also {
             it.setRecognitionListener(this)
             recognizer = it

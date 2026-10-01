@@ -29,6 +29,13 @@ enum class VoiceEngine(val label: String) {
     Device("Device TTS")
 }
 
+/** How the mic button turns speech into text. */
+enum class SpeechInput(val label: String) {
+    Auto("Auto"),
+    Gemini("KITT (Gemini)"),
+    Device("Device recognizer")
+}
+
 enum class NightMode(val label: String) {
     Off("Off"),
     Auto("Auto"),
@@ -107,6 +114,12 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
 
     /** Flattened ComponentName, [SpeechRecognizers.AUTO] or [SpeechRecognizers.ON_DEVICE]. */
     val speechRecognizer = stringPref("speech_recognizer", SpeechRecognizers.AUTO)
+    /** Auto: KITT's own Gemini transcription when a key is set, else a safe device recognizer. */
+    val speechInput = Pref(
+        "speech_input", SpeechInput.Auto,
+        { k, d -> runCatching { SpeechInput.valueOf(getString(k, d.name)!!) }.getOrDefault(d) },
+        { k, v -> putString(k, v.name) }
+    )
 
     // --- Display ---
     val metricUnits = boolPref("metric_units", false)

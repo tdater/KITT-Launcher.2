@@ -83,7 +83,8 @@ class VehicleService(
     fun battery(): BatteryReport {
         val now = System.currentTimeMillis()
         val span = 5 * 60_000L
-        val volts = history.points(PidCatalog.ADAPTER_VOLTAGE, now, span).ifEmpty { history.points(PidCatalog.MODULE_VOLTAGE, now, span) }
+        // Prefer the ECU's supply voltage; the adapter's own reading runs low on many dongles.
+        val volts = history.points(PidCatalog.MODULE_VOLTAGE, now, span).ifEmpty { history.points(PidCatalog.ADAPTER_VOLTAGE, now, span) }
         return BatteryHealth.analyze(volts, history.points(PidCatalog.RPM, now, span))
     }
 

@@ -48,6 +48,7 @@ import com.aiconsole.knightriderlauncher.data.settings.AiProvider
 import com.aiconsole.knightriderlauncher.data.settings.KittSettings
 import com.aiconsole.knightriderlauncher.data.settings.NightMode
 import com.aiconsole.knightriderlauncher.data.settings.PersonaStyle
+import com.aiconsole.knightriderlauncher.data.settings.SpeechInput
 import com.aiconsole.knightriderlauncher.data.settings.VoiceEngine
 import com.aiconsole.knightriderlauncher.nav.MessageReadout
 import com.aiconsole.knightriderlauncher.nav.NavBridge
@@ -99,6 +100,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val voiceName by settings.kittVoiceName.state.collectAsState()
     val voiceEngine by settings.voiceEngine.state.collectAsState()
     val readMessages by settings.readMessages.state.collectAsState()
+    val speechInput by settings.speechInput.state.collectAsState()
     val drivingLayout by settings.drivingMode.state.collectAsState()
     val geminiVoice by settings.geminiVoice.state.collectAsState()
     val recognizerChoice by settings.speechRecognizer.state.collectAsState()
@@ -335,6 +337,14 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                 )
             }
             if (voices.isEmpty()) item { HelpText("Voices appear once the text-to-speech engine is ready; reopen this screen if the list is empty.") }
+            item { Text("SPEECH INPUT (MIC BUTTON)", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
+            item { ChoiceRow(SpeechInput.entries, speechInput, { it.label }, { settings.speechInput.set(it) }) }
+            item {
+                HelpText(
+                    "KITT (Gemini) records the mic itself and has Gemini transcribe it, so the head unit's own voice " +
+                        "assistant is never involved. Auto uses it whenever a Gemini key is set."
+                )
+            }
             item { Text("SPEECH RECOGNIZER (MICROPHONE)", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
             item {
                 ChoiceRow(

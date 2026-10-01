@@ -8,9 +8,18 @@ import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import com.aiconsole.knightriderlauncher.data.settings.KittSettings
+import com.aiconsole.knightriderlauncher.data.settings.SpeechInput
+import java.io.IOException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 sealed interface SpeechState {
     data object Idle : SpeechState
@@ -25,18 +34,36 @@ sealed interface SpeechState {
  * main thread; audio capture and recognition run in the recognition service's own process,
  * so nothing heavy happens on the UI thread. Callbacks just update [state].
  */
-class SpeechToTextHelper(context: Context, private val recognizerChoice: () -> String) : RecognitionListener {
+class SpeechToTextHelper(context: Context, private val settings: KittSettings) : RecognitionListener {
 
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
     private var recognizer: SpeechRecognizer? = null
     private var boundTarget: RecognizerTarget? = null
+    private val transcriber = GeminiTranscriber(settings)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var geminiJob: Job? = null
 
     private val _state = MutableStateFlow<SpeechState>(SpeechState.Idle)
     val state: StateFlow<SpeechState> = _state.asStateFlow()
 
     fun start() = onMain {
-        val target = SpeechRecognizers.resolve(appContext, recognizerChoice())
+        val useGemini = when (settings.speechInput.value) {
+            SpeechInput.Gemini -> true
+            SpeechInput.Device -> false
+            SpeechInput.Auto -> settings.geminiKey.isNotEmpty()
+        }
+        if (useGemini) {
+            startGemini()
+            return@onMain
+        }
+        val target = SpeechRecognizers.resolve(appContext, settings.speechRecognizer.value)
+        if (target == RecognizerTarget.Unavailable) {
+            _state.value = SpeechState.Error(
+                "No safe speech recognizer here. Add a Gemini key in KITT Config to use KITT's own speech input, or pick a recognizer there."
+            )
+            return@onMain
+        }
         if (target == RecognizerTarget.SystemDefault && !SpeechRecognizer.isRecognitionAvailable(appContext)) {
             _state.value = SpeechState.Error("Voice input isn't available on this head unit. Type your question instead.")
             return@onMain
@@ -58,11 +85,43 @@ class SpeechToTextHelper(context: Context, private val recognizerChoice: () -> S
         active.startListening(intent)
     }
 
+    /** KITT's own path: record, then Gemini transcribes. No system recognizer involved. */
+    private fun startGemini() {
+        if (settings.geminiKey.isEmpty()) {
+            _state.value = SpeechState.Error("KITT's speech input needs a Gemini key (KITT Config).")
+            return
+        }
+        geminiJob?.cancel()
+        _state.value = SpeechState.Listening()
+        geminiJob = scope.launch {
+            _state.value = try {
+                val pcm = transcriber.record { level ->
+                    (_state.value as? SpeechState.Listening)?.let { _state.value = it.copy(level = level) }
+                }
+                if (pcm == null) {
+                    SpeechState.Error("Didn't catch that.")
+                } else {
+                    _state.value = SpeechState.Processing
+                    transcriber.transcribe(pcm).let { if (it.isBlank()) SpeechState.Error("Didn't catch that.") else SpeechState.Result(it) }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: SecurityException) {
+                SpeechState.Error("Microphone permission is needed for voice input.")
+            } catch (e: IOException) {
+                SpeechState.Error(e.message ?: "Voice input failed.")
+            }
+        }
+    }
+
     /** Stop capturing and deliver whatever was heard. */
-    fun stop() = onMain { recognizer?.stopListening() }
+    fun stop() = onMain {
+        if (geminiJob?.isActive == true) transcriber.requestStop() else recognizer?.stopListening()
+    }
 
     /** Abort without a result. */
     fun cancel() = onMain {
+        geminiJob?.cancel()
         recognizer?.cancel()
         _state.value = SpeechState.Idle
     }
@@ -72,6 +131,7 @@ class SpeechToTextHelper(context: Context, private val recognizerChoice: () -> S
     }
 
     fun release() = onMain {
+        geminiJob?.cancel()
         recognizer?.destroy()
         recognizer = null
         boundTarget = null
