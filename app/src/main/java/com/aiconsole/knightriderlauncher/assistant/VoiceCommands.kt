@@ -27,7 +27,8 @@ object VoiceCommands {
         "gauges" to "gauges", "gauge" to "gauges", "dashboard" to "gauges",
         "media" to "media", "music player" to "media",
         "widgets" to "widgets", "widget" to "widgets",
-        "apps" to "apps", "app drawer" to "apps", "applications" to "apps"
+        "apps" to "apps", "app drawer" to "apps", "applications" to "apps",
+        "ai" to "ai", "a i" to "ai", "chat" to "ai", "games" to "games", "game" to "games", "arcade" to "games"
     )
 
     private val LEAD = Regex("""^(hey |ok |okay )?(kitt|kit)[, ]+|^(please |can you |could you |would you )+""")

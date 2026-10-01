@@ -83,9 +83,11 @@ import com.aiconsole.knightriderlauncher.ui.components.KittButton
 import com.aiconsole.knightriderlauncher.ui.components.VoiceModulator
 import com.aiconsole.knightriderlauncher.ui.diagnostics.DiagnosticsScreen
 import com.aiconsole.knightriderlauncher.ui.gauges.GaugeUi
+import com.aiconsole.knightriderlauncher.ui.panes.AiPane
 import com.aiconsole.knightriderlauncher.ui.panes.AppDrawerPane
 import com.aiconsole.knightriderlauncher.ui.panes.ControlDock
 import com.aiconsole.knightriderlauncher.ui.panes.DrivingPanel
+import com.aiconsole.knightriderlauncher.ui.panes.GamesPane
 import com.aiconsole.knightriderlauncher.ui.panes.GaugeWallPane
 import com.aiconsole.knightriderlauncher.ui.panes.HudState
 import com.aiconsole.knightriderlauncher.ui.panes.MediaPane
@@ -397,6 +399,21 @@ fun LauncherRoot(
         val app = context.applicationContext as KittApplication
         BrowserSession("stream", app.settings, app.userscripts)
     }
+    // AI and Games keep their tabs (and sign-ins) while you move between pages.
+    val aiBrowser = remember {
+        val app = context.applicationContext as KittApplication
+        BrowserSession("ai", app.settings, app.userscripts)
+    }
+    val gamesBrowser = remember {
+        val app = context.applicationContext as KittApplication
+        BrowserSession("games", app.settings, app.userscripts, gamepad = true)
+    }
+    DisposableEffect(aiBrowser, gamesBrowser) {
+        onDispose {
+            aiBrowser.close()
+            gamesBrowser.close()
+        }
+    }
     DisposableEffect(stream) { onDispose { stream.close() } }
     // Back steps through the stream's pages, then returns to the map.
     BackHandler(enabled = stream.visible && overlay == LauncherOverlay.None) {
@@ -576,7 +593,8 @@ fun LauncherRoot(
                         state = pager,
                         modifier = Modifier.fillMaxWidth().weight(1f),
                         // The map and the stream need horizontal drags; use the page tabs from there.
-                        userScrollEnabled = !(onDrive && (showMap || stream.visible)),
+                        userScrollEnabled = !(onDrive && (showMap || stream.visible)) &&
+                            pager.currentPage != HomePage.Ai.ordinal && pager.currentPage != HomePage.Games.ordinal,
                         pageSpacing = gap
                     ) { page ->
                         when (HomePage.entries[page]) {
@@ -603,6 +621,8 @@ fun LauncherRoot(
                             )
                             HomePage.Media -> MediaPane(Modifier.fillMaxSize())
                             HomePage.Widgets -> WidgetsPane(Modifier.fillMaxSize())
+                            HomePage.Ai -> AiPane(aiBrowser, Modifier.fillMaxSize())
+                            HomePage.Games -> GamesPane(gamesBrowser, Modifier.fillMaxSize())
                             HomePage.Apps -> AppDrawerPane(apps, onAppClick, Modifier.fillMaxSize())
                         }
                     }
@@ -651,7 +671,9 @@ fun LauncherRoot(
 }
 
 /** Home pages, swiped or picked from the tabs above the dock. */
-private enum class HomePage(val label: String) { Drive("Drive"), Gauges("Gauges"), Media("Media"), Widgets("Widgets"), Apps("Apps") }
+private enum class HomePage(val label: String) {
+    Drive("Drive"), Gauges("Gauges"), Media("Media"), Ai("AI"), Games("Games"), Widgets("Widgets"), Apps("Apps")
+}
 
 /** Page selector drawn as KITT console buttons: big targets, readable at a glance. */
 @Composable

@@ -7,7 +7,11 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Message
+import android.os.SystemClock
 import android.util.Log
+import android.view.InputDevice
+import android.view.KeyCharacterMap
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -63,7 +67,9 @@ class BrowserTab(val id: Long, initialUrl: String?, initialTitle: String?) {
 class BrowserSession(
     private val space: String,
     private val settings: KittSettings,
-    private val userscripts: UserscriptStore
+    private val userscripts: UserscriptStore,
+    /** Games: turn controller buttons and sticks into the keyboard keys web emulators use. */
+    private val gamepad: Boolean = false
 ) {
     val tabs = mutableStateListOf<BrowserTab>()
     var currentIndex by mutableIntStateOf(0)
@@ -267,8 +273,46 @@ class BrowserSession(
         applySiteOptions(tab, this)
         webViewClient = TabClient(tab)
         webChromeClient = TabChrome(tab)
+        if (gamepad) installGamepad(this)
         setDownloadListener { url, _, _, mimetype, _ ->
             if (StreamUrls.isUserscript(url) || mimetype == "text/x-userscript") pendingInstall = url
+        }
+    }
+
+    /**
+     * Controller input arrives at the focused page as key events the page doesn't understand;
+     * remap them to the keyboard keys emulators listen for (unless the driver chose native
+     * gamepad mode for sites that use the Gamepad API).
+     */
+    private fun installGamepad(web: WebView) {
+        val held = mutableSetOf<Int>()
+        fun fromController(source: Int) =
+            source and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD ||
+                source and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK ||
+                source and InputDevice.SOURCE_DPAD == InputDevice.SOURCE_DPAD
+        fun send(action: Int, keyCode: Int) {
+            val now = SystemClock.uptimeMillis()
+            web.dispatchKeyEvent(KeyEvent(now, now, action, keyCode, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD))
+        }
+        web.setOnKeyListener { _, keyCode, event ->
+            if (!settings.gamepadKeyboard.value || !fromController(event.source)) return@setOnKeyListener false
+            val mapped = Gamepad.map(keyCode) ?: return@setOnKeyListener false
+            if (mapped == keyCode) return@setOnKeyListener false // D-pad already arrives as arrows.
+            send(event.action, mapped)
+            true
+        }
+        web.setOnGenericMotionListener { _, event ->
+            if (!settings.gamepadKeyboard.value || event.source and InputDevice.SOURCE_JOYSTICK != InputDevice.SOURCE_JOYSTICK) {
+                return@setOnGenericMotionListener false
+            }
+            val x = event.getAxisValue(MotionEvent.AXIS_X).takeIf { kotlin.math.abs(it) > 0.1f } ?: event.getAxisValue(MotionEvent.AXIS_HAT_X)
+            val y = event.getAxisValue(MotionEvent.AXIS_Y).takeIf { kotlin.math.abs(it) > 0.1f } ?: event.getAxisValue(MotionEvent.AXIS_HAT_Y)
+            val now = Gamepad.stickDirections(x, y)
+            (held - now).forEach { send(KeyEvent.ACTION_UP, it) }
+            (now - held).forEach { send(KeyEvent.ACTION_DOWN, it) }
+            held.clear()
+            held.addAll(now)
+            true
         }
     }
 

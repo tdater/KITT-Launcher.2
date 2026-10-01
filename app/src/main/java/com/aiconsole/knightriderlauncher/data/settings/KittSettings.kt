@@ -181,6 +181,8 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val darkPages = boolPref("dark_pages", false)
     /** Block known ad and tracker hosts (default for sites without an override). */
     val blockAds = boolPref("block_ads", true)
+    /** Games page: map controller buttons to keyboard keys (off = native Gamepad API sites). */
+    val gamepadKeyboard = boolPref("gamepad_keyboard", true)
     val navNotifications = boolPref("nav_notifications", true)
     val wakeWord = boolPref("wake_word", false)
 
