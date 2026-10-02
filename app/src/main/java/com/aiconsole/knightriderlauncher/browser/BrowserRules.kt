@@ -98,7 +98,37 @@ object PageScripts {
 })();
 """
 
-    fun scrollBy(fraction: Double): String = "window.scrollBy({top: innerHeight * $fraction, behavior: 'smooth'});"
+    /**
+     * Scrolls the page by [fraction] of a screen. Chat sites (Gemini, Claude, ChatGPT) scroll an
+     * inner panel rather than the window, so it scrolls the scrollable box under the middle of the
+     * view, else the window if it scrolls, else the largest scrollable box.
+     */
+    fun scrollBy(fraction: Double): String = """
+(function () {
+  var f = $fraction;
+  function scrolls(el) {
+    var y = getComputedStyle(el).overflowY;
+    return (y === 'auto' || y === 'scroll' || y === 'overlay') && el.scrollHeight > el.clientHeight + 4;
+  }
+  var target = null;
+  var el = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+  while (el && el !== document.body && el !== document.documentElement) {
+    if (scrolls(el)) { target = el; break; }
+    el = el.parentElement;
+  }
+  var root = document.scrollingElement || document.documentElement;
+  if (!target && root.scrollHeight <= root.clientHeight + 4) {
+    var area = 0;
+    document.querySelectorAll('body *').forEach(function (e) {
+      if (!scrolls(e)) return;
+      var r = e.getBoundingClientRect();
+      if (r.width * r.height > area) { area = r.width * r.height; target = e; }
+    });
+  }
+  if (target) target.scrollBy({top: target.clientHeight * f, behavior: 'smooth'});
+  else window.scrollBy({top: innerHeight * f, behavior: 'smooth'});
+})();
+"""
 
     /** Finds an install link on a userscript page (Greasy Fork, OpenUserJS, GitHub raw…). */
     const val FIND_USERSCRIPT = """

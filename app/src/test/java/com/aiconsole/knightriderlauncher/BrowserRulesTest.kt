@@ -94,4 +94,15 @@ class SiteSettingsTest {
         assertFalse(s.blockAllowed("music.youtube.com"))
         assertTrue(s.blockAllowed("tubitv.com"))
     }
+
+    @Test
+    fun googleSignInAlwaysLoadsAsMobile() {
+        assertTrue(s.forcesMobile("accounts.google.com"))
+        assertTrue(s.forcesMobile("accounts.google.co.uk"))
+        assertTrue(s.forcesMobile("accounts.youtube.com"))
+        assertFalse(s.forcesMobile("www.youtube.com"))
+        assertFalse(s.forcesMobile("music.youtube.com"))
+        assertFalse(s.forcesMobile("gemini.google.com"))
+        assertFalse(s.forcesMobile(null))
+    }
 }

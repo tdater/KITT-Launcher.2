@@ -2,7 +2,7 @@
 
 A Knight Rider–themed home screen for Android car head units. It replaces the unit's stock home screen with a KITT-style dashboard. It adds an OBD-II car scanner and an AI co-pilot named KITT that can see your truck's live data, plus a browser for video, music, AI chat and games. It is built for a 12.1" portrait (9:16) Tesla-style head unit, and it also adapts to landscape screens.
 
-*Technical summary:* a native Android app in Kotlin and Jetpack Compose (single module), running on Android 7.0+ (minSdk 24, target SDK 37). It uses Room for trip history, OkHttp for networking, osmdroid for the map, and AndroidX WebKit for the browser. There are no Google Play Services or analytics dependencies. Logic such as the OBD parsing, formulas, trip maths and voice-command parsing is plain Kotlin and covered by about 140 JVM unit tests.
+*Technical summary:* a native Android app in Kotlin and Jetpack Compose (single module), running on Android 7.0+ (minSdk 24, target SDK 37). It uses Room for trip history, OkHttp for networking, osmdroid for the map, and AndroidX WebKit for the browser. There are no Google Play Services or analytics dependencies. Logic such as the OBD parsing, formulas, trip maths and voice-command parsing is plain Kotlin and covered by about 142 JVM unit tests.
 
 ---
 
@@ -155,7 +155,8 @@ One shared, tabbed browser powers three places: the **Stream window** on the Dri
     - **video:** YouTube, Tubi, Pluto TV, Plex, Roku Channel, Xumo Play, Crackle, Kanopy, Hoopla, PBS, Twitch and more;
     - **music:** YT Music, Spotify, SoundCloud, Pandora, iHeartRadio, TuneIn, Amazon Music, Deezer, Bandcamp, SomaFM, Radio Garden and more.
 - **Save any site:** add it from the address bar with ★ Save, or import and export your bookmarks under "My sites".
-- **Per-site options:** desktop or mobile layout, dark pages, ad blocking (never applied to YouTube) and text size.
+- **Per-site options:** desktop or mobile layout, dark pages, ad blocking (never applied to YouTube) and text size. Google sign-in pages always open in the mobile layout, because Google refuses sign-in from the desktop one inside an app.
+- **Same controls everywhere:** the Stream window, AI page and Games page share one toolbar; ▲ ▼ also scroll chat sites that scroll an inner panel, and the Back button steps back through pages (leaving full screen first) on all three.
 - **Sound keeps playing:** a page playing music or video keeps playing when you swipe to another home page (its tab shows ♪). Only one thing plays at a time: starting sound on another page, or pressing play in another app such as YouTube Music, pauses it. KITT's voice just lowers it.
 - **Tabs and pop-ups:** multiple tabs, and pop-ups you trigger open as new tabs. Links that try to launch other apps are blocked, so nothing hijacks the screen.
 - **Separate sign-ins:** each page keeps its own logins (separate WebView profiles where the system WebView supports it).

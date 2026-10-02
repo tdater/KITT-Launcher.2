@@ -39,6 +39,7 @@ import com.aiconsole.knightriderlauncher.stream.InstalledScript
 import com.aiconsole.knightriderlauncher.stream.StreamUrls
 import com.aiconsole.knightriderlauncher.stream.UserscriptStore
 import com.aiconsole.knightriderlauncher.stream.Userscripts
+import kotlinx.coroutines.flow.StateFlow
 import java.io.ByteArrayInputStream
 
 /** One browser tab: its page and, while it exists, its WebView. */
@@ -183,9 +184,14 @@ class BrowserSession(
 
     // ---- Site options ------------------------------------------------------------------
 
+    /** Every setting the site options read, for UI that must redraw when one changes. */
+    val siteOptionFlows: List<StateFlow<*>>
+        get() = listOf(settings.siteSettings.state, settings.streamDesktop.state, settings.darkPages.state, settings.blockAds.state)
+
     fun siteConfig(tab: BrowserTab?): SiteConfig? = tab?.host?.let { SiteSettings.decode(settings.siteSettings.value)[SiteSettings.keyFor(it)] }
 
-    fun isDesktop(tab: BrowserTab): Boolean = siteConfig(tab)?.desktop ?: settings.streamDesktop.value
+    fun isDesktop(tab: BrowserTab): Boolean =
+        !SiteSettings.forcesMobile(tab.host) && (siteConfig(tab)?.desktop ?: settings.streamDesktop.value)
     fun isDark(tab: BrowserTab): Boolean = siteConfig(tab)?.dark ?: settings.darkPages.value
     fun blocksAds(tab: BrowserTab): Boolean =
         SiteSettings.blockAllowed(tab.host) && (siteConfig(tab)?.blockAds ?: settings.blockAds.value)
@@ -195,8 +201,10 @@ class BrowserSession(
     fun updateSite(change: (SiteConfig) -> SiteConfig) {
         val tab = current ?: return
         val host = tab.host ?: return
+        val adsBefore = blocksAds(tab)
         settings.siteSettings.set(SiteSettings.encode(SiteSettings.update(SiteSettings.decode(settings.siteSettings.value), host, change)))
-        tab.web?.let { if (applySiteOptions(tab, it)) it.reload() }
+        // A new layout needs a reload; so do ads, which are already on the page.
+        tab.web?.let { if (applySiteOptions(tab, it) || blocksAds(tab) != adsBefore) it.reload() }
     }
 
     /** Returns true when the user agent changed (the page must reload to use it). */

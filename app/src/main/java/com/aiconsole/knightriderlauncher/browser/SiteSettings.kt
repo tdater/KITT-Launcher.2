@@ -35,6 +35,16 @@ object SiteSettings {
         return sites + (key to change(sites[key] ?: SiteConfig(key)))
     }
 
+    /**
+     * Google's sign-in pages refuse the desktop user agent inside an embedded browser ("This
+     * browser or app may not be secure") but accept the WebView's own mobile one, so these hosts
+     * always load as mobile. The site the driver came from keeps its own setting.
+     */
+    fun forcesMobile(host: String?): Boolean {
+        val h = keyFor(host)
+        return h.startsWith("accounts.google.") || h == "accounts.youtube.com" || h == "myaccount.google.com"
+    }
+
     fun blockAllowed(host: String?): Boolean {
         val h = keyFor(host)
         return NEVER_BLOCK.none { h == it || h.endsWith(".$it") }

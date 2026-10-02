@@ -458,9 +458,21 @@ fun LauncherRoot(
         }
     }
     DisposableEffect(stream) { onDispose { stream.close() } }
-    // Back steps through the stream's pages, then returns to the map.
-    BackHandler(enabled = stream.visible && overlay == LauncherOverlay.None) {
-        if (stream.canGoBack()) stream.goBack() else stream.visible = false
+    // Back works the same in every browser: leave full screen, then step back through its pages.
+    // On Drive the stream window then returns to the map.
+    val pageBrowser = when (HomePage.entries[pager.currentPage]) {
+        HomePage.Drive -> stream.takeIf { it.visible }
+        HomePage.Ai -> aiBrowser
+        HomePage.Games -> gamesBrowser
+        else -> null
+    }
+    BackHandler(enabled = pageBrowser != null && overlay == LauncherOverlay.None) {
+        val browser = pageBrowser ?: return@BackHandler
+        when {
+            browser.fullscreenView != null -> browser.exitFullscreen()
+            browser.canGoBack() -> browser.goBack()
+            browser === stream -> stream.visible = false
+        }
     }
     LaunchedEffect(homeTrigger) {
         if (homeTrigger > 0) {

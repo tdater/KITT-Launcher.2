@@ -49,6 +49,7 @@ import com.aiconsole.knightriderlauncher.KittApplication
 import com.aiconsole.knightriderlauncher.browser.BrowserSession
 import com.aiconsole.knightriderlauncher.browser.BrowserTab
 import com.aiconsole.knightriderlauncher.browser.PageScripts
+import com.aiconsole.knightriderlauncher.browser.SiteSettings
 import com.aiconsole.knightriderlauncher.browser.WebMedia
 import com.aiconsole.knightriderlauncher.browser.WebViewVersion
 import com.aiconsole.knightriderlauncher.data.settings.KittSettings
@@ -200,12 +201,16 @@ private fun Toolbar(session: BrowserSession, tab: BrowserTab, bookmarks: KittSet
             KittButton(if (more) "Less" else "More", { more = !more }, Modifier.weight(1f).fillMaxHeight(), LedGreen, active = more)
         }
         if (more) {
+            // Site options live in settings, not Compose state: watch them so the buttons show
+            // (and toggle from) the current values.
+            session.siteOptionFlows.forEach { it.collectAsState().value }
             val desktop = session.isDesktop(tab)
             val dark = session.isDark(tab)
             val ads = session.blocksAds(tab)
             val zoom = session.textZoom(tab)
             LazyRow(Modifier.fillMaxWidth().height(36.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                item { KittButton(if (desktop) "Desktop" else "Mobile", { session.updateSite { it.copy(desktop = !desktop) } }, Modifier.fillMaxHeight(), LedGreen, active = desktop) }
+                // Google sign-in always loads as mobile (see SiteSettings.forcesMobile).
+                item { KittButton(if (desktop) "Desktop" else "Mobile", { session.updateSite { it.copy(desktop = !desktop) } }, Modifier.fillMaxHeight(), LedGreen, active = desktop, enabled = !SiteSettings.forcesMobile(tab.host)) }
                 item { KittButton("Dark", { session.updateSite { it.copy(dark = !dark) } }, Modifier.fillMaxHeight(), LedGreen, active = dark) }
                 item { KittButton("Block ads", { session.updateSite { it.copy(blockAds = !ads) } }, Modifier.fillMaxHeight(), LedGreen, active = ads) }
                 item { KittButton("A−", { session.updateSite { it.copy(textZoom = (zoom - 10).coerceAtLeast(60)) } }, Modifier.fillMaxHeight(), DashAmber) }
