@@ -75,6 +75,7 @@ fun HomeScreenSettings(app: KittApplication) {
     val themedIcons by settings.themedIcons.state.collectAsState()
     val sounds by settings.buttonSounds.state.collectAsState()
     val weatherAlerts by settings.weatherAlerts.state.collectAsState()
+    val navVoice by settings.navVoice.state.collectAsState()
     val saver by settings.screensaverMinutes.state.collectAsState()
     val startupApp by settings.startupApp.state.collectAsState()
     val resume by settings.startupResumeMedia.state.collectAsState()
@@ -100,6 +101,12 @@ fun HomeScreenSettings(app: KittApplication) {
             weatherAlerts,
             { settings.weatherAlerts.set(it) },
             description = "KITT warns about ice, freezing rain, fog, storms and strong wind (Open-Meteo, no account needed). Needs location."
+        )
+        KittToggle(
+            "Spoken directions",
+            navVoice,
+            { settings.navVoice.set(it) },
+            description = "KITT reads out each turn when you navigate from the home map (OpenStreetMap, no account needed)."
         )
         Text("SCREENSAVER WHEN PARKED", style = MaterialTheme.typography.labelMedium, color = DashGrey)
         ChoiceRow(SCREENSAVER_OPTIONS, saver, { if (it == 0) "Off" else "$it min" }, { settings.screensaverMinutes.set(it) })

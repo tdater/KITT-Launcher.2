@@ -162,6 +162,10 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val buttonSounds = boolPref("button_sounds", false)
     /** Speak road warnings from the weather (ice, fog, storms). */
     val weatherAlerts = boolPref("weather_alerts", true)
+    /** KITT speaks turn-by-turn directions from the home map. */
+    val navVoice = boolPref("nav_voice", true)
+    /** Recent map destinations, encoded by [com.aiconsole.knightriderlauncher.nav.RouteRules.encodeRecents]. */
+    val navRecents = stringPref("nav_recents", "")
     /** GitHub repository (owner/name) whose releases the in-app updater checks. */
     val updateRepo = stringPref("update_repo", "")
     /** Fill-up log (FuelLog format). */

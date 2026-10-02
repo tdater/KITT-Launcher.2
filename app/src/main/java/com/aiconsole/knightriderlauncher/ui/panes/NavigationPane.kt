@@ -28,6 +28,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,7 +47,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.aiconsole.knightriderlauncher.KittApplication
 import com.aiconsole.knightriderlauncher.nav.NavInstruction
+import com.aiconsole.knightriderlauncher.nav.NavStatus
 import com.aiconsole.knightriderlauncher.ui.components.KittButton
 import com.aiconsole.knightriderlauncher.ui.components.KittPanel
 import com.aiconsole.knightriderlauncher.ui.components.LedBarGauge
@@ -69,8 +73,9 @@ data class HudState(
 
 /**
  * Top pane: a themed OpenStreetMap that follows the car (or the 80s vector grid when the map
- * is off or location isn't allowed), the next turn from Google Maps / Waze, and KITT's digital
- * speedometer and bar-graph tach on top.
+ * is off or location isn't allowed) with destination search and KITT's own spoken turn-by-turn
+ * route, the next turn from Google Maps / Waze otherwise, and KITT's digital speedometer and
+ * bar-graph tach on top.
  *
  * [hud] is read inside the small readout composables only, so live OBD updates redraw the
  * readouts without recomposing the map.
@@ -95,6 +100,22 @@ fun NavigationPane(
     }
     val mapController = remember { NavMapController() }
     val mapOn = showMap && locationGranted
+    val app = context.applicationContext as KittApplication
+    val navigator = app.navigator
+    val route by navigator.state.collectAsState()
+    val metric by app.settings.metricUnits.state.collectAsState()
+    var searching by remember { mutableStateOf(false) }
+    val guiding = route.status == NavStatus.Navigating || route.status == NavStatus.Arrived
+
+    // Preview shows the whole route; guidance follows the car again.
+    LaunchedEffect(route.status, route.route, mapOn) {
+        if (!mapOn) return@LaunchedEffect
+        when (route.status) {
+            NavStatus.Preview -> route.route?.let { mapController.showWhole(it.points) }
+            NavStatus.Navigating -> mapController.recenter()
+            else -> Unit
+        }
+    }
 
     KittPanel(
         title = "Navigation",
@@ -109,7 +130,14 @@ fun NavigationPane(
                 .background(KittBlack)
         ) {
             if (mapOn) {
-                NavMap(ScannerRed, mapActive, mapController, Modifier.fillMaxSize())
+                NavMap(
+                    ScannerRed,
+                    mapActive,
+                    mapController,
+                    Modifier.fillMaxSize(),
+                    route = route.route.takeIf { route.status == NavStatus.Preview || route.status == NavStatus.Navigating },
+                    routeColor = DashAmber
+                )
             } else {
                 NavigationVisualizer(Modifier.fillMaxSize())
             }
@@ -119,6 +147,7 @@ fun NavigationPane(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 when {
+                    guiding -> RouteBanner(route, metric)
                     nav != null -> TurnBanner(nav)
                     showMap && !locationGranted -> KittButton(
                         label = "Enable map (location)",
@@ -141,6 +170,9 @@ fun NavigationPane(
                 if (onStream != null) {
                     KittButton("Stream", onStream, Modifier.height(36.dp).width(84.dp), ScannerRed, active = true)
                 }
+                if (mapOn && route.status == NavStatus.Idle) {
+                    KittButton("Search", { searching = true }, Modifier.height(36.dp).width(84.dp), ScannerRed, active = true)
+                }
                 if (mapOn) {
                     KittButton("Center", mapController::recenter, Modifier.height(36.dp).width(84.dp), ScannerRed)
                 }
@@ -148,6 +180,23 @@ fun NavigationPane(
 
             SpeedReadout(hud, Modifier.align(Alignment.BottomEnd).padding(end = 14.dp, bottom = 30.dp))
             TachBar(hud, Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp))
+
+            if (route.status != NavStatus.Idle && route.status != NavStatus.Arrived) {
+                // Left of the speedometer, above the tach.
+                RouteFooter(route, metric, navigator, Modifier.align(Alignment.BottomStart).padding(start = 10.dp, end = 170.dp, bottom = 40.dp))
+            }
+            if (searching) {
+                RouteSearchPanel(
+                    navigator,
+                    metric,
+                    onPick = { place ->
+                        searching = false
+                        navigator.preview(place)
+                    },
+                    onClose = { searching = false },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
     }
 }

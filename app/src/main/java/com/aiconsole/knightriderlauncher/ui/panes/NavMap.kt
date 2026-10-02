@@ -10,12 +10,18 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import com.aiconsole.knightriderlauncher.nav.LatLon
+import com.aiconsole.knightriderlauncher.nav.Route
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.views.CustomZoomButtonsController
+import org.osmdroid.util.BoundingBox
+import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 
@@ -28,6 +34,16 @@ class NavMapController {
         val o = overlay ?: return
         o.enableFollowLocation()
         map?.controller?.setZoom(FOLLOW_ZOOM)
+    }
+
+    /** Stops following the car and fits the whole route on screen, for the route preview. */
+    internal fun showWhole(points: List<LatLon>) {
+        val m = map ?: return
+        if (points.size < 2) return
+        overlay?.disableFollowLocation()
+        val box = BoundingBox.fromGeoPoints(points.map { GeoPoint(it.lat, it.lon) })
+        // Before the first layout the map has no size to fit into; wait for it.
+        m.post { m.zoomToBoundingBox(box.increaseByScale(1.25f), false) }
     }
 }
 
@@ -43,7 +59,11 @@ fun NavMap(
     accent: Color,
     active: Boolean,
     controller: NavMapController,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Route to draw, if any. */
+    route: Route? = null,
+    /** Line color for [route]: it must stand out against the [accent]-tinted map. */
+    routeColor: Color = Color.White
 ) {
     val context = LocalContext.current
     val map = remember { createMap(context) }
@@ -53,8 +73,25 @@ fun NavMap(
             map.overlays.add(this)
         }
     }
+    val routeLine = remember(map) {
+        Polyline(map).apply {
+            outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+            outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
+            isEnabled = false
+            // Under the car marker.
+            map.overlays.add(0, this)
+        }
+    }
     controller.map = map
     controller.overlay = location
+
+    LaunchedEffect(route, routeColor) {
+        routeLine.outlinePaint.color = routeColor.toArgb()
+        routeLine.outlinePaint.strokeWidth = 9f * context.resources.displayMetrics.density
+        routeLine.setPoints(route?.points.orEmpty().map { GeoPoint(it.lat, it.lon) })
+        routeLine.isEnabled = route != null
+        map.invalidate()
+    }
 
     LaunchedEffect(accent) {
         map.overlayManager.tilesOverlay.setColorFilter(nightFilter(accent))

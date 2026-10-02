@@ -14,6 +14,8 @@ sealed interface VoiceCommand {
     data object StartLogging : VoiceCommand
     data object StopLogging : VoiceCommand
     data object OpenDiagnostics : VoiceCommand
+    data class Navigate(val destination: String) : VoiceCommand
+    data object StopNavigation : VoiceCommand
 }
 
 /**
@@ -52,6 +54,10 @@ object VoiceCommands {
         Regex("""^(next|skip)( the)?( song| track)?$""").find(t)?.let { return VoiceCommand.NextTrack }
         Regex("""^(previous|last|go back)( song| track)$|^previous$""").find(t)?.let { return VoiceCommand.PreviousTrack }
         Regex("""^(close|hide|exit)( the)? (stream|video|window|browser)$""").find(t)?.let { return VoiceCommand.CloseStream }
+        Regex("""^(stop|cancel|end|exit)( the)? (navigation|navigating|route|directions)$""").find(t)?.let { return VoiceCommand.StopNavigation }
+        Regex("""^(navigate|take me|drive|get me|give me directions|get directions|directions) to (.+)$""").find(t)?.let { m ->
+            return VoiceCommand.Navigate(m.groupValues[2])
+        }
         Regex("""^(open|show|go to)( the)? diagnostics$""").find(t)?.let { return VoiceCommand.OpenDiagnostics }
         Regex("""^(show|open|go to|switch to)( the| my)? (.+?)( page| screen)?$""").find(t)?.let { m ->
             PAGES[m.groupValues[3]]?.let { return VoiceCommand.ShowPage(it) }

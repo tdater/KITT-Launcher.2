@@ -54,6 +54,14 @@ class LauncherCommandRunner(private val app: KittApplication) {
         VoiceCommand.Pause -> media(KeyEvent.KEYCODE_MEDIA_PAUSE, "Paused.", "Paused. Blessed silence.")
         VoiceCommand.NextTrack -> media(KeyEvent.KEYCODE_MEDIA_NEXT, "Next track.", "Skipping. Your taste, not mine.")
         VoiceCommand.PreviousTrack -> media(KeyEvent.KEYCODE_MEDIA_PREVIOUS, "Previous track.", "Going back. Again.")
+        is VoiceCommand.Navigate -> {
+            LauncherBus.send(LauncherEvent.ShowPage("drive"))
+            app.navigator.navigateTo(command.destination)
+        }
+        VoiceCommand.StopNavigation -> {
+            app.navigator.stop()
+            say("Navigation ended.", "Directions off. Good luck finding it yourself.")
+        }
         VoiceCommand.ReadCodes -> readCodes()
         VoiceCommand.StartLogging -> app.dataLogger.start()?.let { "I can't start logging: $it" }
             ?: say("Data logging started.", "Logging everything. Every bad decision, recorded.")

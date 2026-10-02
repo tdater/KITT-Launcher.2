@@ -2,7 +2,7 @@
 
 A Knight Rider–themed home screen for Android car head units. It replaces the unit's stock home screen with a KITT-style dashboard. It adds an OBD-II car scanner and an AI co-pilot named KITT that can see your truck's live data, plus a browser for video, music, AI chat and games. It is built for a 12.1" portrait (9:16) Tesla-style head unit, and it also adapts to landscape screens.
 
-*Technical summary:* a native Android app in Kotlin and Jetpack Compose (single module), running on Android 7.0+ (minSdk 24, target SDK 37). It uses Room for trip history, OkHttp for networking, osmdroid for the map, and AndroidX WebKit for the browser. There are no Google Play Services or analytics dependencies. Logic such as the OBD parsing, formulas, trip maths and voice-command parsing is plain Kotlin and covered by about 125 JVM unit tests.
+*Technical summary:* a native Android app in Kotlin and Jetpack Compose (single module), running on Android 7.0+ (minSdk 24, target SDK 37). It uses Room for trip history, OkHttp for networking, osmdroid for the map, and AndroidX WebKit for the browser. There are no Google Play Services or analytics dependencies. Logic such as the OBD parsing, formulas, trip maths and voice-command parsing is plain Kotlin and covered by about 138 JVM unit tests.
 
 ---
 
@@ -33,6 +33,7 @@ A Knight Rider–themed home screen for Android car head units. It replaces the 
 Swipe left and right between pages or tap the page buttons. A swipe that starts at the left or right edge of the screen always changes page, even over a web page or the map. The Home button always returns you to Drive.
 
 - **Drive:** a live map (OpenStreetMap, centred on you) with a grid of your apps or vehicle status underneath. On wide screens they sit side by side.
+  - **Search and directions:** tap **Search** on the map, type an address or place (results nearest first, plus your recent destinations), and the route is drawn on the map with its distance, time and arrival time. Tap **Start** for turn-by-turn guidance: the next turn shows at the top of the map with an arrow and distance, KITT speaks each turn twice (early, then at the turn; earlier on faster roads), recalculates if you leave the route, and announces arrival. **Other app** hands the destination to Google Maps, Waze or any navigation app instead. Uses free OpenStreetMap services (Photon search, OSRM routing), no account; needs a data connection and location. Guidance runs while the launcher is on screen. Spoken directions can be turned off in KITT Config.
   - The map area can switch to the **Stream window** (see Browser).
   - Swiping between pages is paused while you're dragging the map or a video.
 - **Gauges:** a full wall of your OBD gauges.
@@ -81,6 +82,7 @@ Swipe left and right between pages or tap the page buttons. A swipe that starts 
 - **Instant voice commands** run immediately without the AI:
   - "open Spotify", "show the gauges page";
   - "stream YouTube" / "close the stream";
+  - "navigate to the nearest Walmart", "take me to 1600 Main Street" / "cancel the route";
   - "play", "pause", "next track", "previous track";
   - "read my codes", "open diagnostics";
   - "start logging" / "stop logging".
@@ -183,5 +185,5 @@ One shared, tabbed browser powers three places: the **Stream window** on the Dri
 ## Privacy and safety at a glance
 
 - **API keys** are encrypted on the device and never included in backups or problem reports.
-- **No analytics or tracking.** Network calls go only to the AI service you chose, Open-Meteo weather, NHTSA VIN lookup, map tiles, and the sites you open.
+- **No analytics or tracking.** Network calls go only to the AI service you chose, Open-Meteo weather, NHTSA VIN lookup, map tiles, OpenStreetMap place search and routing (only when you search or navigate), and the sites you open.
 - **The car is read-only** unless you explicitly press a button that does something else (clearing codes).

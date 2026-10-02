@@ -21,6 +21,16 @@ class VoiceCommandsTest {
     }
 
     @Test
+    fun navigationCommands() {
+        assertEquals(VoiceCommand.Navigate("the nearest walmart"), VoiceCommands.parse("KITT, navigate to the nearest Walmart"))
+        assertEquals(VoiceCommand.Navigate("1600 main street"), VoiceCommands.parse("take me to 1600 Main Street please"))
+        assertEquals(VoiceCommand.Navigate("home depot"), VoiceCommands.parse("Get directions to Home Depot."))
+        assertEquals(VoiceCommand.StopNavigation, VoiceCommands.parse("cancel the route"))
+        assertEquals(VoiceCommand.StopNavigation, VoiceCommands.parse("stop navigation"))
+        assertEquals(VoiceCommand.ShowPage("drive"), VoiceCommands.parse("go to the map"))
+    }
+
+    @Test
     fun mediaCommands() {
         assertEquals(VoiceCommand.Play, VoiceCommands.parse("play music"))
         assertEquals(VoiceCommand.Play, VoiceCommands.parse("resume"))

@@ -22,6 +22,8 @@ import com.aiconsole.knightriderlauncher.data.trip.TripDatabase
 import com.aiconsole.knightriderlauncher.data.trip.TripMetricRecorder
 import com.aiconsole.knightriderlauncher.media.MediaBridge
 import com.aiconsole.knightriderlauncher.nav.GpsTracker
+import com.aiconsole.knightriderlauncher.nav.NavServices
+import com.aiconsole.knightriderlauncher.nav.RouteNavigator
 import com.aiconsole.knightriderlauncher.nav.WeatherService
 import com.aiconsole.knightriderlauncher.obd.AdapterConfig
 import com.aiconsole.knightriderlauncher.obd.AdapterProfiles
@@ -78,6 +80,9 @@ class KittApplication : Application() {
 
     /** Weather at the vehicle and spoken road warnings. */
     val weather: WeatherService by lazy { WeatherService(gps, alerts, settings, appScope) }
+
+    /** Place search and spoken turn-by-turn directions on the home map. */
+    val navigator: RouteNavigator by lazy { RouteNavigator(gps, NavServices(), settings, kittVoice, appScope) }
 
     /** "Hey KITT" listener, active while the launcher is in front and idle. */
     val wakeWord: WakeWordListener by lazy { WakeWordListener(this, settings, kittVoice, appScope) }
