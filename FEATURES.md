@@ -86,7 +86,7 @@ Swipe left and right between pages or tap the page buttons. A swipe that starts 
   - "start logging" / "stop logging".
 - **KITT speaks up on its own:**
   - a greeting when you start up, and when the vehicle connects;
-  - **alerts** for overheating, charging problems, new fault codes and any gauge limit you set, each spoken at most twice per drive and then shown silently;
+  - **alerts** for overheating, charging problems, new fault codes and any gauge limit you set (a gauge must stay past its limit for 20 seconds), each spoken at most twice per drive and then shown silently;
   - **road weather warnings** (freezing rain and black ice, heavy snow or rain, fog, storms, strong wind) from Open-Meteo, each distinct warning at most every 3 hours;
   - **maintenance reminders**, at most twice a day;
   - **incoming messages** read aloud: off, who it's from, or the whole message (SMS and common chat apps).
