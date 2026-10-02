@@ -1,5 +1,6 @@
 package com.aiconsole.knightriderlauncher.ui.panes
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
@@ -79,6 +80,7 @@ fun NavMap(
     AndroidView(factory = { map }, modifier = modifier)
 }
 
+@SuppressLint("ClickableViewAccessibility") // The touch listener only observes; it never consumes clicks.
 private fun createMap(context: Context): MapView {
     Configuration.getInstance().apply {
         load(context, context.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
@@ -92,6 +94,11 @@ private fun createMap(context: Context): MapView {
         controller.setZoom(FOLLOW_ZOOM)
         minZoomLevel = 4.0
         maxZoomLevel = 19.0
+        // Panning the map must not swipe the home pages: claim the gesture from the pager.
+        setOnTouchListener { v, event ->
+            if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) v.parent?.requestDisallowInterceptTouchEvent(true)
+            false
+        }
     }
 }
 

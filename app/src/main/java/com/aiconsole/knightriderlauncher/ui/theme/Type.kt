@@ -118,3 +118,22 @@ val ColoradoTypography = Typography.run {
         labelSmall = labelSmall.console(0.3f)
     )
 }
+
+/** Film HUD themes: all-monospace like the targeting readouts, tracked wide for that terminal look. */
+val HudTypography = Typography.run {
+    fun TextStyle.hud(tracking: Float) = copy(fontFamily = FontFamily.Monospace, letterSpacing = tracking.sp)
+    copy(
+        displayLarge = displayLarge.hud(3f),
+        displayMedium = displayMedium.hud(3f),
+        displaySmall = displaySmall.hud(2f),
+        headlineMedium = headlineMedium.hud(3f),
+        headlineSmall = headlineSmall.hud(2.5f),
+        titleLarge = titleLarge.hud(2.5f),
+        titleMedium = titleMedium.hud(2f),
+        bodyLarge = bodyLarge.hud(0.5f),
+        bodyMedium = bodyMedium.hud(0.4f),
+        labelLarge = labelLarge.hud(2.5f),
+        labelMedium = labelMedium.hud(2f),
+        labelSmall = labelSmall.hud(1.5f)
+    )
+}

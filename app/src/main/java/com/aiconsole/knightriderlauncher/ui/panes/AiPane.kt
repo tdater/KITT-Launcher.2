@@ -12,10 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,12 +33,13 @@ import com.aiconsole.knightriderlauncher.assistant.SpeechState
 import com.aiconsole.knightriderlauncher.assistant.SpeechToTextHelper
 import com.aiconsole.knightriderlauncher.browser.AiSites
 import com.aiconsole.knightriderlauncher.browser.BrowserSession
+import com.aiconsole.knightriderlauncher.stream.StreamSite
 import com.aiconsole.knightriderlauncher.ui.browser.BrowserView
-import com.aiconsole.knightriderlauncher.ui.components.HelpText
+import com.aiconsole.knightriderlauncher.ui.browser.SitePicker
+import com.aiconsole.knightriderlauncher.ui.browser.SiteSection
 import com.aiconsole.knightriderlauncher.ui.components.KittButton
 import com.aiconsole.knightriderlauncher.ui.components.KittPanel
 import com.aiconsole.knightriderlauncher.ui.components.KittTextField
-import com.aiconsole.knightriderlauncher.ui.components.SectionHeader
 import com.aiconsole.knightriderlauncher.ui.components.VoiceModulator
 import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
 import com.aiconsole.knightriderlauncher.ui.theme.DashGrey
@@ -129,24 +126,26 @@ fun AiPane(session: BrowserSession, modifier: Modifier = Modifier) {
             line?.let {
                 Text(it.uppercase(), style = MaterialTheme.typography.labelMedium, color = DashGrey, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            BrowserView(session = session, picker = { AiPicker(it) }, modifier = Modifier.fillMaxWidth().weight(1f))
+            BrowserView(
+                session = session,
+                bookmarks = app.settings.aiBookmarks,
+                picker = { AiPicker(app, it) },
+                modifier = Modifier.fillMaxWidth().weight(1f)
+            )
         }
     }
 }
 
 @Composable
-private fun AiPicker(session: BrowserSession) {
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(180.dp),
-        modifier = Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        item(span = { GridItemSpan(maxLineSpan) }) { SectionHeader("Open an AI", color = ScannerRed) }
-        items(AiSites.ALL, key = { it.url }) { site ->
-            KittButton(site.label, { session.open(site.url, site.label) }, Modifier.height(64.dp), ScannerRed, active = true)
-        }
-        item(span = { GridItemSpan(maxLineSpan) }) {
+private fun AiPicker(app: KittApplication, session: BrowserSession) {
+    SitePicker(
+        session = session,
+        bookmarks = app.settings.aiBookmarks,
+        sections = listOf(SiteSection("Open an AI", AiSites.ALL.map { StreamSite(it.label, it.url) })),
+        help = "Sign in once with your own Gemini, Claude, Perplexity or ChatGPT account; this page keeps its own sandboxed " +
+            "sign-ins. Turn on SPLIT under MORE to see two at once. SPEAK types your words into every open AI tab and sends " +
+            "them. These sites change their layouts, so sending or reading aloud can occasionally miss.",
+        extra = {
             KittButton("Open all four as tabs", {
                 AiSites.ALL.forEachIndexed { i, site ->
                     if (i == 0) session.open(site.url, site.label) else session.newTab(site.url, site.label)
@@ -154,12 +153,5 @@ private fun AiPicker(session: BrowserSession) {
                 session.select(0)
             }, Modifier.fillMaxWidth().height(56.dp), LedGreen, active = true)
         }
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            HelpText(
-                "Sign in once with your own Gemini, Claude, Perplexity or ChatGPT account; this page keeps its own sandboxed " +
-                    "sign-ins. Turn on SPLIT under MORE to see two at once. SPEAK types your words into every open AI tab and " +
-                    "sends them. These sites change their layouts, so sending or reading aloud can occasionally miss."
-            )
-        }
-    }
+    )
 }

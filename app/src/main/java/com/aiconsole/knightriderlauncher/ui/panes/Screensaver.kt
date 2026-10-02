@@ -23,11 +23,14 @@ import com.aiconsole.knightriderlauncher.ui.components.VoiceModulator
 import com.aiconsole.knightriderlauncher.ui.gauges.SegmentDisplay
 import com.aiconsole.knightriderlauncher.ui.scanner.KittScanner
 import com.aiconsole.knightriderlauncher.ui.theme.DashGrey
+import com.aiconsole.knightriderlauncher.ui.theme.FilmHudText
 import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
-import kotlinx.coroutines.delay
+import com.aiconsole.knightriderlauncher.ui.theme.ThemeState
+import com.aiconsole.knightriderlauncher.ui.theme.hud
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 /** Parked idle screen: KITT's voice box, a big segment clock and the scanner. Any tap wakes it. */
 @Composable
@@ -57,6 +60,12 @@ fun Screensaver(onWake: () -> Unit, modifier: Modifier = Modifier) {
                 color = DashGrey
             )
             VoiceModulator(active = true, modifier = Modifier.fillMaxWidth(0.5f).height(90.dp))
+            ThemeState.theme.hud?.let { style ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(FilmHudText.brand(style), style = MaterialTheme.typography.labelLarge, color = ScannerRed)
+                    FilmHudText.lines(style).forEach { Text(it, style = MaterialTheme.typography.labelMedium, color = DashGrey) }
+                }
+            }
         }
         KittScanner(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(28.dp))
     }

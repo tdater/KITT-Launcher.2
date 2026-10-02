@@ -36,9 +36,12 @@ import com.aiconsole.knightriderlauncher.obd.PidCatalog
 import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
 import com.aiconsole.knightriderlauncher.ui.theme.DashGrey
 import com.aiconsole.knightriderlauncher.ui.theme.DashWhite
+import com.aiconsole.knightriderlauncher.ui.theme.FilmHudText
 import com.aiconsole.knightriderlauncher.ui.theme.KittBlack
 import com.aiconsole.knightriderlauncher.ui.theme.LedGreen
 import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
+import com.aiconsole.knightriderlauncher.ui.theme.ThemeState
+import com.aiconsole.knightriderlauncher.ui.theme.hud
 import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
@@ -76,6 +79,15 @@ fun StatusStrip(modifier: Modifier = Modifier, onClick: () -> Unit = {}) {
         horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(now)), style = MaterialTheme.typography.labelLarge, color = DashWhite)
+        ThemeState.theme.hud?.let { style ->
+            val lines = FilmHudText.lines(style)
+            Text(
+                "${FilmHudText.brand(style)} · ${lines[((now / 8_000) % lines.size).toInt()]}",
+                style = MaterialTheme.typography.labelSmall,
+                color = ScannerRed,
+                maxLines = 1
+            )
+        }
         fix?.bearing?.let { Text("HDG ${Compass.cardinal(it)}", style = MaterialTheme.typography.labelMedium, color = DashAmber) }
         weather?.let { w ->
             val temp = if (metric) w.tempC else w.tempC * 9 / 5 + 32

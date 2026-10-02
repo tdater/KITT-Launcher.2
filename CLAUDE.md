@@ -138,6 +138,7 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
 
 ## Conventions
 
+- **Film HUD themes:** `UiTheme.hud` (`HudStyle`: Terminator, RoboCop) also changes typography (`HudTypography`), shapes, the scanner (`KittScanner`: 20-segment bar or visor), panel headers/frames (`hudFrame`), the full-screen `FilmHudOverlay`, and HUD text (`FilmHudText`). New UI should go through `KittPanel`/palette tokens so these themes apply automatically.
 - **KITT visual language:** new UI uses `KittPanel` framing, uppercase labels, palette constants (`ScannerRed`, `DashAmber`, `LedGreen`, `KittBlack`…) and Canvas-drawn indicators (`SegmentDisplay`, `LedBarGauge`, `VoiceModulator`). There is intentionally no material-icons dependency.
 - **Shared controls:** reusable controls live in `ui/components/KittControls.kt` (`KittTextField`, `KittToggle`, `ChoiceRow`, `SectionHeader`).
 - **Lazy lists:** wrap multiple composables inside a `LazyColumn` `item {}` in a `Column`, otherwise they overlap.

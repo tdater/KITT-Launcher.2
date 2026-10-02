@@ -32,6 +32,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -50,6 +51,8 @@ import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
 import com.aiconsole.knightriderlauncher.ui.theme.DashAmberDim
 import com.aiconsole.knightriderlauncher.ui.theme.DashGrey
 import com.aiconsole.knightriderlauncher.ui.theme.DashYellow
+import com.aiconsole.knightriderlauncher.ui.theme.FilmHudText
+import com.aiconsole.knightriderlauncher.ui.theme.HudStyle
 import com.aiconsole.knightriderlauncher.ui.theme.KittBezel
 import com.aiconsole.knightriderlauncher.ui.theme.KittBlack
 import com.aiconsole.knightriderlauncher.ui.theme.KittCharcoal
@@ -59,7 +62,8 @@ import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
 import com.aiconsole.knightriderlauncher.ui.theme.ScannerRedDim
 import com.aiconsole.knightriderlauncher.ui.theme.ThemeState
 import com.aiconsole.knightriderlauncher.ui.theme.UiTheme
-import androidx.compose.ui.draw.shadow
+import com.aiconsole.knightriderlauncher.ui.theme.hud
+import com.aiconsole.knightriderlauncher.ui.theme.hudFrame
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -122,8 +126,10 @@ fun KittPanel(
 ) {
     val shape = MaterialTheme.shapes.medium
     val console = ThemeState.theme == UiTheme.Colorado
+    val hud = ThemeState.theme.hud
     Column(
         modifier
+            .hudFrame(hud, accent)
             // Colorado OS: translucent console glass with a soft phosphor glow over the rain.
             .then(if (console) Modifier.shadow(10.dp, shape, ambientColor = accent, spotColor = accent) else Modifier)
             .clip(shape)
@@ -131,7 +137,7 @@ fun KittPanel(
                 if (console) Brush.verticalGradient(listOf(KittGraphite.copy(alpha = 0.9f), KittCharcoal.copy(alpha = 0.86f)))
                 else Brush.verticalGradient(listOf(KittGraphite, KittCharcoal))
             )
-            .border(1.dp, KittBezel, shape)
+            .border(1.dp, if (hud != null) accent.copy(alpha = 0.55f) else KittBezel, shape)
     ) {
         Row(
             modifier = Modifier
@@ -139,7 +145,7 @@ fun KittPanel(
                 .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (!console) {
+            if (!console && hud == null) {
                 Box(
                     Modifier
                         .size(width = 4.dp, height = 14.dp)
@@ -148,12 +154,22 @@ fun KittPanel(
                 Spacer(Modifier.width(8.dp))
             }
             Text(
-                // Colorado OS reads like a terminal: "> NAVIGATION".
-                text = if (console) "> ${title.uppercase()}" else title.uppercase(),
+                // Colorado OS reads like a terminal ("> NAVIGATION"); the film HUDs like targeting
+                // readouts: "▌NAVIGATION" with a machine tag, or "[ NAVIGATION ]" in the visor style.
+                text = when {
+                    console -> "> ${title.uppercase()}"
+                    hud == HudStyle.Terminator -> "▌${title.uppercase()}"
+                    hud == HudStyle.RoboCop -> "[ ${title.uppercase()} ]"
+                    else -> title.uppercase()
+                },
                 style = MaterialTheme.typography.labelLarge,
                 color = accent,
                 maxLines = 1
             )
+            if (hud == HudStyle.Terminator) {
+                Spacer(Modifier.width(8.dp))
+                Text(FilmHudText.hexTag(title), style = MaterialTheme.typography.labelSmall, color = accent.copy(alpha = 0.55f), maxLines = 1)
+            }
             Spacer(Modifier.weight(1f))
             trailing()
         }

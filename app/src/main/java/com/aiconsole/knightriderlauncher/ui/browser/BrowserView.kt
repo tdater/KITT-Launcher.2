@@ -49,6 +49,9 @@ import com.aiconsole.knightriderlauncher.browser.BrowserSession
 import com.aiconsole.knightriderlauncher.browser.BrowserTab
 import com.aiconsole.knightriderlauncher.browser.PageScripts
 import com.aiconsole.knightriderlauncher.browser.WebViewVersion
+import com.aiconsole.knightriderlauncher.data.settings.KittSettings
+import com.aiconsole.knightriderlauncher.stream.StreamSite
+import com.aiconsole.knightriderlauncher.stream.StreamSites
 import com.aiconsole.knightriderlauncher.stream.StreamUrls
 import com.aiconsole.knightriderlauncher.stream.Userscript
 import com.aiconsole.knightriderlauncher.ui.components.HelpText
@@ -63,8 +66,8 @@ import com.aiconsole.knightriderlauncher.ui.theme.KittBezel
 import com.aiconsole.knightriderlauncher.ui.theme.KittBlack
 import com.aiconsole.knightriderlauncher.ui.theme.LedGreen
 import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
-import kotlinx.coroutines.launch
 import java.io.IOException
+import kotlinx.coroutines.launch
 
 private const val GREASY_FORK = "https://greasyfork.org/"
 
@@ -76,6 +79,7 @@ private const val GREASY_FORK = "https://greasyfork.org/"
 @Composable
 fun BrowserView(
     session: BrowserSession,
+    bookmarks: KittSettings.Pref<String>,
     picker: @Composable (BrowserSession) -> Unit,
     modifier: Modifier = Modifier,
     extraTools: @Composable () -> Unit = {}
@@ -103,7 +107,7 @@ fun BrowserView(
         if (fullscreen == null) {
             TabStrip(session)
             if (current != null && !current.isPicker && session.pendingInstall == null && !session.showScripts) {
-                Toolbar(session, current, extraTools)
+                Toolbar(session, current, bookmarks, extraTools)
             }
             if (WebViewVersion.isOutdated(webViewVersion)) {
                 HelpText(
@@ -157,7 +161,7 @@ private fun TabStrip(session: BrowserSession) {
 private const val MAX_TABS = 8
 
 @Composable
-private fun Toolbar(session: BrowserSession, tab: BrowserTab, extraTools: @Composable () -> Unit) {
+private fun Toolbar(session: BrowserSession, tab: BrowserTab, bookmarks: KittSettings.Pref<String>, extraTools: @Composable () -> Unit) {
     var more by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -171,6 +175,17 @@ private fun Toolbar(session: BrowserSession, tab: BrowserTab, extraTools: @Compo
                 { session.run(PageScripts.CLOSE_POPUPS) { n -> message = if (n == "0") "No pop-ups found." else "Closed $n pop-up(s)." } },
                 Modifier.weight(1.2f).fillMaxHeight(),
                 ScannerRed
+            )
+            KittButton(
+                "★ Save",
+                {
+                    val url = tab.url ?: return@KittButton
+                    val label = tab.title?.take(40)?.takeIf { it.isNotBlank() } ?: StreamUrls.titleOf(url)
+                    bookmarks.set(StreamSites.encode(StreamSites.decode(bookmarks.value) + StreamSite(label, url)))
+                    message = "Saved \"$label\" to My sites (tap SITES to see it)."
+                },
+                Modifier.weight(1f).fillMaxHeight(),
+                LedGreen
             )
             KittButton("Sites", { session.showPicker() }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
             KittButton(if (more) "Less" else "More", { more = !more }, Modifier.weight(1f).fillMaxHeight(), LedGreen, active = more)

@@ -15,8 +15,20 @@ enum class UiTheme(val label: String) {
     RetroVfd("Retro VFD"),
     Outrun("Outrun"),
     Stealth("Stealth"),
+    Terminator("Terminator"),
+    RoboCop("RoboCop"),
     Colorado("Colorado OS")
 }
+
+/** Film HUD themes change more than colours: scanner, panels, overlay and HUD text. */
+enum class HudStyle { Terminator, RoboCop }
+
+val UiTheme.hud: HudStyle?
+    get() = when (this) {
+        UiTheme.Terminator -> HudStyle.Terminator
+        UiTheme.RoboCop -> HudStyle.RoboCop
+        else -> null
+    }
 
 /**
  * Every color the UI draws with, by role. [accent] is the brand color (KITT's scanner red),
@@ -202,6 +214,48 @@ val StealthPalette = KittPalette(
     grey = Color(0xFF7A7A7A)
 )
 
+// The Terminator (1984): T-800 vision. Everything in shades of red on near-black, readouts in
+// pale red-white, warnings white-hot so they still stand out in an all-red view.
+val TerminatorPalette = KittPalette(
+    black = Color(0xFF070000),
+    charcoal = Color(0xFF120202),
+    graphite = Color(0xFF1C0404),
+    bezel = Color(0xFF5C1210),
+    grid = Color(0xFF2E0807),
+    accent = Color(0xFFFF2B1A),
+    accentDim = Color(0xFF4A0905),
+    danger = Color(0xFFFFFFFF),
+    amber = Color(0xFFFF6B45),
+    amberDim = Color(0xFF3D1208),
+    green = Color(0xFFFFC2B8),
+    greenDim = Color(0xFF3C1714),
+    yellow = Color(0xFFFFD2A6),
+    info = Color(0xFFFF8F80),
+    white = Color(0xFFFFE4DE),
+    grey = Color(0xFFB0645C)
+)
+
+// RoboCop (1987): visor POV and OCP chrome. Cold visor blue on steel-grey, OCP gold highlights,
+// red reserved for threats.
+val RoboCopPalette = KittPalette(
+    black = Color(0xFF02060B),
+    charcoal = Color(0xFF08111C),
+    graphite = Color(0xFF0E1A29),
+    bezel = Color(0xFF3A5674),
+    grid = Color(0xFF16283C),
+    accent = Color(0xFF66CCFF),
+    accentDim = Color(0xFF0F2F4A),
+    danger = Color(0xFFFF3D3D),
+    amber = Color(0xFFE8C45A),
+    amberDim = Color(0xFF3A2F10),
+    green = Color(0xFFA9E8FF),
+    greenDim = Color(0xFF123444),
+    yellow = Color(0xFFFFE07A),
+    info = Color(0xFF66CCFF),
+    white = Color(0xFFE6F3FF),
+    grey = Color(0xFF8399B3)
+)
+
 fun UiTheme.palette(): KittPalette = when (this) {
     UiTheme.Kitt -> KittClassicPalette
     UiTheme.Karr -> KarrPalette
@@ -210,6 +264,8 @@ fun UiTheme.palette(): KittPalette = when (this) {
     UiTheme.RetroVfd -> RetroVfdPalette
     UiTheme.Outrun -> OutrunPalette
     UiTheme.Stealth -> StealthPalette
+    UiTheme.Terminator -> TerminatorPalette
+    UiTheme.RoboCop -> RoboCopPalette
     UiTheme.Colorado -> ColoradoPalette
 }
 

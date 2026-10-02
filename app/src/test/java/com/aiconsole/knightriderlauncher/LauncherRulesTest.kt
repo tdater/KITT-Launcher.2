@@ -111,3 +111,20 @@ class AppFilterTest {
         )
     }
 }
+
+class FilmHudTextTest {
+    private val t = com.aiconsole.knightriderlauncher.ui.theme.FilmHudText
+
+    @Test
+    fun hexTagIsStableAndCaseInsensitive() {
+        assertEquals(t.hexTag("Navigation"), t.hexTag("NAVIGATION"))
+        assertTrue(t.hexTag("Media").matches(Regex("0x[0-9A-F]{4}")))
+    }
+
+    @Test
+    fun robocopKeepsTheFourthDirectiveClassified() {
+        val lines = t.lines(com.aiconsole.knightriderlauncher.ui.theme.HudStyle.RoboCop)
+        assertEquals(4, lines.size)
+        assertTrue(lines.last().contains("CLASSIFIED"))
+    }
+}

@@ -1,5 +1,6 @@
 package com.aiconsole.knightriderlauncher.ui.theme
 
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +61,24 @@ private val ColoradoShapes = Shapes(
     extraLarge = RoundedCornerShape(18.dp)
 )
 
+// Terminator: hard square edges, like a machine's display grid.
+private val TerminatorShapes = Shapes(
+    extraSmall = RoundedCornerShape(0.dp),
+    small = RoundedCornerShape(0.dp),
+    medium = RoundedCornerShape(0.dp),
+    large = RoundedCornerShape(0.dp),
+    extraLarge = RoundedCornerShape(0.dp)
+)
+
+// RoboCop: chamfered corners, like OCP armour plating and the visor's angled frame.
+private val RoboCopShapes = Shapes(
+    extraSmall = CutCornerShape(2.dp),
+    small = CutCornerShape(5.dp),
+    medium = CutCornerShape(8.dp),
+    large = CutCornerShape(10.dp),
+    extraLarge = CutCornerShape(14.dp)
+)
+
 @Composable
 fun KnightRiderLauncherTheme(content: @Composable () -> Unit) {
     val theme = ThemeState.theme
@@ -67,8 +86,17 @@ fun KnightRiderLauncherTheme(content: @Composable () -> Unit) {
     val scheme = remember(theme, accent) { colorScheme(ThemeState.palette) }
     MaterialTheme(
         colorScheme = scheme,
-        typography = if (theme == UiTheme.Colorado) ColoradoTypography else Typography,
-        shapes = if (theme == UiTheme.Colorado) ColoradoShapes else KittShapes,
+        typography = when {
+            theme == UiTheme.Colorado -> ColoradoTypography
+            theme.hud != null -> HudTypography
+            else -> Typography
+        },
+        shapes = when (theme) {
+            UiTheme.Colorado -> ColoradoShapes
+            UiTheme.Terminator -> TerminatorShapes
+            UiTheme.RoboCop -> RoboCopShapes
+            else -> KittShapes
+        },
         content = content
     )
 }

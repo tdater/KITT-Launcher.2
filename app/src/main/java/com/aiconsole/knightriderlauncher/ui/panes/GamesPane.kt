@@ -8,19 +8,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -28,14 +21,13 @@ import androidx.compose.ui.unit.dp
 import com.aiconsole.knightriderlauncher.KittApplication
 import com.aiconsole.knightriderlauncher.browser.BrowserSession
 import com.aiconsole.knightriderlauncher.browser.GameSites
-import com.aiconsole.knightriderlauncher.stream.StreamUrls
+import com.aiconsole.knightriderlauncher.stream.StreamSite
 import com.aiconsole.knightriderlauncher.ui.browser.BrowserView
+import com.aiconsole.knightriderlauncher.ui.browser.SitePicker
+import com.aiconsole.knightriderlauncher.ui.browser.SiteSection
 import com.aiconsole.knightriderlauncher.ui.components.HelpText
 import com.aiconsole.knightriderlauncher.ui.components.KittButton
 import com.aiconsole.knightriderlauncher.ui.components.KittPanel
-import com.aiconsole.knightriderlauncher.ui.components.KittTextField
-import com.aiconsole.knightriderlauncher.ui.components.SectionHeader
-import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
 import com.aiconsole.knightriderlauncher.ui.theme.DashGrey
 import com.aiconsole.knightriderlauncher.ui.theme.LedGreen
 import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
@@ -88,39 +80,24 @@ fun GamesPane(session: BrowserSession, modifier: Modifier = Modifier) {
                     Modifier.weight(1f)
                 )
             }
-            BrowserView(session = session, picker = { GamePicker(it) }, modifier = Modifier.fillMaxWidth().weight(1f))
+            BrowserView(
+                session = session,
+                bookmarks = app.settings.gameBookmarks,
+                picker = { GamePicker(app, it) },
+                modifier = Modifier.fillMaxWidth().weight(1f)
+            )
         }
     }
 }
 
 @Composable
-private fun GamePicker(session: BrowserSession) {
-    var address by remember { mutableStateOf("") }
-    val target = StreamUrls.normalize(address)
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(200.dp),
-        modifier = Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                KittTextField(address, { address = it }, "Another game site…", Modifier.weight(1f), onDone = { target?.let { session.open(it) } })
-                KittButton("Go", { target?.let { session.open(it) } }, Modifier.height(48.dp).width(72.dp), ScannerRed, enabled = target != null)
-            }
-        }
-        item(span = { GridItemSpan(maxLineSpan) }) { SectionHeader("Play in the browser", color = ScannerRed) }
-        items(GameSites.ALL, key = { it.url }) { site ->
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                KittButton(site.label, { session.open(site.url, site.label) }, Modifier.fillMaxWidth().height(56.dp), ScannerRed, active = true)
-                Text(site.note, style = MaterialTheme.typography.labelSmall, color = DashAmber, maxLines = 2)
-            }
-        }
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            HelpText(
-                "Pair a Bluetooth controller in Android settings or plug in a USB dongle. EmulatorJS plays ROM files you own " +
-                    "from USB or storage. Use a game's fullscreen button to fill this pane; EXIT FULL returns."
-            )
-        }
-    }
+private fun GamePicker(app: KittApplication, session: BrowserSession) {
+    SitePicker(
+        session = session,
+        bookmarks = app.settings.gameBookmarks,
+        sections = listOf(SiteSection("Play in the browser", GameSites.ALL.map { StreamSite(it.label, it.url) })),
+        help = GameSites.ALL.joinToString("  ·  ") { "${it.label}: ${it.note}" } +
+            ". Pair a Bluetooth controller in Android settings or plug in a USB dongle. Use a game's fullscreen button to fill " +
+            "this pane; EXIT FULL returns."
+    )
 }

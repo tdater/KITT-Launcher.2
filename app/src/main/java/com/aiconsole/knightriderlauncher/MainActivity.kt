@@ -106,12 +106,14 @@ import com.aiconsole.knightriderlauncher.ui.scanner.ScannerOverlayService
 import com.aiconsole.knightriderlauncher.ui.settings.KittConfigScreen
 import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
 import com.aiconsole.knightriderlauncher.ui.theme.DashWhite
+import com.aiconsole.knightriderlauncher.ui.theme.FilmHudOverlay
 import com.aiconsole.knightriderlauncher.ui.theme.KittBlack
 import com.aiconsole.knightriderlauncher.ui.theme.KnightRiderLauncherTheme
 import com.aiconsole.knightriderlauncher.ui.theme.MatrixRain
 import com.aiconsole.knightriderlauncher.ui.theme.ScannerRed
 import com.aiconsole.knightriderlauncher.ui.theme.ThemeState
 import com.aiconsole.knightriderlauncher.ui.theme.UiTheme
+import com.aiconsole.knightriderlauncher.ui.theme.hud
 import com.aiconsole.knightriderlauncher.ui.trip.TripScreen
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -611,9 +613,8 @@ fun LauncherRoot(
                     HorizontalPager(
                         state = pager,
                         modifier = Modifier.fillMaxWidth().weight(1f),
-                        // The map and the stream need horizontal drags; use the page tabs from there.
-                        userScrollEnabled = !(onDrive && (showMap || stream.visible)) &&
-                            pager.currentPage != HomePage.Ai.ordinal && pager.currentPage != HomePage.Games.ordinal,
+                        // Swipe anywhere outside the map and web pages (they keep their own drags) to change page.
+                        userScrollEnabled = true,
                         pageSpacing = gap
                     ) { page ->
                         when (HomePage.entries[page]) {
@@ -679,6 +680,9 @@ fun LauncherRoot(
                 }
             }
         }
+
+        // Film HUD themes: scanlines and vignette / visor glow over everything (no touch handling).
+        ThemeState.theme.hud?.let { FilmHudOverlay(it, Modifier.fillMaxSize()) }
 
         if (saver) {
             Screensaver(onWake = {

@@ -180,6 +180,9 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val streamDesktop = boolPref("stream_desktop", true)
     /** The driver's saved one-tap sites (StreamSites format). */
     val streamBookmarks = stringPref("stream_bookmarks", "")
+    /** Saved sites on the AI and Games pages (StreamSites format). */
+    val aiBookmarks = stringPref("ai_bookmarks", "")
+    val gameBookmarks = stringPref("game_bookmarks", "")
     /** Per-site browser options (SiteSettings format). */
     val siteSettings = stringPref("site_settings", "")
     /** Darken pages that have no dark theme of their own (default for sites without an override). */
