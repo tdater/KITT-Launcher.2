@@ -58,6 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -575,13 +576,16 @@ fun LauncherRoot(
             KittScanner(Modifier.fillMaxWidth().height(ScannerHeight), alert = dash.alert?.severe == true, shift = dash.shift)
             if (statusStrip) StatusStrip(onClick = { quickSettings = !quickSettings })
 
+            val configuration = LocalConfiguration.current
             BoxWithConstraints(
                 Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .padding(8.dp)
             ) {
-                val isTall = maxHeight >= maxWidth * 1.2f
+                // From the screen's shape, not the space left: the on-screen keyboard shrinks
+                // maxHeight, and flipping the layout then would rebuild the map and drop its search.
+                val isTall = configuration.screenHeightDp >= configuration.screenWidthDp * 1.2f
                 val gap = 8.dp
                 val dockHeight = (maxHeight * if (isTall) 0.15f else 0.20f).coerceIn(112.dp, 280.dp)
                 val portraitCellWidth = if (maxWidth >= 600.dp) 150.dp else 110.dp

@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aiconsole.knightriderlauncher.nav.LatLon
@@ -69,10 +70,13 @@ fun RouteSearchPanel(navigator: RouteNavigator, metric: Boolean, onPick: (Place)
     var error by remember { mutableStateOf<String?>(null) }
     var here by remember { mutableStateOf<LatLon?>(null) }
     val recents = remember { navigator.recents() }
+    val keyboard = LocalSoftwareKeyboardController.current
 
     fun search() {
         val q = query.trim()
         if (q.isEmpty() || busy) return
+        // Results show under the box; the keyboard would cover them.
+        keyboard?.hide()
         busy = true
         error = null
         scope.launch {
