@@ -1,5 +1,7 @@
 package com.aiconsole.knightriderlauncher.ui.scanner
 
+import android.graphics.Paint
+import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -16,8 +18,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.withScale
 import com.aiconsole.knightriderlauncher.ui.theme.DashAmber
 import com.aiconsole.knightriderlauncher.ui.theme.HudStyle
 import com.aiconsole.knightriderlauncher.ui.theme.KittBezel
@@ -45,7 +51,12 @@ fun KittScanner(
 ) {
     val hud = ThemeState.theme.hud
     // Terminator: a fine 20-segment targeting bar instead of KITT's eight lenses.
-    val lamps = if (hud == HudStyle.Terminator) TERMINATOR_SEGMENTS else lampCount
+    val lamps = when (hud) {
+        HudStyle.Terminator -> TERMINATOR_SEGMENTS
+        HudStyle.Matrix -> MATRIX_GLYPHS
+        else -> lampCount
+    }
+    val code = remember { CodeBar() }
     val engine = remember(lamps) { ScannerEngine(lamps) }
     var frameNanos by remember { mutableLongStateOf(0L) }
     LaunchedEffect(engine) {
@@ -78,6 +89,10 @@ fun KittScanner(
         drawRect(Color.Black)
         if (hud == HudStyle.RoboCop && shiftLevel == null) {
             drawVisor(levels, color, pulse)
+            return@Canvas
+        }
+        if (hud == HudStyle.Matrix && shiftLevel == null) {
+            code.draw(this, levels, color, pulse, frameNanos)
             return@Canvas
         }
         clipRect {
@@ -155,4 +170,45 @@ private fun DrawScope.drawVisor(levels: FloatArray, color: Color, pulse: Float) 
         size = Size(size.width, slotHeight)
     )
     drawLine(color.copy(alpha = 0.55f), Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 1.dp.toPx())
+}
+
+private const val MATRIX_GLYPHS = 16
+
+/**
+ * The Matrix: a row of code glyphs (mirrored half-width katakana and digits). The sweep's lead
+ * glyph burns white, the trail fades through code green, and glyphs keep changing like the rain.
+ */
+private class CodeBar {
+    private val glyphs = CharArray(MATRIX_GLYPHS) { GLYPHS.random() }
+    private var lastSwap = 0L
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.MONOSPACE
+        textAlign = Paint.Align.CENTER
+    }
+
+    fun draw(scope: DrawScope, levels: FloatArray, color: Color, pulse: Float, now: Long) = with(scope) {
+        if (now - lastSwap > SWAP_NANOS) {
+            lastSwap = now
+            repeat(3) { glyphs[(glyphs.indices).random()] = GLYPHS.random() }
+        }
+        val cell = size.width / glyphs.size
+        paint.textSize = size.height * 0.78f
+        val baseline = size.height / 2 - (paint.ascent() + paint.descent()) / 2
+        drawIntoCanvas { canvas ->
+            val native = canvas.nativeCanvas
+            glyphs.forEachIndexed { i, glyph ->
+                val level = (levels.getOrElse(i) { 0f } * pulse).coerceIn(0f, 1f)
+                val tint = if (level > 0.85f) lerp(color, Color.White, (level - 0.85f) / 0.15f) else color
+                paint.color = tint.copy(alpha = 0.18f + 0.82f * level).toArgb()
+                val x = cell * (i + 0.5f)
+                // Mirrored, like the film's code.
+                native.withScale(-1f, 1f, x, baseline) { drawText(glyph.toString(), x, baseline, paint) }
+            }
+        }
+    }
+
+    private companion object {
+        const val GLYPHS = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789Z:."
+        const val SWAP_NANOS = 120_000_000L
+    }
 }

@@ -130,7 +130,7 @@ fun KittPanel(
     Column(
         modifier
             .hudFrame(hud, accent)
-            // Colorado OS: translucent console glass with a soft phosphor glow over the rain.
+            // The Matrix: translucent terminal glass with a soft phosphor glow over the rain.
             .then(if (console) Modifier.shadow(10.dp, shape, ambientColor = accent, spotColor = accent) else Modifier)
             .clip(shape)
             .background(
@@ -154,10 +154,10 @@ fun KittPanel(
                 Spacer(Modifier.width(8.dp))
             }
             Text(
-                // Colorado OS reads like a terminal ("> NAVIGATION"); the film HUDs like targeting
+                // The Matrix reads like a terminal ("> NAVIGATION_"); the other film HUDs like targeting
                 // readouts: "▌NAVIGATION" with a machine tag, or "[ NAVIGATION ]" in the visor style.
                 text = when {
-                    console -> "> ${title.uppercase()}"
+                    console -> "> ${title.uppercase()}_"
                     hud == HudStyle.Terminator -> "▌${title.uppercase()}"
                     hud == HudStyle.RoboCop -> "[ ${title.uppercase()} ]"
                     else -> title.uppercase()

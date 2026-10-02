@@ -17,16 +17,18 @@ enum class UiTheme(val label: String) {
     Stealth("Stealth"),
     Terminator("Terminator"),
     RoboCop("RoboCop"),
-    Colorado("Colorado OS")
+    // Stored as "Colorado" (its first name) so earlier selections carry over.
+    Colorado("The Matrix")
 }
 
 /** Film HUD themes change more than colours: scanner, panels, overlay and HUD text. */
-enum class HudStyle { Terminator, RoboCop }
+enum class HudStyle { Terminator, RoboCop, Matrix }
 
 val UiTheme.hud: HudStyle?
     get() = when (this) {
         UiTheme.Terminator -> HudStyle.Terminator
         UiTheme.RoboCop -> HudStyle.RoboCop
+        UiTheme.Colorado -> HudStyle.Matrix
         else -> null
     }
 
@@ -73,24 +75,25 @@ val KittClassicPalette = KittPalette(
     grey = Color(0xFF85878B)
 )
 
-// Colorado OS (the TruckAPK console): terminal green on green-tinted black, blue units, amber system text.
+// The Matrix (1999): green phosphor terminal on true black (#00FF41 code green), the multicolour
+// digital rain behind translucent panels; red pill for warnings, blue pill for info.
 val ColoradoPalette = KittPalette(
-    black = Color(0xFF040906),
-    charcoal = Color(0xFF070C0A),
-    graphite = Color(0xFF101614),
-    bezel = Color(0xFF32694A),
-    grid = Color(0xFF244434),
-    accent = Color(0xFF00FF58),
-    accentDim = Color(0xFF0B3A1D),
-    danger = Color(0xFFFF3B3B),
-    amber = Color(0xFFFFBB33),
-    amberDim = Color(0xFF3D2C08),
-    green = Color(0xFF00FF58),
-    greenDim = Color(0xFF0B3A1D),
-    yellow = Color(0xFFFFE600),
-    info = Color(0xFF00BFFF),
-    white = Color(0xFFE7EEE9),
-    grey = Color(0xFFA8B6AD)
+    black = Color(0xFF000000),
+    charcoal = Color(0xFF020803),
+    graphite = Color(0xFF051208),
+    bezel = Color(0xFF1C5A2C),
+    grid = Color(0xFF0E2A16),
+    accent = Color(0xFF00FF41),
+    accentDim = Color(0xFF003B12),
+    danger = Color(0xFFFF2D2D),
+    amber = Color(0xFF8CFFA8),
+    amberDim = Color(0xFF12361E),
+    green = Color(0xFF00FF41),
+    greenDim = Color(0xFF003B12),
+    yellow = Color(0xFFD8FF7A),
+    info = Color(0xFF3D7BFF),
+    white = Color(0xFFD4FFDC),
+    grey = Color(0xFF5E9E6E)
 )
 
 // KARR, KITT's prototype twin: the same black glass with a gold scanner and amber-orange dash.
@@ -298,7 +301,7 @@ val KittGraphite: Color get() = ThemeState.palette.graphite
 val KittBezel: Color get() = ThemeState.palette.bezel
 val KittGrid: Color get() = ThemeState.palette.grid
 
-// Accents. ScannerRed is the brand accent (green in Colorado OS); AlertRed always means danger.
+// Accents. ScannerRed is the brand accent (code green in The Matrix); AlertRed always means danger.
 val ScannerRed: Color get() = ThemeState.palette.accent
 val ScannerRedDim: Color get() = ThemeState.palette.accentDim
 val AlertRed: Color get() = ThemeState.palette.danger

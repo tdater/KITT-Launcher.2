@@ -31,10 +31,26 @@ object FilmHudText {
         "DIRECTIVE 4: [CLASSIFIED]"
     )
 
-    fun lines(style: HudStyle): List<String> = if (style == HudStyle.Terminator) TERMINATOR else ROBOCOP
+    /** Short terminal lines in the style of the film's opening messages. */
+    val MATRIX = listOf(
+        "WAKE UP, NEO...",
+        "THE MATRIX HAS YOU...",
+        "FOLLOW THE WHITE RABBIT.",
+        "KNOCK, KNOCK."
+    )
+
+    fun lines(style: HudStyle): List<String> = when (style) {
+        HudStyle.Terminator -> TERMINATOR
+        HudStyle.RoboCop -> ROBOCOP
+        HudStyle.Matrix -> MATRIX
+    }
 
     /** Brand line for the status strip. */
-    fun brand(style: HudStyle): String = if (style == HudStyle.Terminator) "CYBERDYNE 101" else "OCP · METRO WEST"
+    fun brand(style: HudStyle): String = when (style) {
+        HudStyle.Terminator -> "CYBERDYNE 101"
+        HudStyle.RoboCop -> "OCP · METRO WEST"
+        HudStyle.Matrix -> "NEBUCHADNEZZAR · OPERATOR"
+    }
 
     /** Machine-looking tag for a panel title, e.g. "0x5E2A": stable per title. */
     fun hexTag(title: String): String = "0x%04X".format(title.uppercase().hashCode() and 0xFFFF)
@@ -42,7 +58,7 @@ object FilmHudText {
 
 /**
  * Full-screen HUD layer drawn over the launcher (never intercepts touches): CRT scanlines, plus a
- * red vision vignette (Terminator) or a cold visor glow at the edges (RoboCop).
+ * red vision vignette (Terminator), a cold visor glow at the edges (RoboCop) or green CRT bloom (The Matrix).
  */
 @Composable
 fun FilmHudOverlay(style: HudStyle, modifier: Modifier = Modifier) {
@@ -54,7 +70,16 @@ fun FilmHudOverlay(style: HudStyle, modifier: Modifier = Modifier) {
             drawLine(line, Offset(0f, y), Offset(size.width, y), 1f)
             y += pitch
         }
-        if (style == HudStyle.Terminator) {
+        if (style == HudStyle.Matrix) {
+            // Green phosphor bloom at the edges of an old monochrome CRT.
+            drawRect(
+                Brush.radialGradient(
+                    colors = listOf(Color.Transparent, Color(0x3300FF41)),
+                    center = center,
+                    radius = size.maxDimension * 0.8f
+                )
+            )
+        } else if (style == HudStyle.Terminator) {
             drawRect(
                 Brush.radialGradient(
                     colors = listOf(Color.Transparent, Color(0x55FF1A0A)),
@@ -74,7 +99,7 @@ fun FilmHudOverlay(style: HudStyle, modifier: Modifier = Modifier) {
  * Panel frame marks: RoboCop draws targeting brackets on the four corners; Terminator draws
  * short corner ticks like the T-800's framing marks.
  */
-fun Modifier.hudFrame(style: HudStyle?, accent: Color): Modifier = if (style == null) this else drawWithContent {
+fun Modifier.hudFrame(style: HudStyle?, accent: Color): Modifier = if (style == null || style == HudStyle.Matrix) this else drawWithContent {
     drawContent()
     val len = (if (style == HudStyle.RoboCop) 18.dp else 10.dp).toPx()
     val inset = 3.dp.toPx()

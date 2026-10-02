@@ -410,7 +410,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                 }
             }
             if (theme == UiTheme.Colorado) {
-                item { KittToggle("Matrix rain", rain, { settings.matrixRain.set(it) }, description = "Falling glyphs behind the panels.") }
+                item { KittToggle("Digital rain", rain, { settings.matrixRain.set(it) }, description = "Falling code glyphs behind the panels.") }
             }
             item { Text("NIGHT MODE", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
             item { ChoiceRow(NightMode.entries, nightMode, { it.label }, { settings.nightMode.set(it) }) }

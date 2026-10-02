@@ -529,7 +529,7 @@ fun LauncherRoot(
                 if (night) drawRect(Color.Black, alpha = NightDim)
             }
     ) {
-        // Colorado OS: falling glyphs behind the translucent panels.
+        // The Matrix: digital rain behind the translucent panels.
         if (rain) MatrixRain(Modifier.fillMaxSize())
 
         Column(

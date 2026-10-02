@@ -87,7 +87,7 @@ fun GaugeTile(
         1f
     }
     val console = ThemeState.theme == UiTheme.Colorado
-    // Colorado OS shows readouts in terminal green like its telemetry grid; KITT uses dash amber.
+    // The Matrix shows readouts in code green; KITT uses dash amber.
     val accent = if (warning) AlertRed.copy(alpha = blink) else if (console) LedGreen else DashAmber
 
     val display = if (def != null && base != null) def.displayValue(base, metric) else null

@@ -98,7 +98,7 @@ val Typography = Typography(
 )
 
 /**
- * Colorado OS: everything in a Courier-style monospace with tighter tracking, like the
+ * The Matrix: everything in a Courier-style monospace with tighter tracking, like the
  * TruckAPK console. Sizes match the KITT scale so layouts don't shift when switching.
  */
 val ColoradoTypography = Typography.run {

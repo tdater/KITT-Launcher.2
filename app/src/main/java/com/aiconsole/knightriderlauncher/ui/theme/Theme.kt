@@ -52,13 +52,13 @@ private val KittShapes = Shapes(
     extraLarge = RoundedCornerShape(12.dp)
 )
 
-// Colorado OS console: softer rounded panels and buttons
+// The Matrix: tight terminal-window corners.
 private val ColoradoShapes = Shapes(
-    extraSmall = RoundedCornerShape(4.dp),
-    small = RoundedCornerShape(7.dp),
-    medium = RoundedCornerShape(10.dp),
-    large = RoundedCornerShape(14.dp),
-    extraLarge = RoundedCornerShape(18.dp)
+    extraSmall = RoundedCornerShape(1.dp),
+    small = RoundedCornerShape(2.dp),
+    medium = RoundedCornerShape(3.dp),
+    large = RoundedCornerShape(4.dp),
+    extraLarge = RoundedCornerShape(6.dp)
 )
 
 // Terminator: hard square edges, like a machine's display grid.

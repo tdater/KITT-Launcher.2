@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.IntSize
 import kotlin.random.Random
 
 /**
- * Colorado OS background: multicolor falling glyphs. Like the TruckAPK console it paints a
+ * The Matrix theme background: multicolour digital rain. Like the TruckAPK console it paints a
  * translucent black wash over the previous frame so each column leaves a fading trail. It
  * renders at half resolution into one reused bitmap at ~28 fps, and stops with the frame
  * clock whenever the launcher isn't drawing.

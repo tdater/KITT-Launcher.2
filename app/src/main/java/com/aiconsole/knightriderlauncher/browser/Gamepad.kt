@@ -61,17 +61,17 @@ object Gamepad {
 data class GameSite(val label: String, val url: String, val note: String)
 
 /**
- * Legal places to play retro games in a browser: archives running emulators on preserved
- * software, homebrew and fantasy consoles, and emulators for ROMs the driver owns.
+ * The Games page's buttons: the owner's bookmarked game sites that are licensed or preservation
+ * archives. Sites hosting commercial ROMs aren't built in; the driver can import their own
+ * bookmarks into My sites.
  */
 object GameSites {
     val ALL = listOf(
         GameSite("Internet Arcade", "https://archive.org/details/internetarcade", "Classic arcade machines, preserved by the Internet Archive"),
-        GameSite("Console Living Room", "https://archive.org/details/consolelivingroom", "Home consoles from the Internet Archive"),
         GameSite("MS-DOS Games", "https://archive.org/details/softwarelibrary_msdos_games", "Thousands of DOS games, run in the browser"),
-        GameSite("EmulatorJS", "https://emulatorjs.org/", "Play ROMs you own: load the file from USB or storage"),
-        GameSite("PICO-8", "https://www.lexaloffle.com/bbs/?cat=7", "Retro-style fantasy console games"),
-        GameSite("itch.io retro", "https://itch.io/games/html5/tag-retro", "Free retro-style browser games"),
-        GameSite("Homebrew Hub", "https://hh.gbdev.io/", "Free homebrew Game Boy games")
+        GameSite("Level Devil", "https://poki.com/en/g/level-devil", "Platformer on Poki"),
+        GameSite("Poki", "https://poki.com/", "Free browser games"),
+        GameSite("CrazyGames", "https://www.crazygames.com/", "Free browser games"),
+        GameSite("Addicting Games", "https://www.addictinggames.com/", "Over 5,000 free browser games")
     )
 }
