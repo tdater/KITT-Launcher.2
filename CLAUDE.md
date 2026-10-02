@@ -78,11 +78,12 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
   - **Browser (`browser/`, `ui/browser/BrowserView`):** one tabbed WebView browser behind the stream window and the AI and Games pages. Each `BrowserSession` has its own WebView profile (sandboxed sign-ins) where `MULTI_PROFILE` is supported.
     - Per-site options (`SiteSettings`): desktop/mobile, dark pages, ad blocking (`AdBlock`, never on YouTube), text size.
     - Pop-ups the driver triggers open as tabs. Non-web schemes are dropped so apps can't take over the screen.
+    - Background sound (`WebMedia`): WebViews attach only on the settled pager page (`LocalWebViewHostActive`); a playing page leaving the screen is parked in a 1×1 container so it keeps playing. Pages report playback through the `KittMedia` JS bridge (`PageScripts.MEDIA_WATCH`); one page plays at a time, and it holds audio focus (`MediaFocus`: loss pauses, transient loss pauses until regained, ducking does nothing).
     - Userscripts (`stream/Userscripts`, `UserscriptStore`) inject at document start. `.user.js` links and downloads prompt to install.
     - `PageScripts` holds the toolbar's JS (close pop-ups, scroll, find install link).
     - Stream window: site picker built-ins are licensed services only (`StreamSites`; don't add piracy sites). Video plays while moving by the owner's choice; don't add a driving gate.
     - AI page (`AiSites`): the driver's own accounts; voice prompts typed into every open AI tab. Games page: controller input remapped to emulator keys (`Gamepad`); `GameSites` are legal sources only.
-  - **Swipe:** disabled on Drive while the map or stream needs horizontal drags; Home returns to Drive.
+  - **Swipe:** web pages and the map keep drags that start inside them; drags from the 48 dp edge strips (`edgeSwipe`, `EdgeSwipe`) always change page. Home returns to Drive.
   - **More:** `DrivingPanel` (driving layout while moving), `QuickSettingsPanel` (tap the status strip), `WeatherService` (Open-Meteo + spoken road warnings), messages read aloud via `NavNotificationListener` + `MessageRules`, `DriverProfiles` (personal vs shared keys in `ProfileRules`), `SelfUpdate` (GitHub releases, `PackageInstaller`).
   - **Extras:** `StatusStrip` (clock/heading/radios/OBD/volts), GPS speed fallback (`GpsTracker`), `Screensaver` when parked and idle, `WidgetsPane` (`AppWidgetHost` in `KittApplication`), `StartupRoutine` (on start or wake after 5+ min), `HardwareKeys` button mapping via `onKeyUp`, `LauncherBackup` (API keys excluded on purpose).
 - **Overlays:** full-screen features are selected by the `LauncherOverlay` enum and drawn inside that box, below the scanner. The scanner is always visible. Each overlay swallows taps and registers its own `BackHandler`.

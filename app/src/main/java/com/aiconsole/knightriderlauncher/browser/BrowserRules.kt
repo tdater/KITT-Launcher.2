@@ -109,6 +109,59 @@ object PageScripts {
 })();
 """
 
+    /**
+     * Injected at document start in every frame: tells the app (through the `KittMedia` bridge)
+     * whenever this frame starts or stops making sound. Each frame reports under its own id so a
+     * paused page doesn't hide a playing embed.
+     */
+    const val MEDIA_WATCH = """
+(function () {
+  if (window.__kittMedia || typeof KittMedia === 'undefined') return;
+  window.__kittMedia = true;
+  var id = Math.random().toString(36).slice(2), last = null;
+  function report() {
+    try {
+      var playing = Array.prototype.some.call(document.querySelectorAll('video,audio'), function (m) {
+        return !m.paused && !m.ended && !m.muted && m.volume > 0;
+      });
+      if (playing !== last) { last = playing; KittMedia.state(id, playing); }
+    } catch (e) {}
+  }
+  ['play', 'playing', 'pause', 'ended', 'volumechange', 'emptied', 'abort'].forEach(function (t) {
+    document.addEventListener(t, report, true);
+  });
+  window.addEventListener('pagehide', function () { if (last) KittMedia.state(id, false); });
+})();
+"""
+
+    /** Pauses everything playing in the page (and same-origin frames), marking it for [RESUME_MEDIA]. */
+    const val PAUSE_MEDIA = """
+(function () {
+  function pause(d) {
+    try {
+      d.querySelectorAll('video,audio').forEach(function (m) { if (!m.paused) { m.dataset.kittPaused = '1'; m.pause(); } });
+      d.querySelectorAll('iframe').forEach(function (f) { try { pause(f.contentDocument); } catch (e) {} });
+    } catch (e) {}
+  }
+  pause(document);
+})();
+"""
+
+    /** Plays again whatever [PAUSE_MEDIA] paused. */
+    const val RESUME_MEDIA = """
+(function () {
+  function resume(d) {
+    try {
+      d.querySelectorAll('video,audio').forEach(function (m) {
+        if (m.dataset.kittPaused) { delete m.dataset.kittPaused; var p = m.play(); if (p && p.catch) p.catch(function () {}); }
+      });
+      d.querySelectorAll('iframe').forEach(function (f) { try { resume(f.contentDocument); } catch (e) {} });
+    } catch (e) {}
+  }
+  resume(document);
+})();
+"""
+
     /** Selected text, or the page's readable text as a fallback (for reading aloud). */
     const val SELECTION_OR_TEXT = "(function(){var s=String(getSelection()||'').trim();return s||document.body.innerText.slice(0,4000);})();"
 

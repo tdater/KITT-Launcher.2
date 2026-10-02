@@ -98,3 +98,25 @@ object StartupRule {
     fun shouldRun(firstStartThisProcess: Boolean, screenOffForMs: Long?): Boolean =
         firstStartThisProcess || (screenOffForMs != null && screenOffForMs >= MIN_OFF_MS)
 }
+
+/**
+ * Home-page swipes that start in the strips along the screen edges. Web pages and the map keep
+ * drags that start inside them, so the edges always change page.
+ */
+object EdgeSwipe {
+    /** Past this share of the page width, or this fast (px/s), the swipe changes page. */
+    const val DISTANCE_SHARE = 0.2f
+    const val FLING_PX_PER_S = 900f
+
+    /** The page to settle on after a drag of [dragPx] (negative = leftward, towards the next page). */
+    fun target(startPage: Int, pageCount: Int, dragPx: Float, velocityPx: Float, widthPx: Float): Int {
+        val next = dragPx < -widthPx * DISTANCE_SHARE || velocityPx < -FLING_PX_PER_S
+        val previous = dragPx > widthPx * DISTANCE_SHARE || velocityPx > FLING_PX_PER_S
+        val target = when {
+            next && !previous -> startPage + 1
+            previous && !next -> startPage - 1
+            else -> startPage
+        }
+        return target.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
+    }
+}

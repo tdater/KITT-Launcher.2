@@ -49,6 +49,11 @@ class BrowserTab(val id: Long, initialUrl: String?, initialTitle: String?) {
     /** 0..100 while loading, 100 when done. */
     var progress by mutableIntStateOf(100)
 
+    /** The page is making sound (see [WebMedia]). */
+    var playing by mutableStateOf(false)
+        internal set
+    internal val playingFrames = mutableSetOf<String>()
+
     /** The new-tab page (site picker) instead of a website. */
     val isPicker: Boolean get() = url == null
     var web: WebView? = null
@@ -95,6 +100,10 @@ class BrowserSession(
     private val profile = "kitt-$space"
 
     val current: BrowserTab? get() = tabs.getOrNull(currentIndex)
+
+    init {
+        WebMedia.register(this)
+    }
 
     fun newTab(url: String? = null, title: String? = null): BrowserTab {
         val tab = BrowserTab(nextId++, url, title)
@@ -222,6 +231,7 @@ class BrowserSession(
         tab.handlers.forEach { it.remove() }
         tab.handlers.clear()
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
+        tab.handlers += WebViewCompat.addDocumentStartJavaScript(web, PageScripts.MEDIA_WATCH, setOf("*"))
         scripts.filter { it.enabled }.forEach { installed ->
             try {
                 tab.handlers += WebViewCompat.addDocumentStartJavaScript(web, Userscripts.wrap(installed.script), setOf("*"))
@@ -232,6 +242,7 @@ class BrowserSession(
     }
 
     private fun destroy(tab: BrowserTab) {
+        WebMedia.forget(tab)
         tab.handlers.clear()
         tab.web?.let {
             (it.parent as? ViewGroup)?.removeView(it)
@@ -274,6 +285,7 @@ class BrowserSession(
         webViewClient = TabClient(tab)
         webChromeClient = TabChrome(tab)
         if (gamepad) installGamepad(this)
+        addJavascriptInterface(WebMedia.bridgeFor(this, tab), "KittMedia")
         setDownloadListener { url, _, _, mimetype, _ ->
             if (StreamUrls.isUserscript(url) || mimetype == "text/x-userscript") pendingInstall = url
         }
@@ -341,6 +353,7 @@ class BrowserSession(
         override fun onPageFinished(view: WebView, url: String?) {
             tab.title = view.title?.takeIf { it.isNotBlank() } ?: tab.title
             if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
+            view.evaluateJavascript(PageScripts.MEDIA_WATCH, null)
             userscripts.scripts.value.filter { it.enabled }.forEach { view.evaluateJavascript(Userscripts.wrap(it.script), null) }
         }
 
@@ -354,6 +367,7 @@ class BrowserSession(
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
             Log.w(TAG, "Renderer gone in $space tab ${tab.id}")
             if (tab.web === view) {
+                WebMedia.forget(tab)
                 (view.parent as? ViewGroup)?.removeView(view)
                 view.destroy()
                 tab.web = null

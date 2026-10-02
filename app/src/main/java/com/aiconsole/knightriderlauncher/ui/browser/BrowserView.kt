@@ -49,6 +49,7 @@ import com.aiconsole.knightriderlauncher.KittApplication
 import com.aiconsole.knightriderlauncher.browser.BrowserSession
 import com.aiconsole.knightriderlauncher.browser.BrowserTab
 import com.aiconsole.knightriderlauncher.browser.PageScripts
+import com.aiconsole.knightriderlauncher.browser.WebMedia
 import com.aiconsole.knightriderlauncher.browser.WebViewVersion
 import com.aiconsole.knightriderlauncher.data.settings.KittSettings
 import com.aiconsole.knightriderlauncher.stream.StreamSite
@@ -152,7 +153,7 @@ private fun TabStrip(session: BrowserSession) {
             itemsIndexed(session.tabs, key = { _, t -> t.id }) { index, tab ->
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     KittButton(
-                        label = tab.title?.take(18) ?: tab.host ?: "New tab",
+                        label = (if (tab.playing) "♪ " else "") + (tab.title?.take(18) ?: tab.host ?: "New tab"),
                         onClick = { session.select(index) },
                         modifier = Modifier.widthIn(min = 80.dp, max = 180.dp).fillMaxHeight(),
                         color = ScannerRed,
@@ -252,8 +253,16 @@ private fun Page(session: BrowserSession, tab: BrowserTab, modifier: Modifier) {
     Box(modifier.clip(MaterialTheme.shapes.small).border(1.dp, KittBezel, MaterialTheme.shapes.small).background(KittBlack)) {
         if (hostActive) key(tab.id) {
             AndroidView(
-                factory = { context -> session.webViewFor(context, tab).also { (it.parent as? ViewGroup)?.removeView(it) } },
-                modifier = Modifier.fillMaxSize()
+                factory = { context ->
+                    session.webViewFor(context, tab).also {
+                        // It may still sit in the background-audio parking spot (see WebMedia).
+                        (it.parent as? ViewGroup)?.removeView(it)
+                        it.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                    }
+                },
+                modifier = Modifier.fillMaxSize(),
+                // Leaving the screen (page swiped away, other tab shown): a playing page keeps playing.
+                onRelease = { web -> WebMedia.parkIfPlaying(tab, web) }
             )
         }
         if (tab.progress < 100) {

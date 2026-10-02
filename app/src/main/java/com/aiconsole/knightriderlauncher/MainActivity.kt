@@ -5,6 +5,8 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.KeyEvent
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -13,6 +15,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -28,6 +32,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -52,9 +57,11 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.coerceIn
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
@@ -64,8 +71,10 @@ import com.aiconsole.knightriderlauncher.assistant.LauncherBus
 import com.aiconsole.knightriderlauncher.assistant.LauncherEvent
 import com.aiconsole.knightriderlauncher.assistant.MicGuard
 import com.aiconsole.knightriderlauncher.browser.BrowserSession
+import com.aiconsole.knightriderlauncher.browser.WebMedia
 import com.aiconsole.knightriderlauncher.data.AppLists
 import com.aiconsole.knightriderlauncher.data.AppUsage
+import com.aiconsole.knightriderlauncher.data.EdgeSwipe
 import com.aiconsole.knightriderlauncher.data.HardwareKeys
 import com.aiconsole.knightriderlauncher.data.InstalledApps
 import com.aiconsole.knightriderlauncher.data.KeyAction
@@ -118,7 +127,9 @@ import com.aiconsole.knightriderlauncher.ui.theme.UiTheme
 import com.aiconsole.knightriderlauncher.ui.theme.hud
 import com.aiconsole.knightriderlauncher.ui.trip.TripScreen
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -190,6 +201,16 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+        // A playing web page swiped off screen is parked here, attached but out of sight, so its
+        // sound keeps going (see WebMedia).
+        val parking = FrameLayout(this)
+        findViewById<ViewGroup>(android.R.id.content).addView(parking, 0, FrameLayout.LayoutParams(1, 1))
+        WebMedia.parking = parking
+    }
+
+    override fun onDestroy() {
+        if (WebMedia.parking?.context === this) WebMedia.parking = null
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -614,7 +635,7 @@ fun LauncherRoot(
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
                     HorizontalPager(
                         state = pager,
-                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        modifier = Modifier.fillMaxWidth().weight(1f).edgeSwipe(pager, scope),
                         // Swipe anywhere outside the map and web pages (they keep their own drags) to change page.
                         userScrollEnabled = true,
                         pageSpacing = gap
@@ -707,6 +728,48 @@ private enum class HomePage(val label: String) {
 }
 
 /** Page selector drawn as KITT console buttons: big targets, readable at a glance. */
+/**
+ * Drags that start in the strips along the left and right edges always change page, even over
+ * web pages and the map (which otherwise keep horizontal drags for themselves). Watching in the
+ * Initial pass sees the drag before the page does; taps pass straight through.
+ */
+private fun Modifier.edgeSwipe(pager: PagerState, scope: CoroutineScope, edge: Dp = 48.dp): Modifier =
+    pointerInput(pager) {
+        val edgePx = edge.toPx()
+        val slop = viewConfiguration.touchSlop
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            if (down.position.x > edgePx && down.position.x < size.width - edgePx) return@awaitEachGesture
+            val startPage = pager.settledPage
+            val tracker = VelocityTracker()
+            var dragging = false
+            var dragged = 0f
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                if (!change.pressed) break
+                if (!dragging) {
+                    val moved = change.position - down.position
+                    when {
+                        abs(moved.x) > slop && abs(moved.x) > abs(moved.y) -> dragging = true
+                        abs(moved.y) > slop -> return@awaitEachGesture // A vertical scroll: leave it to the page.
+                    }
+                }
+                if (dragging) {
+                    val dx = change.position.x - change.previousPosition.x
+                    change.consume()
+                    tracker.addPosition(change.uptimeMillis, change.position)
+                    dragged += dx
+                    pager.dispatchRawDelta(-dx)
+                }
+            }
+            if (dragging) {
+                val target = EdgeSwipe.target(startPage, pager.pageCount, dragged, tracker.calculateVelocity().x, size.width.toFloat())
+                scope.launch { pager.animateScrollToPage(target) }
+            }
+        }
+    }
+
 @Composable
 private fun PageTabs(current: Int, onSelect: (Int) -> Unit) {
     Row(Modifier.fillMaxWidth().height(40.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {

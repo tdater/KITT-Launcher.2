@@ -14,6 +14,7 @@ import com.aiconsole.knightriderlauncher.assistant.KittAlerts
 import com.aiconsole.knightriderlauncher.assistant.PerplexityAssistantClient
 import com.aiconsole.knightriderlauncher.assistant.TextToSpeechHelper
 import com.aiconsole.knightriderlauncher.assistant.WakeWordListener
+import com.aiconsole.knightriderlauncher.browser.WebMedia
 import com.aiconsole.knightriderlauncher.data.ProblemReport
 import com.aiconsole.knightriderlauncher.data.StartupRoutine
 import com.aiconsole.knightriderlauncher.data.settings.KittSettings
@@ -157,6 +158,7 @@ class KittApplication : Application() {
         // should be attached to an owner"), so prefetch composes whole pages at once instead.
         @OptIn(ExperimentalFoundationApi::class)
         ComposeFoundationFlags.isPausableCompositionInPrefetchEnabled = false
+        WebMedia.init(this)
         // Apply the saved look before the first frame, then follow changes from KITT Config.
         ThemeState.theme = settings.uiTheme.value
         appScope.launch(Dispatchers.Main) {

@@ -30,7 +30,7 @@ A Knight Rider–themed home screen for Android car head units. It replaces the 
 
 ## Home screen pages
 
-Swipe left and right between pages or tap the page buttons. The Home button always returns you to Drive.
+Swipe left and right between pages or tap the page buttons. A swipe that starts at the left or right edge of the screen always changes page, even over a web page or the map. The Home button always returns you to Drive.
 
 - **Drive:** a live map (OpenStreetMap, centred on you) with a grid of your apps or vehicle status underneath. On wide screens they sit side by side.
   - The map area can switch to the **Stream window** (see Browser).
@@ -154,6 +154,7 @@ One shared, tabbed browser powers three places: the **Stream window** on the Dri
     - **music:** YT Music, Spotify, SoundCloud, Pandora, iHeartRadio, TuneIn, Amazon Music, Deezer, Bandcamp, SomaFM, Radio Garden and more.
 - **Save any site:** add it from the address bar with ★ Save, or import and export your bookmarks under "My sites".
 - **Per-site options:** desktop or mobile layout, dark pages, ad blocking (never applied to YouTube) and text size.
+- **Sound keeps playing:** a page playing music or video keeps playing when you swipe to another home page (its tab shows ♪). Only one thing plays at a time: starting sound on another page, or pressing play in another app such as YouTube Music, pauses it. KITT's voice just lowers it.
 - **Tabs and pop-ups:** multiple tabs, and pop-ups you trigger open as new tabs. Links that try to launch other apps are blocked, so nothing hijacks the screen.
 - **Separate sign-ins:** each page keeps its own logins (separate WebView profiles where the system WebView supports it).
 - **Userscripts:**
