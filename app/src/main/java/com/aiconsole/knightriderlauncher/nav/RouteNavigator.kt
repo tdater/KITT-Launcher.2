@@ -2,6 +2,8 @@ package com.aiconsole.knightriderlauncher.nav
 
 import com.aiconsole.knightriderlauncher.assistant.TextToSpeechHelper
 import com.aiconsole.knightriderlauncher.data.settings.KittSettings
+import com.aiconsole.knightriderlauncher.data.settings.PersonaStyle
+import kotlin.random.Random
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -95,7 +97,7 @@ class RouteNavigator(
         lastIndex = 0
         _state.value = s.copy(status = NavStatus.Navigating, message = null)
         val line = "Route set to ${place.name}: ${RouteRules.spokenDistance(route.distanceM, metric())}, about ${RouteRules.duration(route.durationS)}."
-        if (speak) say(line)
+        if (speak) say(RouteRules.Speech.Start, line)
         follow()
         return line
     }
@@ -175,7 +177,8 @@ class RouteNavigator(
         if ((spoken[p.nextStep] ?: 0) >= level) return
         spoken[p.nextStep] = level
         val instruction = RouteRules.instruction(step)
-        say(if (level == 1) "In ${RouteRules.spokenDistance(p.toNextM, metric())}, ${instruction.replaceFirstChar { it.lowercase() }}." else "$instruction.")
+        if (level == 1) say(RouteRules.Speech.Early, "In ${RouteRules.spokenDistance(p.toNextM, metric())}, ${instruction.replaceFirstChar { it.lowercase() }}.")
+        else say(RouteRules.Speech.Now, "$instruction.")
     }
 
     private fun checkOffRoute(p: RouteProgress, here: LatLon, s: NavState) {
@@ -185,7 +188,7 @@ class RouteNavigator(
         val place = s.destination ?: return
         lastReroute = now
         offRouteFixes = 0
-        say("Recalculating.")
+        say(RouteRules.Speech.Reroute, "Recalculating.")
         routing?.cancel()
         routing = scope.launch(Dispatchers.Main) {
             try {
@@ -204,16 +207,18 @@ class RouteNavigator(
     private fun arrive(s: NavState) {
         following?.cancel()
         _state.value = s.copy(status = NavStatus.Arrived)
-        say("You have arrived" + (s.destination?.let { " at ${it.name}" } ?: "") + ".")
+        say(RouteRules.Speech.Arrive, "You have arrived" + (s.destination?.let { " at ${it.name}" } ?: "") + ".")
         scope.launch(Dispatchers.Main) {
             delay(ARRIVED_SHOW_MS)
             if (_state.value.status == NavStatus.Arrived) _state.value = NavState()
         }
     }
 
-    private fun say(text: String) {
-        if (settings.navVoice.value) voice.speak(text, interrupt = false)
+    private fun say(kind: RouteRules.Speech, plain: String) {
+        if (settings.navVoice.value) voice.speak(RouteRules.spoken(kind, plain, unfiltered(), Random.nextInt()), interrupt = false)
     }
+
+    private fun unfiltered() = settings.persona.value == PersonaStyle.Unfiltered
 
     private fun metric() = settings.metricUnits.value
 

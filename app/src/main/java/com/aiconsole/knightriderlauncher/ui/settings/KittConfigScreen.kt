@@ -287,7 +287,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
             item {
                 HelpText(
                     if (persona == PersonaStyle.Unfiltered) {
-                        "Savagely sarcastic and foul-mouthed: swears in every reply and alert and roasts your driving and your vehicle, while the facts stay accurate. Turn-by-turn prompts stay plain."
+                        "Savagely sarcastic and foul-mouthed: swears in every reply and alert and roasts your driving and your vehicle, while the facts stay accurate. Turn-by-turn directions say the turn plainly first, then the insult."
                     } else {
                         "Calm, precise and dry, like the original."
                     }

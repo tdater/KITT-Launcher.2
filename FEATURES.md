@@ -66,7 +66,7 @@ Swipe left and right between pages or tap the page buttons. A swipe that starts 
 - **Sources:** web-grounded answers list their sources.
 - **Subscriptions:** if you pay for Gemini, Claude or Perplexity Pro, KITT can hand your question to that official app, since consumer subscriptions can't be used through an API.
 - **Personality:**
-  - **Unfiltered KITT** (the default): savagely sarcastic and foul-mouthed, swearing in every reply and alert and roasting your driving and your vehicle, while every fact stays accurate (turn-by-turn prompts stay plain);
+  - **Unfiltered KITT** (the default): savagely sarcastic and foul-mouthed, swearing in every reply and alert and roasting your driving and your vehicle, while every fact stays accurate, including turn-by-turn directions (each turn is said plainly first, then the insult);
   - **Classic KITT:** the polite TV version.
   - Both follow strict rules: don't make things up, and don't distract the driver.
 - **Voice:**

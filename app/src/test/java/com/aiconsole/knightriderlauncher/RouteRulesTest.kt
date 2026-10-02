@@ -116,6 +116,21 @@ class RouteRulesTest {
     }
 
     @Test
+    fun unfilteredDirectionsKeepTheInstructionFirst() {
+        val plain = "In half a mile, turn left onto Main Street."
+        assertEquals(plain, RouteRules.spoken(RouteRules.Speech.Early, plain, unfiltered = false, roll = 3))
+        for (roll in -5..10) {
+            for (kind in listOf(RouteRules.Speech.Start, RouteRules.Speech.Early, RouteRules.Speech.Now)) {
+                val line = RouteRules.spoken(kind, plain, unfiltered = true, roll = roll)
+                assertTrue(line, line.startsWith(plain) && line.length > plain.length)
+            }
+            val arrive = RouteRules.spoken(RouteRules.Speech.Arrive, "You have arrived at Walmart.", unfiltered = true, roll = roll)
+            assertTrue(arrive, arrive.startsWith("You have arrived at Walmart"))
+            assertTrue(RouteRules.spoken(RouteRules.Speech.Reroute, "Recalculating.", unfiltered = true, roll = roll).startsWith("Recalculating"))
+        }
+    }
+
+    @Test
     fun spokenDestinationDropsFiller() {
         assertEquals("walmart", RouteRules.destinationQuery("the nearest walmart"))
         assertEquals("gas station", RouteRules.destinationQuery("a gas station"))

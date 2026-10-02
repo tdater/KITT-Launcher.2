@@ -288,6 +288,49 @@ object RouteRules {
     /** Distance from the car, for search results. */
     fun distanceLabel(from: LatLon?, to: LatLon, metric: Boolean): String? = from?.let { shortDistance(distanceM(it, to), metric) }
 
+    /** Unfiltered KITT's add-ons, spoken after the plain instruction so the instruction stays clear. */
+    private val ROAST_EARLY = listOf(
+        "Plenty of warning, so no fucking excuses this time.",
+        "Start thinking about it now, I know it takes you a while, dumbass.",
+        "Try not to sail past it like last time, hotshot.",
+        "Mirrors and blinker, genius. Those exist, damn it."
+    )
+    private val ROAST_NOW = listOf("Now, dumbass.", "Right fucking now.", "Now. Don't screw it up.", "Now, damn it.")
+    private val ROAST_REROUTE = listOf(
+        "Recalculating, because you can't follow one simple fucking instruction.",
+        "Recalculating. Missed it, didn't you, ace? Shit.",
+        "Recalculating. A toddler with a crayon map would do better, damn."
+    )
+    private val ROAST_ARRIVE = listOf(
+        "and holy shit, we didn't die.",
+        "and only took the long way twice, dumbass.",
+        "Park it without hitting anything, if that's not too fucking much to ask."
+    )
+    private val ROAST_START = listOf(
+        "Try to follow along, it's not fucking rocket science.",
+        "I'll do the thinking, you just steer, damn it.",
+        "Let's see how many turns you miss, hotshot."
+    )
+
+    enum class Speech { Start, Early, Now, Reroute, Arrive }
+
+    /**
+     * What KITT says for [kind]: [plain] alone, or for Unfiltered KITT [plain] followed by a roast
+     * picked by [roll] (any int; callers pass a random one). The instruction always comes first.
+     */
+    fun spoken(kind: Speech, plain: String, unfiltered: Boolean, roll: Int): String {
+        if (!unfiltered) return plain
+        val pool = when (kind) {
+            Speech.Start -> ROAST_START
+            Speech.Early -> ROAST_EARLY
+            Speech.Now -> ROAST_NOW
+            Speech.Reroute -> return ROAST_REROUTE[Math.floorMod(roll, ROAST_REROUTE.size)]
+            Speech.Arrive -> ROAST_ARRIVE
+        }
+        val roast = pool[Math.floorMod(roll, pool.size)]
+        return if (kind == Speech.Arrive && roast.first().isLowerCase()) plain.removeSuffix(".") + ", " + roast else "$plain $roast"
+    }
+
     /** Strips filler from a spoken destination: "the nearest Walmart" → "Walmart". */
     fun destinationQuery(spoken: String): String =
         spoken.trim().replace(Regex("""^(the |a |an )?(nearest |closest |nearby )?"""), "").trim()
