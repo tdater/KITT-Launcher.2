@@ -120,7 +120,8 @@ class LauncherCommandRunner(private val app: KittApplication) {
             } else {
                 val list = report.all.take(4).joinToString("; ") { "$it, ${DtcDecoder.describe(it)}" }
                 val more = if (report.all.size > 4) " and ${report.all.size - 4} more" else ""
-                say("${report.all.size} codes: $list$more.", "${report.all.size} codes, because of fucking course: $list$more.", "${report.all.size} codes. Great work, champ: $list$more.")
+                val count = if (report.all.size == 1) "1 code" else "${report.all.size} codes"
+                say("$count: $list$more.", "$count, because of fucking course: $list$more.", "$count. Great work, champ: $list$more.")
             }
         },
         onFailure = { say("I can't read codes: ${it.message}", "Can't read codes: ${it.message}. Plug me in properly, for fuck's sake.", "Can't read codes: ${it.message}. Hard to diagnose shit when you can't even plug in a dongle.") }

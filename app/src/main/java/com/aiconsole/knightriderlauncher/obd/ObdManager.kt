@@ -188,14 +188,38 @@ class ObdManager(
 
     fun connect(config: AdapterConfig) = connect(listOf(config))
 
+    /**
+     * Debug builds only (see [DemoSession]): a simulated, clearly labelled session for
+     * screenshots and demos. Nothing is sent to any adapter or vehicle; a real connect ends it.
+     */
+    @Volatile
+    private var demoReport: DtcReport? = null
+
+    internal fun startDemo(info: ObdSessionInfo, report: DtcReport, frame: () -> Map<String, Double>) {
+        session?.cancel()
+        demoReport = report
+        _state.value = ObdState.Connected(info)
+        _dtcs.value = report
+        session = scope.launch {
+            while (true) {
+                val now = System.currentTimeMillis()
+                _readings.update { old -> old + frame().mapValues { PidReading(it.value, now) } }
+                _refreshHz.value = 8f
+                delay(250)
+            }
+        }
+    }
+
     /** Connects to the first adapter in [configs] that answers, rotating through them on failure. */
     fun connect(configs: List<AdapterConfig>) {
         if (configs.isEmpty()) return
+        demoReport = null
         session?.cancel()
         session = scope.launch(Dispatchers.IO) { runWithReconnect(configs) }
     }
 
     fun disconnect() {
+        demoReport = null
         session?.cancel()
         session = null
         elm = null
@@ -205,6 +229,7 @@ class ObdManager(
     }
 
     suspend fun readCodes(): Result<DtcReport> {
+        demoReport?.let { if (_state.value is ObdState.Connected && elm == null) return Result.success(it) }
         val link = elm ?: return Result.failure(IOException("OBD adapter not connected"))
         return try {
             Result.success(readCodesInternal(link))

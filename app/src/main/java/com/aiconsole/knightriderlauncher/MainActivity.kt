@@ -87,6 +87,7 @@ import com.aiconsole.knightriderlauncher.obd.AdapterDiscovery
 import com.aiconsole.knightriderlauncher.obd.AdapterType
 import com.aiconsole.knightriderlauncher.obd.DrivingRules
 import com.aiconsole.knightriderlauncher.obd.ObdConnectionService
+import com.aiconsole.knightriderlauncher.obd.DemoSession
 import com.aiconsole.knightriderlauncher.obd.ObdState
 import com.aiconsole.knightriderlauncher.obd.PidCatalog
 import com.aiconsole.knightriderlauncher.obd.PidReading
@@ -153,6 +154,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
         )
         handleVoiceIntent(intent)
+        DemoSession.startIfRequested(kitt, intent?.getBooleanExtra(DemoSession.EXTRA, false) == true)
         // Re-render the app icons when the driver picks another icon pack.
         lifecycleScope.launch {
             kitt.settings.iconPack.state.collect { pack -> apps = InstalledApps.load(applicationContext, pack) }
@@ -217,6 +219,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleVoiceIntent(intent)
+        DemoSession.startIfRequested(kitt, intent?.getBooleanExtra(DemoSession.EXTRA, false) == true)
         if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_HOME)) homeTrigger++
     }
 
