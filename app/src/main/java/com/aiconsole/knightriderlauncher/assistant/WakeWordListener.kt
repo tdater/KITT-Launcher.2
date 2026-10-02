@@ -48,6 +48,13 @@ class WakeWordListener(
     val wakes: SharedFlow<Unit> = _wakes.asSharedFlow()
 
     init {
+        // A takeover while listening for "Hey KITT" would repeat forever: turn the wake word off.
+        scope.launch(Dispatchers.Main) {
+            MicGuard.stops.collect {
+                stopAll()
+                settings.wakeWord.set(false)
+            }
+        }
         scope.launch(Dispatchers.Main) {
             combine(settings.wakeWord.state, voice.speaking) { on, talking -> on to talking }.collect { (on, talking) ->
                 enabled = on
@@ -70,7 +77,7 @@ class WakeWordListener(
     }
 
     private fun shouldListen(): Boolean =
-        enabled && visible && !suspended && !speaking &&
+        enabled && visible && !suspended && !speaking && !MicGuard.autoListenBlocked() &&
             ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
     private fun update() {
@@ -99,6 +106,7 @@ class WakeWordListener(
             .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
         listening = true
+        MicGuard.listeningStarted()
         try {
             active.startListening(intent)
         } catch (e: RuntimeException) {

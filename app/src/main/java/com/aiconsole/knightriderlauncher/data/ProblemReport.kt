@@ -42,25 +42,50 @@ object ProblemReport {
         }
     }
 
+    /**
+     * Writes the report section by section, flushing as it goes, so a failure in one part (or the
+     * slow log read) can never leave an empty file.
+     */
     fun write(context: Context, obd: ObdManager, out: OutputStream) {
-        val text = buildString {
-            val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z", Locale.US)
-            appendLine("KITT LAUNCHER PROBLEM REPORT")
+        val writer = out.bufferedWriter(Charsets.UTF_8)
+        val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z", Locale.US)
+        fun section(title: String, body: StringBuilder.() -> Unit) {
+            val text = try {
+                buildString(body)
+            } catch (e: Throwable) {
+                "(section failed: ${e.javaClass.simpleName}: ${e.message})\n"
+            }
+            writer.write("== $title ==\n")
+            writer.write(text)
+            writer.write("\n")
+            writer.flush()
+        }
+        section("KITT LAUNCHER PROBLEM REPORT") {
             appendLine("Created: ${stamp.format(Date())}")
             val pkg = runCatching { context.packageManager.getPackageInfo(context.packageName, 0) }.getOrNull()
             appendLine("App: ${context.packageName} ${pkg?.versionName ?: "?"}")
             appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL} (${Build.DEVICE}), Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}")
             appendLine("Build: ${Build.FINGERPRINT}")
-            appendLine()
-
-            appendLine("== OBD ==")
+            val webView = runCatching { androidx.webkit.WebViewCompat.getCurrentWebViewPackage(context) }.getOrNull()
+            appendLine("WebView: ${webView?.packageName ?: "?"} ${webView?.versionName ?: "?"}")
+        }
+        section("Microphone and speech") {
+            val prefs = context.getSharedPreferences("kitt_settings", Context.MODE_PRIVATE)
+            appendLine("Speech input: ${prefs.getString("speech_input", "Auto")}, recognizer choice: ${prefs.getString("speech_recognizer", "").orEmpty().ifEmpty { "Auto" }}")
+            appendLine("Resolved recognizer: ${com.aiconsole.knightriderlauncher.assistant.SpeechRecognizers.describe(context, prefs.getString("speech_recognizer", "").orEmpty())}")
+            appendLine("System default recognizer: ${com.aiconsole.knightriderlauncher.assistant.SpeechRecognizers.systemDefault(context)?.flattenToString() ?: "none"}")
+            appendLine("Installed recognizers: " + com.aiconsole.knightriderlauncher.assistant.SpeechRecognizers.installed(context).joinToString { it.component.flattenToString() })
+            appendLine("Default assistant: " + (android.provider.Settings.Secure.getString(context.contentResolver, "assistant") ?: "none"))
+            appendLine("Usage access: ${com.aiconsole.knightriderlauncher.assistant.MicGuard.hasUsageAccess(context)}")
+            appendLine("Last mic takeover: ${com.aiconsole.knightriderlauncher.assistant.MicGuard.last.value?.let { "${stamp.format(Date(it.atMillis))} by ${it.packageName ?: "unknown"}" } ?: "none"}")
+        }
+        section("OBD") {
             appendLine("State: ${obd.state.value}")
             obd.linkEvents.value.takeLast(80).forEach { e ->
                 appendLine("${stamp.format(Date(e.timestamp))} ${e.layer.label} ${if (e.ok) "ok" else "FAIL"}: ${e.message}")
             }
-            appendLine()
-
-            appendLine("== Recent crashes ==")
+        }
+        section("Recent crashes") {
             val crashes = crashDir(context).listFiles()?.sortedByDescending { it.name }.orEmpty()
             if (crashes.isEmpty()) appendLine("None recorded.")
             crashes.forEach { f ->
@@ -68,18 +93,13 @@ object ProblemReport {
                 appendLine("-- ${at?.let { stamp.format(Date(it)) } ?: f.name}")
                 appendLine(f.readText().take(8_000))
             }
-            appendLine()
-
-            appendLine("== Settings (no API keys) ==")
+        }
+        section("Settings (no API keys)") {
             context.getSharedPreferences("kitt_settings", Context.MODE_PRIVATE).all.toSortedMap().forEach { (k, v) ->
                 appendLine("$k = ${v.toString().replace('\n', ' ').take(200)}")
             }
-            appendLine()
-
-            appendLine("== App log (this app only) ==")
-            append(appLog())
         }
-        out.write(text.toByteArray(Charsets.UTF_8))
+        section("App log (this app only)") { append(appLog()) }
     }
 
     /** This process's recent logcat output; apps may read their own logs without extra permission. */

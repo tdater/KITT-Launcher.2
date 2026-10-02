@@ -345,6 +345,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                         "assistant is never involved. Auto uses it whenever a Gemini key is set."
                 )
             }
+            item { MicFixSettings(app) }
             item { Text("SPEECH RECOGNIZER (MICROPHONE)", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
             item {
                 ChoiceRow(

@@ -29,8 +29,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import com.aiconsole.knightriderlauncher.KittApplication
 import com.aiconsole.knightriderlauncher.MainActivity
+import com.aiconsole.knightriderlauncher.assistant.MicGuard
 import com.aiconsole.knightriderlauncher.data.DriverProfiles
 import com.aiconsole.knightriderlauncher.data.HardwareKeys
 import com.aiconsole.knightriderlauncher.data.IconPacks
@@ -312,6 +314,90 @@ fun UpdateSettings(app: KittApplication) {
     }
 }
 
+/**
+ * Microphone fix: for head units that jump to their own radio/climate app when another app opens
+ * the microphone. Names the app that took over, links to its settings and the default-assistant
+ * setting, and gives ADB commands that silence it.
+ */
+@Composable
+fun MicFixSettings(app: KittApplication) {
+    val context = LocalContext.current
+    val last by MicGuard.last.collectAsState()
+    val vrMic by app.settings.voiceRecognitionMic.state.collectAsState()
+    var usage by remember { mutableStateOf(MicGuard.hasUsageAccess(context)) }
+    var copied by remember { mutableStateOf(false) }
+    val pkg = last?.packageName
+    fun open(intent: Intent) {
+        try {
+            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: android.content.ActivityNotFoundException) {
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SectionHeader("Microphone fix")
+        Text(
+            when {
+                last == null -> "NO TAKEOVER DETECTED YET"
+                pkg != null -> "LAST TAKEOVER: $pkg"
+                else -> "TAKEOVER DETECTED (ALLOW USAGE ACCESS TO NAME THE APP)"
+            },
+            style = MaterialTheme.typography.labelLarge,
+            color = if (last == null) LedGreen else ScannerRed
+        )
+        HelpText(
+            "If tapping the mic jumps to the radio/climate app: 1) set KITT's speech input to KITT (Gemini) above; " +
+                "2) set the system Default digital assistant to None; 3) if it still happens, silence that app's microphone " +
+                "with the ADB commands below. KITT stops listening by itself the moment a takeover is detected."
+        )
+        KittToggle(
+            "Use voice-recognition mic source",
+            vrMic,
+            { app.settings.voiceRecognitionMic.set(it) },
+            description = "Off (recommended) records from the plain microphone, which head units are less likely to hand to their own voice system."
+        )
+        Row(Modifier.fillMaxWidth().height(44.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            KittButton("Default assistant", { open(Intent(android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS)) }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
+            KittButton(
+                if (usage) "Usage access ✓" else "Allow usage access",
+                {
+                    open(Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                    usage = MicGuard.hasUsageAccess(context)
+                },
+                Modifier.weight(1f).fillMaxHeight(),
+                LedGreen,
+                active = usage
+            )
+            KittButton(
+                "Open ${pkg?.substringAfterLast('.') ?: "app"} settings",
+                { pkg?.let { open(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$it".toUri())) } },
+                Modifier.weight(1f).fillMaxHeight(),
+                DashAmber,
+                enabled = pkg != null
+            )
+        }
+        Text(MicGuard.adbFix(pkg), style = MaterialTheme.typography.bodyMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace), color = DashWhite)
+        if (pkg == null) {
+            HelpText("Find the package right after a takeover with: ${MicGuard.FIND_APP_COMMAND}")
+        }
+        KittButton(
+            if (copied) "Copied" else "Copy ADB commands",
+            {
+                val text = MicGuard.adbFix(pkg) + "\n# find the app: " + MicGuard.FIND_APP_COMMAND
+                context.getSystemService(android.content.ClipboardManager::class.java)
+                    ?.setPrimaryClip(android.content.ClipData.newPlainText("KITT mic fix", text))
+                copied = true
+            },
+            Modifier.fillMaxWidth().height(44.dp),
+            LedGreen
+        )
+        HelpText(
+            "ADB without a cable: head unit Settings → About → tap Build number 7 times, then Developer options → " +
+                "Wireless debugging → Pair device with pairing code; on the PC run adb pair <ip:port>, then adb connect <ip:port>."
+        )
+    }
+}
+
 /** Save or restore settings, gauges, custom PIDs and userscripts. */
 @Composable
 fun BackupSettings(app: KittApplication) {
@@ -321,7 +407,9 @@ fun BackupSettings(app: KittApplication) {
     val backup = remember { LauncherBackup(context) }
     val report = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri: Uri? ->
         uri ?: return@rememberLauncherForActivityResult
-        scope.launch {
+        message = "Writing the report…"
+        // App scope, not this screen's: closing KITT Config mustn't cancel the write.
+        app.appScope.launch(Dispatchers.Main) {
             message = try {
                 withContext(Dispatchers.IO) {
                     context.contentResolver.openOutputStream(uri)?.use { ProblemReport.write(context, app.obd, it) }

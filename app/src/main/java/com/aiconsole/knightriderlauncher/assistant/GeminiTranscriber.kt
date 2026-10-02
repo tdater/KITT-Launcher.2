@@ -46,7 +46,9 @@ class GeminiTranscriber(private val settings: KittSettings) {
         val minBuffer = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         if (minBuffer <= 0) throw IOException("Microphone unavailable")
         val recorder = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            // Plain MIC by default: on some head units the voice-recognition source is routed
+            // through the manufacturer's voice system, which switches to its own app.
+            if (settings.voiceRecognitionMic.value) MediaRecorder.AudioSource.VOICE_RECOGNITION else MediaRecorder.AudioSource.MIC,
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,

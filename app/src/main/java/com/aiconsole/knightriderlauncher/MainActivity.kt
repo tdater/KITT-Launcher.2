@@ -61,6 +61,7 @@ import com.aiconsole.knightriderlauncher.assistant.AssistantPrompt
 import com.aiconsole.knightriderlauncher.assistant.KittAlert
 import com.aiconsole.knightriderlauncher.assistant.LauncherBus
 import com.aiconsole.knightriderlauncher.assistant.LauncherEvent
+import com.aiconsole.knightriderlauncher.assistant.MicGuard
 import com.aiconsole.knightriderlauncher.browser.BrowserSession
 import com.aiconsole.knightriderlauncher.data.AppLists
 import com.aiconsole.knightriderlauncher.data.AppUsage
@@ -209,6 +210,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        MicGuard.launcherHidden(this)
         LauncherVisibility.visible.value = false
         kitt.nightMode.setActive(false)
         kitt.gps.stop()
@@ -390,7 +392,19 @@ fun LauncherRoot(
     var saver by remember { mutableStateOf(false) }
     var quickSettings by remember { mutableStateOf(false) }
     // Applies on the Drive page only; the launcher never changes page by itself while driving.
-    val driving = drivingLayout && moving
+    // Debounced: GPS/OBD "moving" flips at every slow-down, which made the panel swap back and
+    // forth. Switch in only after steady driving, and back only after a real stop.
+    var steadyDriving by remember { mutableStateOf(false) }
+    LaunchedEffect(moving) {
+        if (moving && !steadyDriving) {
+            delay(DRIVING_ENTER_MS)
+            steadyDriving = true
+        } else if (!moving && steadyDriving) {
+            delay(DRIVING_EXIT_MS)
+            steadyDriving = false
+        }
+    }
+    val driving = drivingLayout && steadyDriving
     LaunchedEffect(screensaverMinutes, moving) {
         if (moving) saver = false
         while (screensaverMinutes > 0 && !moving) {
@@ -482,7 +496,8 @@ fun LauncherRoot(
     }
     LaunchedEffect(voiceTrigger) {
         if (voiceTrigger > 0) {
-            autoListen = true
+            // After a mic takeover, open KITT without listening so the loop can't restart.
+            autoListen = !MicGuard.autoListenBlocked()
             overlay = LauncherOverlay.Assistant
         }
     }
@@ -673,6 +688,9 @@ fun LauncherRoot(
         }
     }
 }
+
+private const val DRIVING_ENTER_MS = 15_000L
+private const val DRIVING_EXIT_MS = 60_000L
 
 /** Home pages, swiped or picked from the tabs above the dock. */
 private enum class HomePage(val label: String) {

@@ -47,6 +47,20 @@ class SpeechToTextHelper(context: Context, private val settings: KittSettings) :
     private val _state = MutableStateFlow<SpeechState>(SpeechState.Idle)
     val state: StateFlow<SpeechState> = _state.asStateFlow()
 
+    init {
+        // The head unit took the screen when the mic opened: stop now so it can't loop.
+        scope.launch {
+            MicGuard.stops.collect {
+                geminiJob?.cancel()
+                recognizer?.cancel()
+                MicGuard.listeningEnded()
+                _state.value = SpeechState.Error(
+                    "The head unit switched apps when the microphone opened. See KITT Config → Microphone fix."
+                )
+            }
+        }
+    }
+
     fun start() = onMain {
         val useGemini = when (settings.speechInput.value) {
             SpeechInput.Gemini -> true
@@ -82,6 +96,7 @@ class SpeechToTextHelper(context: Context, private val settings: KittSettings) :
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         _state.value = SpeechState.Listening()
+        MicGuard.listeningStarted()
         active.startListening(intent)
     }
 
@@ -93,10 +108,15 @@ class SpeechToTextHelper(context: Context, private val settings: KittSettings) :
         }
         geminiJob?.cancel()
         _state.value = SpeechState.Listening()
+        MicGuard.listeningStarted()
         geminiJob = scope.launch {
             _state.value = try {
-                val pcm = transcriber.record { level ->
-                    (_state.value as? SpeechState.Listening)?.let { _state.value = it.copy(level = level) }
+                val pcm = try {
+                    transcriber.record { level ->
+                        (_state.value as? SpeechState.Listening)?.let { _state.value = it.copy(level = level) }
+                    }
+                } finally {
+                    MicGuard.listeningEnded()
                 }
                 if (pcm == null) {
                     SpeechState.Error("Didn't catch that.")
@@ -155,6 +175,7 @@ class SpeechToTextHelper(context: Context, private val settings: KittSettings) :
     }
 
     override fun onEndOfSpeech() {
+        MicGuard.listeningEnded()
         _state.value = SpeechState.Processing
     }
 
@@ -164,6 +185,7 @@ class SpeechToTextHelper(context: Context, private val settings: KittSettings) :
     }
 
     override fun onError(error: Int) {
+        MicGuard.listeningEnded()
         _state.value = SpeechState.Error(errorMessage(error))
     }
 

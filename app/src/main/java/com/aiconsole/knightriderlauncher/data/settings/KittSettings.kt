@@ -114,6 +114,8 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
 
     /** Flattened ComponentName, [SpeechRecognizers.AUTO] or [SpeechRecognizers.ON_DEVICE]. */
     val speechRecognizer = stringPref("speech_recognizer", SpeechRecognizers.AUTO)
+    /** Record with the "voice recognition" mic source instead of the plain mic. */
+    val voiceRecognitionMic = boolPref("voice_recognition_mic", false)
     /** Auto: KITT's own Gemini transcription when a key is set, else a safe device recognizer. */
     val speechInput = Pref(
         "speech_input", SpeechInput.Auto,
@@ -140,7 +142,8 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
         { k, d -> runCatching { NightMode.valueOf(getString(k, d.name)!!) }.getOrDefault(d) },
         { k, v -> putString(k, v.name) }
     )
-    val drivingMode = boolPref("driving_mode", true)
+    /** Driving layout (big controls while moving). Off by default; new key so earlier defaults don't carry over. */
+    val drivingMode = boolPref("driving_layout_v2", false)
     val showMap = boolPref("show_map", true)
 
     // --- Home & app drawer (newline-separated LauncherApp keys, see AppLists) ---
