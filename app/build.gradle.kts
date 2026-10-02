@@ -24,10 +24,12 @@ android {
         applicationId = "com.aiconsole.knightriderlauncher"
         minSdk = 24
         targetSdk = 37
-        // CI builds number themselves so in-app updates always see a newer version.
+        // CI builds number themselves so in-app updates always see a newer version. A release
+        // tag (v1.2) becomes the version name, so it matches the release the updater compares.
         val ciBuild = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+        val releaseTag = System.getenv("GITHUB_REF_NAME")?.takeIf { System.getenv("GITHUB_REF_TYPE") == "tag" }?.removePrefix("v")
         versionCode = ciBuild ?: 1
-        versionName = if (ciBuild != null) "1.0.$ciBuild" else "1.0"
+        versionName = releaseTag ?: if (ciBuild != null) "1.0.$ciBuild" else "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

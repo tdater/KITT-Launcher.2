@@ -270,7 +270,7 @@ fun UpdateSettings(app: KittApplication) {
         SectionHeader("Updates")
         Text("INSTALLED: $current", style = MaterialTheme.typography.labelLarge, color = DashWhite)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            KittTextField(repo, { app.settings.updateRepo.set(it.trim()) }, "GitHub repo, e.g. owner/KnightRiderLauncher", Modifier.weight(1f))
+            KittTextField(repo, { app.settings.updateRepo.set(it.trim()) }, "GitHub repo, e.g. tdater/KITT-Launcher-releases", Modifier.weight(1f))
             KittButton(
                 if (busy) "Checking…" else "Check",
                 {

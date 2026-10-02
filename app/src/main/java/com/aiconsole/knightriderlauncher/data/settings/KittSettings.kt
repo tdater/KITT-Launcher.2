@@ -167,7 +167,7 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     /** Recent map destinations, encoded by [com.aiconsole.knightriderlauncher.nav.RouteRules.encodeRecents]. */
     val navRecents = stringPref("nav_recents", "")
     /** GitHub repository (owner/name) whose releases the in-app updater checks. */
-    val updateRepo = stringPref("update_repo", "")
+    val updateRepo = stringPref("update_repo", DEFAULT_UPDATE_REPO)
     /** Fill-up log (FuelLog format). */
     val fuelLog = stringPref("fuel_log", "")
     /** Clock, connectivity, GPS and OBD status under the scanner. */
@@ -244,6 +244,8 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     }
 
     companion object {
+        /** Public downloads-only repository the release workflow publishes signed APKs to. */
+        const val DEFAULT_UPDATE_REPO = "tdater/KITT-Launcher-releases"
         const val DEFAULT_CHAT_MODEL = "gemini-3.5-flash-lite"
         const val DEFAULT_DIAGNOSTIC_MODEL = "gemini-3.8-flash"
         /** The model behind Perplexity's "fast" preset. */

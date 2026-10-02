@@ -20,6 +20,8 @@ jobs:
       KITT_KEY_PASSWORD: ${{ secrets.KITT_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # release notes list the commits since the previous tag
 
       - uses: actions/setup-java@v4
         with:
@@ -45,8 +47,28 @@ jobs:
           echo "$KITT_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/kitt.jks"
           KITT_KEYSTORE="$RUNNER_TEMP/kitt.jks" ./gradlew assembleRelease
 
-      - name: Publish release (tags only)
+      # Tags (v1.2) publish the signed APK to the public downloads-only repository, which the
+      # in-app updater checks. Needs a RELEASES_TOKEN secret allowed to write its releases.
+      - name: Prepare release
+        if: startsWith(github.ref, 'refs/tags/v') && hashFiles('app/build/outputs/apk/release/app-release.apk') != ''
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk "KITT-Launcher-$GITHUB_REF_NAME.apk"
+          previous=$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)
+          {
+            echo "KITT Launcher $GITHUB_REF_NAME"
+            echo
+            echo "Download the APK below and open it on the head unit, or use KITT Config → Updates."
+            echo
+            echo "Changes:"
+            git log --no-merges --pretty='- %s' ${previous:+$previous..}"$GITHUB_REF_NAME" | head -40
+          } > release-notes.md
+
+      - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v') && hashFiles('app/build/outputs/apk/release/app-release.apk') != ''
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/release/app-release.apk
+          repository: tdater/KITT-Launcher-releases
+          token: ${{ secrets.RELEASES_TOKEN }}
+          name: KITT Launcher ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: KITT-Launcher-${{ github.ref_name }}.apk
