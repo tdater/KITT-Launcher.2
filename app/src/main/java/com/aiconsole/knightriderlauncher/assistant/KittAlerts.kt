@@ -1,5 +1,6 @@
 ﻿package com.aiconsole.knightriderlauncher.assistant
 
+import android.util.Log
 import com.aiconsole.knightriderlauncher.data.settings.KittSettings
 import com.aiconsole.knightriderlauncher.data.settings.PersonaStyle
 import com.aiconsole.knightriderlauncher.obd.DtcDecoder
@@ -8,6 +9,7 @@ import com.aiconsole.knightriderlauncher.obd.ObdManager
 import com.aiconsole.knightriderlauncher.obd.ObdState
 import com.aiconsole.knightriderlauncher.obd.PidCatalog
 import com.aiconsole.knightriderlauncher.obd.PidDefinition
+import java.util.Calendar
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -16,7 +18,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.util.Calendar
 
 data class KittAlert(val message: String, val severe: Boolean, val at: Long)
 
@@ -43,6 +44,8 @@ class KittAlerts(
     private var linkAnnounced = false
     private var greeted = false
     private var lowVoltageSince = 0L
+    /** When each gauge first went past its limit; a single odd reading never raises an alert. */
+    private val limitSince = HashMap<String, Long>()
     private var clearJob: Job? = null
 
     init {
@@ -196,7 +199,13 @@ class KittAlerts(
             if (gauge.pidId == PidCatalog.COOLANT && gauge.warnAbove != null && gauge.warnAbove >= OVERHEAT_C) continue
             val def = defs[gauge.pidId] ?: continue
             val value = fresh(gauge.pidId) ?: continue
-            if (gauge.isWarning(value)) {
+            if (!gauge.isWarning(value)) {
+                limitSince.remove(gauge.id)
+                continue
+            }
+            val since = limitSince.getOrPut(gauge.id) { now }
+            if (now - since >= LIMIT_HOLD_MS) {
+                Log.i(TAG, "Limit alert ${gauge.pidId} = $value, raw [${obd.rawDataOf(gauge.pidId)}], past the limit for ${(now - since) / 1000} s")
                 raise(
                     "gauge_${gauge.id}",
                     line(
@@ -254,5 +263,8 @@ class KittAlerts(
 
         /** Each alert is spoken at most this many times per drive, then shown silently. */
         const val MAX_SPOKEN = 2
+        /** A gauge must stay past its limit this long before KITT says anything. */
+        const val LIMIT_HOLD_MS = 20_000L
+        const val TAG = "KittAlerts"
     }
 }

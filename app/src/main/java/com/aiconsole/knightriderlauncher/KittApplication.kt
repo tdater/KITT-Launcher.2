@@ -4,6 +4,8 @@ import android.app.Application
 import android.appwidget.AppWidgetHost
 import android.database.SQLException
 import android.util.Log
+import androidx.compose.foundation.ComposeFoundationFlags
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.ui.graphics.Color
 import com.aiconsole.knightriderlauncher.assistant.AssistantPrompt
 import com.aiconsole.knightriderlauncher.assistant.AssistantRepository
@@ -150,6 +152,11 @@ class KittApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         ProblemReport.installCrashHandler(this)
+        // The home pager pre-composes neighbouring pages in pieces across frames. With a WebView
+        // (AndroidView) on those pages that crashed the launcher on the head unit ("LayoutNode
+        // should be attached to an owner"), so prefetch composes whole pages at once instead.
+        @OptIn(ExperimentalFoundationApi::class)
+        ComposeFoundationFlags.isPausableCompositionInPrefetchEnabled = false
         // Apply the saved look before the first frame, then follow changes from KITT Config.
         ThemeState.theme = settings.uiTheme.value
         appScope.launch(Dispatchers.Main) {

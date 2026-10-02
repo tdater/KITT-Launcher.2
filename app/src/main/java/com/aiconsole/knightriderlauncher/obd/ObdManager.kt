@@ -100,6 +100,10 @@ class ObdManager(
     private val _readings = MutableStateFlow<Map<String, PidReading>>(emptyMap())
     val readings: StateFlow<Map<String, PidReading>> = _readings.asStateFlow()
 
+    /** Last raw data bytes (hex) behind each standard reading, for problem reports. */
+    private val rawData = java.util.concurrent.ConcurrentHashMap<String, String>()
+    fun rawDataOf(id: String): String? = rawData[id]
+
     /**
      * [readings] sampled at [DISPLAY_INTERVAL_MS] for the UI. The poll loop can run well above
      * 10 Hz on CAN; redrawing faster than that only costs frames. Logging and alerts keep
@@ -617,6 +621,7 @@ class ObdManager(
                 for (def in group) {
                     val data = values[def.mode01Pid]
                     val value = data?.let { evaluate(def, it) }
+                    if (data != null) rawData[def.id] = data.joinToString(" ") { "%02X".format(Locale.US, it.toInt() and 0xFF) }
                     if (value != null) {
                         results[def.id] = value
                         failures.remove(def.id)

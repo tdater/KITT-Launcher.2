@@ -32,6 +32,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -80,6 +81,7 @@ import com.aiconsole.knightriderlauncher.obd.ObdState
 import com.aiconsole.knightriderlauncher.obd.PidCatalog
 import com.aiconsole.knightriderlauncher.obd.PidReading
 import com.aiconsole.knightriderlauncher.ui.assistant.AssistantOverlay
+import com.aiconsole.knightriderlauncher.ui.browser.LocalWebViewHostActive
 import com.aiconsole.knightriderlauncher.ui.components.KittButton
 import com.aiconsole.knightriderlauncher.ui.components.VoiceModulator
 import com.aiconsole.knightriderlauncher.ui.diagnostics.DiagnosticsScreen
@@ -617,33 +619,36 @@ fun LauncherRoot(
                         userScrollEnabled = true,
                         pageSpacing = gap
                     ) { page ->
-                        when (HomePage.entries[page]) {
-                            HomePage.Drive -> if (isTall) {
-                                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
-                                    // 50 : 35 of the space above the dock keeps the 50/35/15 split
-                                    navPane(Modifier.fillMaxWidth().weight(0.50f))
-                                    if (driving) drivingPanel(Modifier.fillMaxWidth().weight(0.35f))
-                                    else grid(Modifier.fillMaxWidth().weight(0.35f), portraitCellWidth)
+                        // Web pages attach only on the page the pager settled on, never while pre-composed.
+                        CompositionLocalProvider(LocalWebViewHostActive provides (page == pager.settledPage)) {
+                            when (HomePage.entries[page]) {
+                                HomePage.Drive -> if (isTall) {
+                                    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
+                                        // 50 : 35 of the space above the dock keeps the 50/35/15 split
+                                        navPane(Modifier.fillMaxWidth().weight(0.50f))
+                                        if (driving) drivingPanel(Modifier.fillMaxWidth().weight(0.35f))
+                                        else grid(Modifier.fillMaxWidth().weight(0.35f), portraitCellWidth)
+                                    }
+                                } else {
+                                    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                                        navPane(Modifier.fillMaxHeight().weight(0.60f))
+                                        if (driving) drivingPanel(Modifier.fillMaxHeight().weight(0.40f))
+                                        else grid(Modifier.fillMaxHeight().weight(0.40f), 120.dp)
+                                    }
                                 }
-                            } else {
-                                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(gap)) {
-                                    navPane(Modifier.fillMaxHeight().weight(0.60f))
-                                    if (driving) drivingPanel(Modifier.fillMaxHeight().weight(0.40f))
-                                    else grid(Modifier.fillMaxHeight().weight(0.40f), 120.dp)
-                                }
+                                HomePage.Gauges -> GaugeWallPane(
+                                    gauges = dash.gauges,
+                                    metric = dash.metric,
+                                    reading = dash.reading,
+                                    onGaugeClick = { open(LauncherOverlay.Diagnostics) },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                HomePage.Media -> MediaPane(Modifier.fillMaxSize())
+                                HomePage.Widgets -> WidgetsPane(Modifier.fillMaxSize())
+                                HomePage.Ai -> AiPane(aiBrowser, Modifier.fillMaxSize())
+                                HomePage.Games -> GamesPane(gamesBrowser, Modifier.fillMaxSize())
+                                HomePage.Apps -> AppDrawerPane(apps, onAppClick, Modifier.fillMaxSize())
                             }
-                            HomePage.Gauges -> GaugeWallPane(
-                                gauges = dash.gauges,
-                                metric = dash.metric,
-                                reading = dash.reading,
-                                onGaugeClick = { open(LauncherOverlay.Diagnostics) },
-                                modifier = Modifier.fillMaxSize()
-                            )
-                            HomePage.Media -> MediaPane(Modifier.fillMaxSize())
-                            HomePage.Widgets -> WidgetsPane(Modifier.fillMaxSize())
-                            HomePage.Ai -> AiPane(aiBrowser, Modifier.fillMaxSize())
-                            HomePage.Games -> GamesPane(gamesBrowser, Modifier.fillMaxSize())
-                            HomePage.Apps -> AppDrawerPane(apps, onAppClick, Modifier.fillMaxSize())
                         }
                     }
                     PageTabs(pager.currentPage) { scope.launch { pager.animateScrollToPage(it) } }

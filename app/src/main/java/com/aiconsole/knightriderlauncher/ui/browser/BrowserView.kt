@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -70,6 +71,13 @@ import java.io.IOException
 import kotlinx.coroutines.launch
 
 private const val GREASY_FORK = "https://greasyfork.org/"
+
+/**
+ * False while the home page holding this browser isn't the page the pager settled on (it's
+ * being pre-composed or swiped past). The WebView is only attached on the settled page; the tab
+ * and its WebView stay alive, so nothing reloads when the driver comes back.
+ */
+val LocalWebViewHostActive = compositionLocalOf { true }
 
 /**
  * The shared browser: tabs, toolbar, the page (or two side by side in split mode), and the
@@ -126,7 +134,7 @@ fun BrowserView(
                 session.split && session.tabs.size > 1 -> SplitPages(session)
                 else -> Page(session, current, Modifier.fillMaxSize())
             }
-            if (fullscreen != null) {
+            if (fullscreen != null && LocalWebViewHostActive.current) {
                 AndroidView(
                     factory = { fullscreen.also { (it.parent as? ViewGroup)?.removeView(it) } },
                     modifier = Modifier.fillMaxSize().background(KittBlack)
@@ -240,8 +248,9 @@ private fun SplitPages(session: BrowserSession) {
 @Composable
 private fun Page(session: BrowserSession, tab: BrowserTab, modifier: Modifier) {
     if (tab.isPicker) return
-    Box(modifier.clip(MaterialTheme.shapes.small).border(1.dp, KittBezel, MaterialTheme.shapes.small)) {
-        key(tab.id) {
+    val hostActive = LocalWebViewHostActive.current
+    Box(modifier.clip(MaterialTheme.shapes.small).border(1.dp, KittBezel, MaterialTheme.shapes.small).background(KittBlack)) {
+        if (hostActive) key(tab.id) {
             AndroidView(
                 factory = { context -> session.webViewFor(context, tab).also { (it.parent as? ViewGroup)?.removeView(it) } },
                 modifier = Modifier.fillMaxSize()

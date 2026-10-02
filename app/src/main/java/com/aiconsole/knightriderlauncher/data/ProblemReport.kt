@@ -77,12 +77,22 @@ object ProblemReport {
             appendLine("Installed recognizers: " + com.aiconsole.knightriderlauncher.assistant.SpeechRecognizers.installed(context).joinToString { it.component.flattenToString() })
             appendLine("Default assistant: " + (android.provider.Settings.Secure.getString(context.contentResolver, "assistant") ?: "none"))
             appendLine("Usage access: ${com.aiconsole.knightriderlauncher.assistant.MicGuard.hasUsageAccess(context)}")
-            appendLine("Last mic takeover: ${com.aiconsole.knightriderlauncher.assistant.MicGuard.last.value?.let { "${stamp.format(Date(it.atMillis))} by ${it.packageName ?: "unknown"}" } ?: "none"}")
+            appendLine("Last mic takeover: ${com.aiconsole.knightriderlauncher.assistant.MicGuard.lastRecorded(context)?.let { "${stamp.format(Date(it.atMillis))} by ${it.packageName ?: "unknown"}" } ?: "none"}")
         }
         section("OBD") {
             appendLine("State: ${obd.state.value}")
             obd.linkEvents.value.takeLast(80).forEach { e ->
                 appendLine("${stamp.format(Date(e.timestamp))} ${e.layer.label} ${if (e.ok) "ok" else "FAIL"}: ${e.message}")
+            }
+        }
+        section("Live readings") {
+            val defs = obd.definitions.value
+            val now = System.currentTimeMillis()
+            val readings = obd.readings.value
+            if (readings.isEmpty()) appendLine("None.")
+            readings.toSortedMap().forEach { (id, r) ->
+                val raw = obd.rawDataOf(id)?.let { " raw [$it]" }.orEmpty()
+                appendLine("$id ${defs[id]?.name ?: ""} = ${"%.2f".format(Locale.US, r.value)} (${(now - r.timestamp) / 1000}s ago)$raw")
             }
         }
         section("Recent crashes") {
@@ -107,7 +117,10 @@ object ProblemReport {
         val process = ProcessBuilder("logcat", "-d", "-v", "threadtime", "-t", "3000", "--pid=${Process.myPid()}")
             .redirectErrorStream(true)
             .start()
-        val output = process.inputStream.bufferedReader().use { it.readText() }
+        // Skip the renderer's slow-frame spam so the useful lines fit.
+        val output = process.inputStream.bufferedReader().useLines { lines ->
+            lines.filterNot { "Davey! duration=" in it }.joinToString("\n")
+        }
         process.waitFor() // logcat -d exits once it has dumped; the output is already read.
         output.ifBlank { "(empty)\n" }
     } catch (e: IOException) {

@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Process
 import android.os.SystemClock
 import android.util.Log
+import androidx.core.content.edit
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -30,6 +31,7 @@ object MicGuard {
     private const val TAKEOVER_WINDOW_MS = 6_000L
     private const val COOLDOWN_MS = 2 * 60_000L
     private const val TAG = "MicGuard"
+    private const val PREFS = "mic_guard"
 
     @Volatile
     private var listeningSince = 0L
@@ -66,6 +68,19 @@ object MicGuard {
         val culprit = foregroundApp(context)
         Log.w(TAG, "Launcher covered ${SystemClock.elapsedRealtime() - since} ms after the mic opened; foreground: ${culprit ?: "unknown (no usage access)"}")
         _last.value = MicTakeover(System.currentTimeMillis(), culprit)
+        // Kept on disk so a problem report written after a restart still shows it.
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+            putLong("last_at", System.currentTimeMillis())
+            putString("last_pkg", culprit)
+        }
+    }
+
+    /** The last takeover, including ones from before the app restarted. */
+    fun lastRecorded(context: Context): MicTakeover? {
+        _last.value?.let { return it }
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val at = prefs.getLong("last_at", 0L).takeIf { it > 0 } ?: return null
+        return MicTakeover(at, prefs.getString("last_pkg", null))
     }
 
     fun hasUsageAccess(context: Context): Boolean {
