@@ -93,6 +93,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val chatPreset by settings.perplexityChatPreset.state.collectAsState()
     val diagPreset by settings.perplexityDiagnosticPreset.state.collectAsState()
     val webSearch by settings.webSearch.state.collectAsState()
+    val localModel by settings.perplexityLocalModel.state.collectAsState()
     val driverName by settings.driverName.state.collectAsState()
     val voiceReply by settings.voiceReply.state.collectAsState()
     val greeting by settings.greeting.state.collectAsState()
@@ -224,7 +225,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
             } else {
                 item {
                     HelpText(
-                        "Perplexity Agent API key from perplexity.ai/account/api. Every answer is web-grounded. " +
+                        "Perplexity Agent API key from perplexity.ai/account/api. " +
                             if (savedPerplexityKey.isNotEmpty()) "A key is saved (encrypted on this unit)." else "No key saved yet."
                     )
                 }
@@ -254,6 +255,22 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                 item { ChoiceRow(PERPLEXITY_PRESETS, chatPreset, { it }, { settings.perplexityChatPreset.set(it) }) }
                 item { Text("DIAGNOSTICS PRESET", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
                 item { ChoiceRow(PERPLEXITY_PRESETS, diagPreset, { it }, { settings.perplexityDiagnosticPreset.set(it) }) }
+                item {
+                    KittToggle(
+                        "Web search",
+                        webSearch,
+                        { settings.webSearch.set(it) },
+                        description = "Questions about current facts (weather, prices, recalls) and diagnostics search the web. " +
+                            "Truck readings, trips and small talk skip the search charge. Off: never search."
+                    )
+                }
+                item { Text("NO-SEARCH MODEL", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
+                item {
+                    KittTextField(localModel, { settings.perplexityLocalModel.set(it.trim()) }, "Blank: always use the preset", Modifier.fillMaxWidth())
+                }
+                item {
+                    HelpText("Answers that don't need the web use this Agent API model with no tools. Each answer shows its cost.")
+                }
             }
 
             item {

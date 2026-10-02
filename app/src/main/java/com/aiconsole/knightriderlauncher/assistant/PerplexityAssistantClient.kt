@@ -15,11 +15,13 @@ import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import java.util.Locale
 
 /**
  * Perplexity Agent API client (POST /v1/agent), the replacement for the retired Sonar
- * chat-completions endpoint. Every answer is web-grounded; presets trade speed for depth:
- * fast < low < medium < high.
+ * chat-completions endpoint. Web-grounded questions use a preset (fast < low < medium < high;
+ * each carries web_search). Questions KITT can answer from the vehicle data it sends (see
+ * [PerplexityRouting]) go to a model with no tools, so they cost tokens but no searches.
  */
 class PerplexityAssistantClient(
     context: Context,
@@ -34,7 +36,9 @@ class PerplexityAssistantClient(
         history: List<ChatTurn>,
         driverName: String,
         vehicleContext: String,
-        persona: PersonaStyle
+        persona: PersonaStyle,
+        webGrounded: Boolean = true,
+        localModel: String = ""
     ): AssistantResult = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             return@withContext AssistantResult.Failure("No Perplexity API key yet. Add one under KITT CONFIG, AI CORE.")
@@ -43,32 +47,30 @@ class PerplexityAssistantClient(
 
         // History goes into the instructions: the Agent API input is kept to the single current message.
         val recent = history.takeLast(6).joinToString("\n") { (if (it.fromUser) "Driver: " else "KITT: ") + it.text }
-        val instructions = KittPersona.systemInstruction(persona, driverName, webSearch = true, vehicleContext) +
+        val modelOnly = !webGrounded && localModel.isNotBlank()
+        fun instructions(web: Boolean) = KittPersona.systemInstruction(persona, driverName, webSearch = web, vehicleContext) +
             if (recent.isNotEmpty()) "\n\nRECENT CONVERSATION:\n$recent" else ""
 
-        val body = JSONObject()
-            .put("preset", preset)
-            .put("instructions", instructions)
-            .put(
-                "input",
-                JSONArray().put(
-                    JSONObject().put("type", "message").put("role", "user").put("content", userPrompt)
-                )
-            )
-            .put("tools", JSONArray().put(JSONObject().put("type", "web_search")))
-            .toString()
-
-        val request = Request.Builder()
-            .url(ENDPOINT)
-            .header("Authorization", "Bearer $apiKey")
-            .post(body.toRequestBody(JSON_MEDIA_TYPE))
-            .build()
-
         try {
-            http.newCall(request).await().use { response ->
-                val text = response.body.string()
-                if (response.isSuccessful) parse(text, preset) else failure(response.code, text)
+            if (modelOnly) {
+                val local = JSONObject()
+                    .put("model", localModel)
+                    .put("instructions", instructions(web = false))
+                    .put("input", userPrompt)
+                val (code, text) = post(apiKey, local)
+                when {
+                    code in 200..299 -> return@withContext parse(text, localModel)
+                    // The configured model was renamed or retired: answer with the preset instead.
+                    code != 400 && code != 404 -> return@withContext failure(code, text)
+                }
             }
+            // Presets already carry web_search (plus fetch_url above "fast"), so no tools array.
+            val grounded = JSONObject()
+                .put("preset", preset)
+                .put("instructions", instructions(web = true))
+                .put("input", userPrompt)
+            val (code, text) = post(apiKey, grounded)
+            if (code in 200..299) parse(text, preset) else failure(code, text)
         } catch (e: CancellationException) {
             throw e
         } catch (_: UnknownHostException) {
@@ -84,7 +86,16 @@ class PerplexityAssistantClient(
         }
     }
 
-    private fun parse(body: String, preset: String): AssistantResult {
+    private suspend fun post(apiKey: String, body: JSONObject): Pair<Int, String> {
+        val request = Request.Builder()
+            .url(ENDPOINT)
+            .header("Authorization", "Bearer $apiKey")
+            .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
+            .build()
+        return http.newCall(request).await().use { it.code to it.body.string() }
+    }
+
+    private fun parse(body: String, engine: String): AssistantResult {
         val root = JSONObject(body)
         val text = toGlanceable(root.optString("output_text"))
         if (text.isBlank()) return AssistantResult.Failure("No answer was returned.")
@@ -99,7 +110,12 @@ class PerplexityAssistantClient(
             .map { Source(title = it.optString("title").ifEmpty { it.optString("url") }, uri = it.optString("url")) }
             .filter { it.title.isNotEmpty() }
             .distinctBy { it.uri }
-        return AssistantResult.Answer(text, sources, engine = "perplexity · $preset")
+        // The response reports the exact charge; show it so the driver can see where credit goes.
+        val cost = sequenceOf(root.optJSONObject("usage")?.optJSONObject("cost"), root.optJSONObject("cost"))
+            .mapNotNull { it?.optDouble("total_cost") }
+            .firstOrNull { !it.isNaN() }
+        val label = "perplexity · $engine" + (cost?.let { " · $" + String.format(Locale.US, "%.4f", it) } ?: "")
+        return AssistantResult.Answer(text, sources, engine = label)
     }
 
     private fun failure(code: Int, body: String): AssistantResult.Failure {

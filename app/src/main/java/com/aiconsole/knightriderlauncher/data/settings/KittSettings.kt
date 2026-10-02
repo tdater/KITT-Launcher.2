@@ -93,6 +93,8 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val diagnosticModel = stringPref("diagnostic_model", DEFAULT_DIAGNOSTIC_MODEL)
     val perplexityChatPreset = stringPref("pplx_chat_preset", "fast")
     val perplexityDiagnosticPreset = stringPref("pplx_diag_preset", "low")
+    /** Agent API model for questions that don't need the web (no search charge); blank = always use presets. */
+    val perplexityLocalModel = stringPref("pplx_local_model", DEFAULT_PERPLEXITY_LOCAL_MODEL)
     val webSearch = boolPref("web_search", true)
     val driverName = stringPref("driver_name", "")
     val voiceReply = boolPref("voice_reply", true)
@@ -240,6 +242,8 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     companion object {
         const val DEFAULT_CHAT_MODEL = "gemini-3.5-flash-lite"
         const val DEFAULT_DIAGNOSTIC_MODEL = "gemini-3.8-flash"
+        /** The model behind Perplexity's "fast" preset. */
+        const val DEFAULT_PERPLEXITY_LOCAL_MODEL = "openai/gpt-6-luna"
         private const val GEMINI_KEY = "gemini_api_key"
         private const val PERPLEXITY_KEY = "perplexity_api_key"
     }

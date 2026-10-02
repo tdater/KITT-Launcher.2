@@ -51,7 +51,9 @@ class AssistantRepository(
                 history = history,
                 driverName = driverName,
                 vehicleContext = context,
-                persona = settings.persona.value
+                persona = settings.persona.value,
+                webGrounded = PerplexityRouting.needsWeb(prompt, useDiagnosticModel, settings.webSearch.value),
+                localModel = settings.perplexityLocalModel.value
             )
         }
     }

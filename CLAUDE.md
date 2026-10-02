@@ -121,6 +121,7 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
 
 **Assistant (`assistant/`):**
 - **Routing:** `AssistantRepository` builds the vehicle context (`ObdManager.vehicleContext()` + 30-day Room baseline via `VehicleContextFormatter`). It routes to `GeminiAssistantClient` or `PerplexityAssistantClient` (Agent API `/v1/agent`; the old Sonar endpoint is retired).
+- **Perplexity credit routing:** `PerplexityRouting.needsWeb` sends current-fact and diagnostic questions to the web-grounded preset; vehicle-data questions and small talk go to `perplexityLocalModel` with no tools, so they don't pay for a search. If that model is rejected (400/404), the client falls back to the preset. Each answer's engine label shows its `usage` cost.
 - **Diagnostic questions:** `KittPersona.isDiagnostic` sends them to the diagnostics model.
 - **Gemini client resilience:**
   - retries without `google_search` when a free-tier key refuses grounding;
