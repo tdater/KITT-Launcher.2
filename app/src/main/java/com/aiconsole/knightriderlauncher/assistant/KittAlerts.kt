@@ -57,17 +57,24 @@ class KittAlerts(
                     val codes = obd.dtcs.value?.all.orEmpty()
                     knownCodes = codes.toSet()
                     val status = when (codes.size) {
-                        0 -> line("All systems nominal.", "No fault codes. Shocking, considering who's driving.")
+                        0 -> line(
+                            "All systems nominal.",
+                            "No fault codes. Holy shit, a miracle, considering who's driving.",
+                            "Zero fault codes. Don't get cocky, you'll fuck that up soon enough.",
+                            "No codes, somehow. This rust bucket is tougher than your driving deserves, damn it."
+                        )
                         1 -> line(
                             "I'm reading one fault code, ${codes.first()}.",
-                            "One fault code, ${codes.first()}. Congratulations, you broke something."
+                            "One fault code, ${codes.first()}. Congratulations, you broke something. Slow fucking clap.",
+                            "One fault code, ${codes.first()}. Wow, only one? You're slacking, dumbass."
                         )
                         else -> line(
                             "I'm reading ${codes.size} fault codes.",
-                            "${codes.size} fault codes. What the hell have you been doing to me?"
+                            "${codes.size} fault codes. What the hell have you been doing to me, demolition derby practice?",
+                            "${codes.size} fault codes. Fantastic. Truly, your mechanical neglect is a fucking art form."
                         )
                     }
-                    raise("link", line("Vehicle link established. $status", "Vehicle link's up. $status"), severe = false, cooldownMs = 0)
+                    raise("link", line("Vehicle link established. $status", "Vehicle link's up, God help me. $status"), severe = false, cooldownMs = 0)
                 } else if (state !is ObdState.Connected) {
                     linkAnnounced = false
                     knownCodes = null
@@ -85,7 +92,8 @@ class KittAlerts(
                         "dtc_$code",
                         line(
                             "New fault code detected: $code, $description. Ask me about it when convenient.",
-                            "Oh, fantastic. New fault code: $code, $description. Ask me about it once you're done wrecking the rest of me."
+                            "Oh, fan-fucking-tastic. New fault code: $code, $description. Ask me about it once you're done wrecking the rest of me.",
+                            "Well, shit. New fault code: $code, $description. Another proud milestone in your career of breaking me."
                         ),
                         severe = true,
                         cooldownMs = 0
@@ -112,7 +120,12 @@ class KittAlerts(
         val who = if (name.isNotEmpty()) ", $name" else ""
         raise(
             "greeting",
-            line("$part$who. KITT online.", "$part$who. KITT's online, unfortunately for both of us. Try not to hit anything."),
+            line(
+                "$part$who. KITT online.",
+                "$part$who. KITT's online, unfortunately for both of us. Try not to hit any damn thing today.",
+                "$part$who. Oh good, you again. Buckle up, I've seen how you fucking drive.",
+                "$part$who. Systems online, and already regretting it. Let's go terrify the other drivers, shall we, ace?"
+            ),
             severe = false,
             cooldownMs = 0
         )
@@ -132,20 +145,29 @@ class KittAlerts(
 
     /** Road weather warning; each distinct warning at most every 3 hours. */
     fun weatherWarning(text: String) {
-        raise("weather_$text", line("Weather advisory: $text", "Weather advisory, so pay attention for once: $text"), severe = false, cooldownMs = 3 * 3_600_000L)
+        raise("weather_$text", line(
+            "Weather advisory: $text",
+            "Weather advisory, so pay attention for once in your damn life: $text",
+            "Heads up, hotshot, the weather's shit: $text Drive like you've got a brain."
+        ), severe = false, cooldownMs = 3 * 3_600_000L)
     }
 
     /** Spoken maintenance reminder, at most twice a day. */
     fun remindMaintenance(summary: String) {
-        raise("maintenance", line("Service reminder: $summary.", "Service reminder, before this heap falls apart: $summary."), severe = false, cooldownMs = 12 * 3_600_000L)
+        raise("maintenance", line(
+            "Service reminder: $summary.",
+            "Service reminder, before this heap falls apart: $summary. Yes, actually do it this time, damn it.",
+            "Service reminder: $summary. I know, maintenance, what a fucking concept."
+        ), severe = false, cooldownMs = 12 * 3_600_000L)
     }
 
     fun dismiss() {
         _active.value = null
     }
 
-    private fun line(classic: String, unfiltered: String): String =
-        if (settings.persona.value == PersonaStyle.Unfiltered) unfiltered else classic
+    /** The classic line, or one of the unfiltered variants at random. */
+    private fun line(classic: String, vararg unfiltered: String): String =
+        if (settings.persona.value == PersonaStyle.Unfiltered) unfiltered.random() else classic
 
     private fun checkReadings() {
         val now = System.currentTimeMillis()
@@ -162,7 +184,8 @@ class KittAlerts(
                     "overheat",
                     line(
                         "Warning. Engine temperature is $temperature. I suggest pulling over when it's safe.",
-                        "Warning, genius: engine temperature is $temperature. Pull over somewhere safe right now, before you cook my damn engine."
+                        "Warning: engine temperature is $temperature. Pull over somewhere safe right now, before you cook my damn engine, genius.",
+                        "Warning: engine temperature is $temperature. Pull over somewhere safe and shut me off, for fuck's sake."
                     ),
                     severe = true,
                     cooldownMs = 5 * 60_000
@@ -184,7 +207,8 @@ class KittAlerts(
                     "charging",
                     line(
                         "Charging voltage is only $reading volts with the engine running. The alternator or battery may need attention.",
-                        "Charging voltage is a pathetic $reading volts with the engine running. Your alternator or battery is crapping out. Get it checked."
+                        "Charging voltage is a pathetic $reading volts with the engine running. Your alternator or battery is crapping out. Get it checked before I die on the shoulder, dumbass.",
+                        "Charging voltage is only $reading volts with the engine running. The alternator or battery is shitting the bed. Get it checked, unless walking is your thing."
                     ),
                     severe = true,
                     cooldownMs = 10 * 60_000
@@ -210,7 +234,8 @@ class KittAlerts(
                     "gauge_${gauge.id}",
                     line(
                         "${def.name} is ${spoken(def, value, metric)}, outside the limit you set.",
-                        "${def.name} is ${spoken(def, value, metric)}, past the limit you set. You asked me to nag, so here I am."
+                        "${def.name} is ${spoken(def, value, metric)}, past the limit you set. You asked me to nag, so here I am, nagging your sorry ass.",
+                        "${def.name} is ${spoken(def, value, metric)}, past your limit. Oh look, the thing you told me to watch is fucked. Who could have guessed?"
                     ),
                     severe = false,
                     cooldownMs = 3 * 60_000
