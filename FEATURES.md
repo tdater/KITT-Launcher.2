@@ -12,7 +12,7 @@ A Knight Rider–themed home screen for Android car head units. It replaces the 
   - It can also show over other apps as a see-through strip that ignores touches (a `TYPE_APPLICATION_OVERLAY` at 80% opacity, the most Android 12+ allows while still letting taps through).
   - **Shift light option:** the scanner flashes as the engine approaches an RPM you choose (5,000 by default).
   - *Under the hood:* a shared simulation engine (eased head movement with exponentially fading lamps) drives both the in-app scanner and the overlay.
-- **11 themes:**
+- **10 themes:**
   - **Colour themes:** KITT, KARR, Night Vision, Super Pursuit, Retro VFD, Outrun and Stealth.
   - **Film HUD themes:** these change much more than colours, including the fonts, panel shapes, the scanner, the panel frames, a full-screen scanline effect and themed status text.
     - **Terminator:** a red-tinted vision overlay, a 20-segment scanner, and T-800 readouts such as "THREAT ASSESSMENT: NONE".
