@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Knight Rider Launcher"
+rootProject.name = "KITT Launcher.2"
 include(":app")

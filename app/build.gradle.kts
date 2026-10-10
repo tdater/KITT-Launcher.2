@@ -15,13 +15,13 @@ val localProperties = Properties().apply {
 }
 
 android {
-    namespace = "com.aiconsole.knightriderlauncher"
+    namespace = "com.aiconsole.kittlauncher2"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.aiconsole.knightriderlauncher"
+        applicationId = "com.aiconsole.kittlauncher2"
         minSdk = 24
         targetSdk = 37
         // CI builds number themselves so in-app updates always see a newer version. A release

@@ -20,7 +20,7 @@ If no change was given, finish the work in progress: the uncommitted diff plus t
 ## 2. Implement
 
 - Make the complete change in source files. Never edit `app/build/`, `build/`, `.gradle/`, `.kotlin/` or generated KSP output.
-- Add or extend JVM unit tests in `app/src/test/java/com/aiconsole/knightriderlauncher/` for any plain-Kotlin logic (parsers, formulas, formatters). These tests can't use `org.json` or Android framework classes.
+- Add or extend JVM unit tests in `app/src/test/java/com/aiconsole/kittlauncher2/` for any plain-Kotlin logic (parsers, formulas, formatters). These tests can't use `org.json` or Android framework classes.
 - Never add or trigger vehicle write commands (Mode 04, ECU writes) unless the owner explicitly asked for them.
 
 ## 3. Capacitor sync (only if necessary)

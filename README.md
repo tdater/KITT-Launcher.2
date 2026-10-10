@@ -1,7 +1,9 @@
-# KITT Launcher
+# KITT Launcher.2
 
 A Knight Rider (KITT) themed Android home-screen launcher for aftermarket car head units, built
-for a 12.1" portrait Tesla-style unit and adapting to landscape screens. It includes:
+for **7" to 10" landscape** screens (1024x600, 1280x720, 1280x800 and similar). It is the
+landscape, small-screen edition of the original 12.1" portrait KITT Launcher, with a lighter
+footprint for cheap head units. It includes:
 
 - an ELM327 OBD-II car scanner (gauges, fault codes, readiness, custom PIDs, data logging);
 - KITT, a voice and text AI co-pilot (Gemini or Perplexity) that sees live vehicle data;
@@ -10,6 +12,23 @@ for a 12.1" portrait Tesla-style unit and adapting to landscape screens. It incl
 - the always-on red scanner light and ten themes.
 
 See [FEATURES.md](FEATURES.md) for everything it does.
+
+## What's different from the original
+
+- **Landscape shell:** a side rail (KITT plus the page buttons) and a slim one-row dock replace
+  the page tabs and the tall dock, so the pages get nearly the whole height of a short screen.
+  The KITT panel splits into controls on the left and the conversation on the right.
+- **Screen size setting** (KITT Config → Display): Auto fits 480–800 dp tall screens; Compact,
+  Normal and Large override it.
+- **Lite mode** (Auto, Lite, Full): on cheap units (3 GB RAM or less, or four cores or fewer) the
+  browser keeps fewer pages loaded, the scanner and its overlay draw at 30 fps, idle animations
+  stop and the Matrix rain is off. Every feature still works.
+- **Lighter browser everywhere:** hidden silent pages pause, the least recently used hidden
+  tabs are freed (and reload when opened), and every hidden page is freed when Android runs
+  low on memory. Playing pages keep playing.
+- **Savage KITT**, the new default personality: even more sarcasm and swearing than Unfiltered,
+  with the same accuracy and safety rules. Unfiltered and Classic are still there.
+- Installs alongside the original (`com.aiconsole.kittlauncher2`).
 
 ## Building
 

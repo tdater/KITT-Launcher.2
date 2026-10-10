@@ -30,12 +30,12 @@ This is the owner's personal project, and they vibe code it. Deliver complete, w
 
 ## What this is
 
-A Knight Rider (KITT) themed Android **home-screen launcher** for aftermarket car head units, primarily a 12.1" portrait (9:16) Tesla-style unit. It includes:
+**KITT Launcher.2**: a Knight Rider (KITT) themed Android **home-screen launcher** for aftermarket car head units, built for **7"–10" landscape** screens (1024x600 mdpi, 1280x720 hdpi, 1280x800 and similar) and light enough for cheap units. It was forked from the 12.1" portrait KITT Launcher (`com.aiconsole.knightriderlauncher`) and installs alongside it. It includes:
 - an ELM327 OBD-II scanner (Car Scanner-style gauges, codes and custom PIDs);
 - a voice/text AI copilot ("KITT") that sees live vehicle data;
 - an always-on red scanner light.
 
-Single `:app` module, Jetpack Compose, package `com.aiconsole.knightriderlauncher`.
+Single `:app` module, Jetpack Compose, package `com.aiconsole.kittlauncher2`.
 
 ## Build / test commands (Windows, PowerShell)
 
@@ -45,11 +45,11 @@ Gradle needs a JDK; use Android Studio's bundled JBR:
 $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 .\gradlew.bat assembleDebug
 .\gradlew.bat testDebugUnitTest
-.\gradlew.bat testDebugUnitTest --tests "com.aiconsole.knightriderlauncher.ObdProtocolTest"   # single class
+.\gradlew.bat testDebugUnitTest --tests "com.aiconsole.kittlauncher2.ObdProtocolTest"   # single class
 .\gradlew.bat lintDebug    # text report: app/build/intermediates/lint_intermediate_text_report/
 ```
 
-CI: `.github/workflows/android.yml` runs tests, lint and the debug build; with signing secrets (`KITT_KEYSTORE_BASE64` etc.) it also builds a signed release, published on `v*` tags for the in-app updater. CI sets `versionCode` from the run number.
+CI: `.github/workflows/android.yml` runs tests, lint and the debug build; with signing secrets (`KITT_KEYSTORE_BASE64` etc.) it also builds a signed release, published on `v*` tags to `tdater/KITT-Launcher.2-releases` (that repo and a `RELEASES_TOKEN` secret must exist) for the in-app updater. CI sets `versionCode` from the run number.
 
 Toolchain: AGP 9.x with **built-in Kotlin** (no `kotlin-android` plugin), Compose BOM, KSP 2.3.x (decoupled from Kotlin version) for Room, OkHttp 5. Versions live in `gradle/libs.versions.toml`. minSdk 24, target/compile 37.
 
@@ -72,12 +72,17 @@ Don't rewrite source files with PowerShell `Get-Content`/`Set-Content`. Windows 
 There's no DI framework. Composables that need them do `LocalContext.current.applicationContext as KittApplication`.
 
 **UI shell** (`MainActivity.kt`):
-- **`LauncherRoot`:** a permanent `KittScanner` strip (doubles as a shift light), then a `BoxWithConstraints` holding a `HorizontalPager` of `HomePage`s, page tabs, and the fixed dock.
+- **`LauncherRoot`:** a permanent `KittScanner` strip (doubles as a shift light; 12–22 dp by screen height), then a `BoxWithConstraints` holding a `HorizontalPager` of `HomePage`s.
+  - **Landscape (`DeviceProfile.useRail`, the main target):** `NavRail` (KITT + page buttons) on the left, pages, and the one-row `DockBar` (in `ControlDock.kt`) below. Height is the scarce dimension on 7"–10" units; don't add rows above or below the pages.
+  - **Portrait / squarish:** page tabs and the stacked `ControlDock`, as in the original.
+  - **Screen fit:** `MainActivity` overrides `LocalDensity` by `DeviceProfile.scale` (`UiScale` setting; Auto from the screen's short side). Sizes in dp scale with it; WebViews and the map are unaffected.
+  - **Lite mode (`LiteMode`, `KittApplication.lite`, `LocalLiteMode`):** Auto from `lowEndDevice` (≤ 3 GB RAM, ≤ 4 cores or the low-RAM flag). Lite caps the scanner and overlay at 30 fps, freezes idle animations, drops the Matrix rain, keeps fewer WebViews and skips off-screen pre-raster. New animations must stand still when idle and respect `LocalLiteMode`.
   - **Drive:** tall screens (height ≥ 1.2× width) stack map 50% / grid 35%; wide screens put them side by side. The grid shows pinned favourites, else all non-hidden apps (`AppLists`).
   - **Gauges / Media / Apps:** `GaugeWallPane`, `MediaPane` (active `MediaSession` via `MediaBridge`, needs notification access), `AppDrawerPane` (search, A–Z rail, pin/hide).
   - **Browser (`browser/`, `ui/browser/BrowserView`):** one tabbed WebView browser behind the stream window and the AI and Games pages. Each `BrowserSession` has its own WebView profile (sandboxed sign-ins) where `MULTI_PROFILE` is supported.
     - Per-site options (`SiteSettings`): desktop/mobile, dark pages, ad blocking (`AdBlock`, never on YouTube), text size.
     - Pop-ups the driver triggers open as tabs. Non-web schemes are dropped so apps can't take over the screen.
+    - Memory (`DeviceProfile.liveWebViews`, `WebMedia.enforceBudget`): pages pause (`WebView.onPause`) when hidden and silent, and while the launcher is behind another app; least recently used hidden tabs are discarded beyond the budget and reload from their URL when shown; `onTrimMemory` frees every hidden page. Visible and playing tabs are never discarded.
     - Background sound (`WebMedia`): WebViews attach only on the settled pager page (`LocalWebViewHostActive`); a playing page leaving the screen is parked in a 1×1 container so it keeps playing. Pages report playback through the `KittMedia` JS bridge (`PageScripts.MEDIA_WATCH`); one page plays at a time, and it holds audio focus (`MediaFocus`: loss pauses, transient loss pauses until regained, ducking does nothing).
     - Userscripts (`stream/Userscripts`, `UserscriptStore`) inject at document start. `.user.js` links and downloads prompt to install.
     - `PageScripts` holds the toolbar's JS (close pop-ups, scroll, find install link).
@@ -110,7 +115,7 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
   - **Headers:** CAN polling targets the engine header `7E0`; code reads switch to broadcast `7DF`.
   - **Units and logging:** values are stored in **metric base units** and converted with `Quantity.toDisplay`. Readings feed `TripMetricRecorder` at 1 Hz.
 - **`ObdConnectionService`:** just holds the foreground lifetime (type `connectedDevice`).
-- **Demo mode (`DemoSession`, debug builds only):** `am start -n com.aiconsole.knightriderlauncher/.MainActivity --ez kitt.demo true` feeds simulated readings, a sample stored code and one past trip, labelled "DEMO (simulated)", for screenshots. Nothing is sent to an adapter; a real connect or disconnect ends it.
+- **Demo mode (`DemoSession`, debug builds only):** `am start -n com.aiconsole.kittlauncher2/.MainActivity --ez kitt.demo true` feeds simulated readings, a sample stored code and one past trip, labelled "DEMO (simulated)", for screenshots. Nothing is sent to an adapter; a real connect or disconnect ends it.
 - **Diagnostics tools** (all read-only): `ReadinessDecoder`, `Mode06`, `ModuleScan`, `PerformanceTimer`, `BatteryHealth`, `VinDecoder` + NHTSA lookup, maintenance/fuel (`VehicleService`). The raw console goes through `ConsoleSafety`'s allow-list; keep it read-only. `ConnectionLog` tags events by `LinkLayer`. Saved adapters (`AdapterProfiles`) are tried in rotation.
 
 **PIDs:**
@@ -130,7 +135,7 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
   - retries without `google_search` when a free-tier key refuses grounding;
   - swaps a retired model (404) for the newest same-tier model from `listModels` and persists it.
 - **Errors:** clients return the sealed `AssistantResult` instead of throwing.
-- **Persona:** `KittPersona` holds the personality (`PersonaStyle.Unfiltered`, the default and the owner's explicit choice: crude, sarcastic and profane on every reply; or `Classic`) plus non-negotiable accuracy and driving-safety rules. `KittAlerts` has matching spoken variants.
+- **Persona:** `KittPersona` holds the personality plus non-negotiable accuracy and driving-safety rules. `PersonaStyle.Savage` is the default and the owner's explicit choice for this edition (Unfiltered turned up further: swearing in every sentence, sarcasm on every fact, a parting shot); `Unfiltered` and `Classic` remain. Check `persona.rude`, never `== Unfiltered`. Spoken lines go through `SavageLines.pick` (Savage appends a jab after the facts); `KittAlerts`, `LauncherCommandRunner` and `RouteRules` have the rude variants.
 - **Keys:** API keys are entered in-app and encrypted with an Android Keystore AES-GCM key (`SecureStore`). `BuildConfig.GEMINI_API_KEY` from `local.properties` is only a dev fallback.
 - **Voice commands:** `VoiceCommands` (pure parser) is tried before the AI; `LauncherCommandRunner` runs matches and sends home-screen changes over `LauncherBus`. `WakeWordListener` ("Hey KITT") restarts the recognizer in short sessions and pauses while an overlay or KITT's voice is active.
 - **Problem reports:** `ProblemReport` installs a crash handler (files in `filesDir/crashes`) and writes a text report (crashes, connection log, settings without keys, own logcat) from KITT Config.

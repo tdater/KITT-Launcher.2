@@ -1,8 +1,15 @@
-# KITT Launcher: Features and Options
+# KITT Launcher.2: Features and Options
 
-A Knight Rider–themed home screen for Android car head units. It replaces the unit's stock home screen with a KITT-style dashboard. It adds an OBD-II car scanner and an AI co-pilot named KITT that can see your truck's live data, plus a browser for video, music, AI chat and games. It is built for a 12.1" portrait (9:16) Tesla-style head unit, and it also adapts to landscape screens.
+A Knight Rider–themed home screen for Android car head units. It replaces the unit's stock home screen with a KITT-style dashboard. It adds an OBD-II car scanner and an AI co-pilot named KITT that can see your truck's live data, plus a browser for video, music, AI chat and games. It is built for 7" to 10" landscape head units (1024x600, 1280x720, 1280x800 and similar) and keeps a stacked layout for portrait screens.
 
-*Technical summary:* a native Android app in Kotlin and Jetpack Compose (single module), running on Android 7.0+ (minSdk 24, target SDK 37). It uses Room for trip history, OkHttp for networking, osmdroid for the map, and AndroidX WebKit for the browser. There are no Google Play Services or analytics dependencies. Logic such as the OBD parsing, formulas, trip maths and voice-command parsing is plain Kotlin and covered by about 142 JVM unit tests.
+**New in KITT Launcher.2:**
+- **Landscape shell:** KITT and the page buttons in a side rail, the pages in the middle, and a slim one-row dock (last trip, now playing with media keys, Diagnostics, Trips, Config, System) along the bottom. The KITT panel puts its controls on the left and the conversation on the right.
+- **Screen size** (KITT Config → Display): Auto (fits short 480 dp screens and big 10" panels), Compact, Normal or Large.
+- **Lite mode** (KITT Config → Display → Performance): Auto, Lite or Full. Lite keeps at most two web pages loaded, draws the scanner (and its overlay over other apps) at 30 fps, stops idle animations and turns the Matrix rain off. Auto turns it on for units with 3 GB of RAM or less or four CPU cores or fewer.
+- **Lighter browser:** hidden pages that aren't playing sound pause; the least recently used hidden tabs are freed and reload when opened; when Android runs low on memory every hidden page is freed. Pages only pre-render off screen on capable units.
+- **Savage KITT** personality (the new default): see Personality below.
+
+*Technical summary:* a native Android app in Kotlin and Jetpack Compose (single module), running on Android 7.0+ (minSdk 24, target SDK 37). It uses Room for trip history, OkHttp for networking, osmdroid for the map, and AndroidX WebKit for the browser. There are no Google Play Services or analytics dependencies. Logic such as the OBD parsing, formulas, trip maths and voice-command parsing is plain Kotlin and covered by about 154 JVM unit tests.
 
 ---
 
@@ -66,7 +73,8 @@ Swipe left and right between pages or tap the page buttons. A swipe that starts 
 - **Sources:** web-grounded answers list their sources.
 - **Subscriptions:** if you pay for Gemini, Claude or Perplexity Pro, KITT can hand your question to that official app, since consumer subscriptions can't be used through an API.
 - **Personality:**
-  - **Unfiltered KITT** (the default): savagely sarcastic and foul-mouthed, swearing in every reply and alert and roasting your driving and your vehicle, while every fact stays accurate, including turn-by-turn directions (each turn is said plainly first, then the insult);
+  - **Savage KITT** (the default): Unfiltered with the dial past maximum, swearing in every sentence, sarcasm on every fact and a parting shot on every spoken line, with the same accuracy and safety rules;
+  - **Unfiltered KITT**: savagely sarcastic and foul-mouthed, swearing in every reply and alert and roasting your driving and your vehicle, while every fact stays accurate, including turn-by-turn directions (each turn is said plainly first, then the insult);
   - **Classic KITT:** the polite TV version.
   - Both follow strict rules: don't make things up, and don't distract the driver.
 - **Voice:**
