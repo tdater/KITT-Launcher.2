@@ -17,6 +17,7 @@ import com.aiconsole.kittlauncher2.assistant.TextToSpeechHelper
 import com.aiconsole.kittlauncher2.assistant.WakeWordListener
 import com.aiconsole.kittlauncher2.browser.WebMedia
 import com.aiconsole.kittlauncher2.data.DeviceProfile
+import com.aiconsole.kittlauncher2.data.FreezeWatchdog
 import com.aiconsole.kittlauncher2.data.ProblemReport
 import com.aiconsole.kittlauncher2.data.StartupRoutine
 import com.aiconsole.kittlauncher2.data.settings.KittSettings
@@ -182,6 +183,7 @@ class KittApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         ProblemReport.installCrashHandler(this)
+        FreezeWatchdog.start(this)
         // The home pager pre-composes neighbouring pages in pieces across frames. With a WebView
         // (AndroidView) on those pages that crashed the launcher on the head unit ("LayoutNode
         // should be attached to an owner"), so prefetch composes whole pages at once instead.

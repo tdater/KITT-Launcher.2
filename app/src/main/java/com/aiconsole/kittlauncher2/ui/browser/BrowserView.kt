@@ -255,6 +255,10 @@ private fun Page(session: BrowserSession, tab: BrowserTab, modifier: Modifier) {
     if (tab.isPicker) return
     val hostActive = LocalWebViewHostActive.current
     Box(modifier.clip(MaterialTheme.shapes.small).border(1.dp, KittBezel, MaterialTheme.shapes.small).background(KittBlack)) {
+        if (tab.gone) {
+            PageStopped(session, tab)
+            return@Box
+        }
         if (hostActive) key(tab.id) {
             AndroidView(
                 factory = { context ->
@@ -276,6 +280,28 @@ private fun Page(session: BrowserSession, tab: BrowserTab, modifier: Modifier) {
             Canvas(Modifier.fillMaxWidth().height(3.dp).align(Alignment.TopStart)) {
                 drawRect(ScannerRed, size = Size(size.width * tab.progress / 100f, size.height))
             }
+        }
+    }
+}
+
+/** The page's renderer died (crash, out of memory, or shut down because it hung the launcher). */
+@Composable
+private fun PageStopped(session: BrowserSession, tab: BrowserTab) {
+    Column(
+        Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("PAGE STOPPED", style = MaterialTheme.typography.titleMedium, color = ScannerRed)
+        Text(
+            "${tab.title ?: tab.host ?: "This page"} stopped responding or ran out of memory, so it was shut down " +
+                "to keep the launcher running. Long AI chats are the usual cause: start a new chat if it happens again.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = DashWhite
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            KittButton("Reload", { session.reloadGone(tab) }, Modifier.height(48.dp).width(120.dp), LedGreen, active = true)
+            KittButton("Close tab", { session.closeTab(session.tabs.indexOf(tab)) }, Modifier.height(48.dp).width(120.dp), DashGrey)
         }
     }
 }
