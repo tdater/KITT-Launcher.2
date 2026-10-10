@@ -415,7 +415,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
             item {
                 HelpText(
                     "Auto fits 7\" to 10\" landscape head units: a little smaller on short 480 dp screens (1280x720), " +
-                        "a little larger on big 10\" panels. Compact fits more on screen; Large is easier to hit while driving."
+                        "a little larger on big 10\" panels; portrait screens keep their normal size. Compact fits more on screen; Large is easier to hit while driving."
                 )
             }
             item { Text("PERFORMANCE", style = MaterialTheme.typography.labelMedium, color = DashGrey) }

@@ -35,6 +35,7 @@ class DeviceProfileTest {
         assertEquals(0.8f, DeviceProfile.autoScale(640, 360), 0f)
         assertEquals(1.1f, DeviceProfile.autoScale(1280, 800), 0f) // 10" 1280x800 mdpi
         assertEquals(1f, DeviceProfile.autoScale(0, 0), 0f)
+        assertEquals(1f, DeviceProfile.autoScale(800, 1280), 0f) // portrait keeps its density
         assertEquals(0.85f, DeviceProfile.scale(UiScale.Compact, 1024, 600), 0f)
         assertEquals(0.9f, DeviceProfile.scale(UiScale.Auto, 853, 480), 0f)
     }

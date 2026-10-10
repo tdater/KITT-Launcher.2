@@ -41,8 +41,10 @@ object DeviceProfile {
      * The layout is designed for a landscape screen about 600 dp tall (1024×600 at mdpi, the
      * classic 7"–10" head unit). Shorter screens (1280×720 at hdpi is 480 dp) draw slightly
      * smaller so everything fits without scrolling; tall 10" panels draw slightly larger.
+     * Portrait screens keep the density Android gives them (their layout was tuned on it).
      */
     fun autoScale(widthDp: Int, heightDp: Int): Float {
+        if (heightDp > widthDp) return 1f
         val shortSide = min(widthDp, heightDp)
         return when {
             shortSide <= 0 -> 1f
