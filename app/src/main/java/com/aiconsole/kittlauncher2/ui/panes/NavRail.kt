@@ -22,6 +22,7 @@ import com.aiconsole.kittlauncher2.ui.theme.KittBlack
 import com.aiconsole.kittlauncher2.ui.theme.KittCharcoal
 import com.aiconsole.kittlauncher2.ui.theme.KittGrid
 import com.aiconsole.kittlauncher2.ui.theme.ScannerRed
+import com.aiconsole.kittlauncher2.ui.theme.assistantName
 
 /**
  * Side rail for landscape head units: KITT on top, then one console button per home page.
@@ -62,7 +63,7 @@ fun NavRail(
         ) {
             VoiceModulator(active = kittSpeaking, modifier = Modifier.fillMaxWidth().weight(1f))
             Text(
-                "KITT",
+                assistantName(),
                 modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.labelLarge,
                 color = ScannerRed,

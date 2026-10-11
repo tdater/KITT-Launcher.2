@@ -44,6 +44,7 @@ import com.aiconsole.kittlauncher2.ui.theme.KittCharcoal
 import com.aiconsole.kittlauncher2.ui.theme.KittGrid
 import com.aiconsole.kittlauncher2.ui.theme.LedGreen
 import com.aiconsole.kittlauncher2.ui.theme.ScannerRed
+import com.aiconsole.kittlauncher2.ui.theme.assistantName
 import com.aiconsole.kittlauncher2.ui.trip.rememberRecentTrips
 import java.util.Locale
 
@@ -214,7 +215,7 @@ private fun AssistantSection(onClick: () -> Unit, speaking: Boolean, modifier: M
                 .weight(1f)
         )
         Text(
-            text = "KITT",
+            text = assistantName(),
             modifier = Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.titleMedium,
             color = ScannerRed,
