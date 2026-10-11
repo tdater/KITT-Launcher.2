@@ -10,6 +10,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.ui.graphics.Color
 import com.aiconsole.kittlauncher2.assistant.AssistantPrompt
 import com.aiconsole.kittlauncher2.assistant.AssistantRepository
+import com.aiconsole.kittlauncher2.assistant.DriveAssistant
 import com.aiconsole.kittlauncher2.assistant.GeminiAssistantClient
 import com.aiconsole.kittlauncher2.assistant.KittAlerts
 import com.aiconsole.kittlauncher2.assistant.PerplexityAssistantClient
@@ -27,6 +28,7 @@ import com.aiconsole.kittlauncher2.media.MediaBridge
 import com.aiconsole.kittlauncher2.nav.GpsTracker
 import com.aiconsole.kittlauncher2.nav.NavServices
 import com.aiconsole.kittlauncher2.nav.RouteNavigator
+import com.aiconsole.kittlauncher2.nav.SpeedLimitService
 import com.aiconsole.kittlauncher2.nav.WeatherService
 import com.aiconsole.kittlauncher2.obd.AdapterConfig
 import com.aiconsole.kittlauncher2.obd.AdapterProfiles
@@ -38,15 +40,18 @@ import com.aiconsole.kittlauncher2.obd.ObdManager
 import com.aiconsole.kittlauncher2.obd.PidHistory
 import com.aiconsole.kittlauncher2.obd.VehicleService
 import com.aiconsole.kittlauncher2.stream.UserscriptStore
+import com.aiconsole.kittlauncher2.ui.components.SoundFx
 import com.aiconsole.kittlauncher2.ui.components.UiSounds
 import com.aiconsole.kittlauncher2.ui.theme.NightModeController
 import com.aiconsole.kittlauncher2.ui.theme.ThemeState
+import com.aiconsole.kittlauncher2.ui.theme.UiTheme
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -131,7 +136,17 @@ class KittApplication : Application() {
     val assistantInbox = MutableStateFlow<AssistantPrompt?>(null)
 
     /** Night dimming (light sensor or clock); the activity turns the sensor on while visible. */
-    val nightMode: NightModeController by lazy { NightModeController(this, settings, appScope) }
+    val nightMode: NightModeController by lazy { NightModeController(this, settings, appScope) { gps.position() } }
+
+    /** The road's speed limit from OpenStreetMap, while the launcher shows. */
+    val speedLimits: SpeedLimitService by lazy { SpeedLimitService(gps, settings, appScope) }
+
+    /** Driving commentary, low-fuel and speed warnings, parking spot and report cards. */
+    val driveAssistant: DriveAssistant by lazy {
+        DriveAssistant(obd, gps, navigator, speedLimits, alerts, settings, tripDatabase.tripMetricDao(), {
+            vehicle.rangeKm(null)
+        }, appScope)
+    }
 
     /** Cheap head-unit hardware (little RAM or few cores): lite mode's Auto setting turns on. */
     val lowEndDevice: Boolean by lazy {
@@ -192,9 +207,14 @@ class KittApplication : Application() {
         WebMedia.init(this)
         // Apply the saved look before the first frame, then follow changes from KITT Config.
         ThemeState.theme = settings.uiTheme.value
+        // The night theme (if one is chosen) takes over while night mode says it's dark.
         appScope.launch(Dispatchers.Main) {
-            settings.uiTheme.state.collect { ThemeState.theme = it }
+            combine(settings.uiTheme.state, settings.nightTheme.state, nightMode.night) { day, nightName, dark ->
+                val nightTheme = runCatching { UiTheme.valueOf(nightName) }.getOrNull()
+                if (dark && nightTheme != null) nightTheme else day
+            }.collect { ThemeState.theme = it }
         }
+        appScope.launch { settings.soundEffects.state.collect { SoundFx.enabled = it } }
         appScope.launch(Dispatchers.Main) {
             settings.accentColor.state.collect { argb ->
                 ThemeState.accentOverride = if (argb == 0L) null else Color(argb.toInt())
@@ -211,6 +231,7 @@ class KittApplication : Application() {
         appScope.launch { settings.buttonSounds.state.collect { UiSounds.enabled = it } }
         appScope.launch(Dispatchers.Main) {
             vehicle.start()
+            driveAssistant.start()
         }
         appScope.launch(Dispatchers.IO) {
             try {
