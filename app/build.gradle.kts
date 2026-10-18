@@ -1,3 +1,4 @@
+import java.security.MessageDigest
 import java.util.Properties
 
 plugins {
@@ -85,7 +86,7 @@ android {
 val sherpaVersion = "1.13.8"
 val sherpaSha256 = "633c24321e06b1fe79feafa03ea16cbc0f8a286641e2da3559bac91bdb13bd96"
 val sherpaAar = file("libs/sherpa-onnx-$sherpaVersion.aar")
-fun sha256(f: File): String = java.security.MessageDigest.getInstance("SHA-256")
+fun sha256(f: File): String = MessageDigest.getInstance("SHA-256")
     .digest(f.readBytes()).joinToString("") { "%02x".format(it) }
 if (!sherpaAar.exists() || sha256(sherpaAar) != sherpaSha256) {
     sherpaAar.parentFile.mkdirs()
