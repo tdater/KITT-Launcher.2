@@ -181,6 +181,7 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
 - GM tire pressures: BCM header 241, `22 5005`–`5008`, sourced from OBDb (2022 Blazer).
 
 **Film themes (`HudStyle`: Terminator, RoboCop, Matrix, Future = Back to the Future):**
+- `FilmEdition` (`ui/theme/FilmEditions.kt`): three editions per film (palette, HUD text, intro, alert title, default character); the first is the original look. `ThemeState.edition` / `filmCharacter` follow the `filmChoices` setting (`FilmChoices` format); scanner, overlay, panel titles and map reticle switch on the edition. 12 `FilmCharacter`s, three per film. `FilmSounds` (synthesized start-up sounds), `FilmMoments.reached88` (88 km/h nod on the BTTF status strip).
 - `FilmHud.kt`: status/intro/alert text (`FilmHudText`), the full-screen overlay (Terminator's scrolling machine code, RoboCop's visor sweep; still in lite mode) and `hudFrame` (brackets, ticks, BTTF rivets).
 - `FilmExtras.kt`: `ThemeIntro` boot sequence when a film theme comes on (`filmIntros`), `TimeCircuitsStrip` (BTTF replaces the status-strip clock; `TimeCircuits` is pure), `FilmMapReticle`, `FilmAlertHeader`, `assistantName()`.
 - `KittScanner` (flux pulses for BTTF), `VoiceModulator` (flux capacitor / oscilloscope), `KittPanel` titles (label tape for BTTF).
