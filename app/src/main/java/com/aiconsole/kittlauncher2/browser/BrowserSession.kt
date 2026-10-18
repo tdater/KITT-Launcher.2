@@ -64,7 +64,10 @@ class BrowserTab(val id: Long, initialUrl: String?, initialTitle: String?) {
 
     /** On screen right now (its WebView is attached in a page, not parked or hidden). */
     var attached = false
-        internal set
+        internal set(value) {
+            if (field != value) WebMedia.pageShown(value)
+            field = value
+        }
 
     /** When the tab was last shown, for discarding the least recently used hidden tabs. */
     var lastUsed = 0L
@@ -231,7 +234,8 @@ class BrowserSession(
     }
 
     fun isDesktop(tab: BrowserTab): Boolean =
-        !SiteSettings.forcesMobile(tab.host) && (siteConfig(tab)?.desktop ?: settings.streamDesktop.value)
+        !SiteSettings.forcesMobile(tab.host) &&
+            (siteConfig(tab)?.desktop ?: (!SiteSettings.prefersMobile(tab.host) && settings.streamDesktop.value))
     fun isDark(tab: BrowserTab): Boolean = siteConfig(tab)?.dark ?: settings.darkPages.value
     fun blocksAds(tab: BrowserTab): Boolean =
         SiteSettings.blockAllowed(tab.host) && (siteConfig(tab)?.blockAds ?: settings.blockAds.value)

@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
+import com.aiconsole.kittlauncher2.browser.WebMedia
 import kotlin.random.Random
 
 /** Text the film HUD themes show in the status strip, panels, screensaver and intros. */
@@ -145,7 +146,10 @@ object FilmHudText {
  */
 @Composable
 fun FilmHudOverlay(style: HudStyle, modifier: Modifier = Modifier) {
-    val animate = !LocalLiteMode.current && (style == HudStyle.Terminator || style == HudStyle.RoboCop)
+    // Still over a web page too: this layer covers the whole screen, so every frame of it made
+    // the page underneath composite again.
+    val animate = !LocalLiteMode.current && WebMedia.pagesOnScreen == 0 &&
+        (style == HudStyle.Terminator || style == HudStyle.RoboCop)
     var now by remember { mutableLongStateOf(0L) }
     if (animate) {
         LaunchedEffect(style) {

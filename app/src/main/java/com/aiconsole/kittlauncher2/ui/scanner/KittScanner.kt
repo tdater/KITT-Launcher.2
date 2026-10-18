@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.withScale
+import com.aiconsole.kittlauncher2.browser.WebMedia
 import com.aiconsole.kittlauncher2.data.DeviceProfile
 import com.aiconsole.kittlauncher2.ui.theme.DashAmber
 import com.aiconsole.kittlauncher2.ui.theme.HudStyle
@@ -61,8 +62,8 @@ fun KittScanner(
     val code = remember { CodeBar() }
     val engine = remember(lamps) { ScannerEngine(lamps) }
     var frameNanos by remember { mutableLongStateOf(0L) }
-    // Lite mode: ~30 fps is plenty for the sweep and halves the redraws.
-    val minFrame = DeviceProfile.scannerFrameNanos(LocalLiteMode.current)
+    // Lite mode: ~30 fps is plenty for the sweep and halves the redraws. Slower still beside a web page.
+    val minFrame = DeviceProfile.scannerFrameNanos(LocalLiteMode.current, WebMedia.pagesOnScreen > 0)
     LaunchedEffect(engine, minFrame) {
         while (true) withFrameNanos { if (it - frameNanos >= minFrame) frameNanos = it }
     }
