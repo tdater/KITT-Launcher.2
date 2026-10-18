@@ -136,6 +136,7 @@ import com.aiconsole.kittlauncher2.ui.settings.KittConfigScreen
 import com.aiconsole.kittlauncher2.ui.theme.DashAmber
 import com.aiconsole.kittlauncher2.ui.theme.DashWhite
 import com.aiconsole.kittlauncher2.ui.theme.FilmAlertHeader
+import com.aiconsole.kittlauncher2.ui.theme.FilmEdition
 import com.aiconsole.kittlauncher2.ui.theme.FilmHudOverlay
 import com.aiconsole.kittlauncher2.ui.theme.HudStyle
 import com.aiconsole.kittlauncher2.ui.theme.ThemeIntro
@@ -388,7 +389,7 @@ class MainActivity : ComponentActivity() {
     private fun launchChecks() {
         if (checked) return
         checked = true
-        SoundFx.scanner()
+        ThemeState.theme.hud?.let(SoundFx::film) ?: SoundFx.scanner()
         if (!HomeScreen.isDefault(this)) kitt.alerts.notHomeScreen()
         val settings = kitt.settings
         val info = runCatching { packageManager.getPackageInfo(packageName, 0) }.getOrNull()
@@ -941,14 +942,20 @@ fun LauncherRoot(
         }
 
         // Film HUD themes: scanlines and vignette / visor glow over everything (no touch handling).
-        ThemeState.theme.hud?.let { FilmHudOverlay(it, Modifier.fillMaxSize()) }
+        ThemeState.edition?.let { FilmHudOverlay(it, Modifier.fillMaxSize()) }
 
         // A film theme's boot sequence when it comes on (at start and on switching).
         val introsOn = (context.applicationContext as? KittApplication)?.settings?.filmIntros?.state?.collectAsState()?.value ?: false
-        var intro by remember { mutableStateOf<HudStyle?>(null) }
-        val hudNow = ThemeState.theme.hud
-        LaunchedEffect(hudNow) { intro = if (introsOn) hudNow else null }
-        intro?.let { style -> ThemeIntro(style, onDone = { intro = null }) }
+        var intro by remember { mutableStateOf<FilmEdition?>(null) }
+        val editionNow = ThemeState.edition
+        var firstEdition by remember { mutableStateOf(true) }
+        LaunchedEffect(editionNow) {
+            intro = if (introsOn) editionNow else null
+            // Switching film or edition plays its start-up sound (at launch, launchChecks does).
+            if (!firstEdition) editionNow?.let { SoundFx.film(it.film) }
+            firstEdition = false
+        }
+        intro?.let { edition -> ThemeIntro(edition, onDone = { intro = null }) }
 
         if (saver) {
             Screensaver(onWake = {
@@ -1055,7 +1062,7 @@ private fun AlertBanner(alert: KittAlert, onDismiss: () -> Unit, modifier: Modif
             }
         }
         Column(Modifier.weight(1f)) {
-            FilmAlertHeader(style, color)
+            FilmAlertHeader(ThemeState.edition, color)
             Text(
                 text = alert.message.take(shown) + if (shown < alert.message.length) "█" else "",
                 style = MaterialTheme.typography.titleMedium,

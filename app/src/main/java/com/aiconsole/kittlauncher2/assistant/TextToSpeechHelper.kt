@@ -1,7 +1,6 @@
 package com.aiconsole.kittlauncher2.assistant
 
 import com.aiconsole.kittlauncher2.ui.theme.ThemeState
-import com.aiconsole.kittlauncher2.ui.theme.hud
 
 import android.content.Context
 import android.media.AudioAttributes
@@ -260,7 +259,7 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
     }
 
     private fun filmCharacter(): FilmCharacter? =
-        if (settings.filmCharacters.value) FilmCharacter.forStyle(ThemeState.theme.hud) else null
+        if (settings.filmCharacters.value) ThemeState.filmCharacter else null
 
     private companion object {
         const val TAG = "KittVoice"
