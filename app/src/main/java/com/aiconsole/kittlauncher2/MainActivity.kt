@@ -77,6 +77,7 @@ import com.aiconsole.kittlauncher2.assistant.LauncherEvent
 import com.aiconsole.kittlauncher2.assistant.MicGuard
 import com.aiconsole.kittlauncher2.assistant.SavageLines
 import com.aiconsole.kittlauncher2.browser.BrowserSession
+import com.aiconsole.kittlauncher2.browser.SiteHomeRules
 import com.aiconsole.kittlauncher2.browser.WebMedia
 import com.aiconsole.kittlauncher2.data.AppLists
 import com.aiconsole.kittlauncher2.data.AppUsage
@@ -583,7 +584,10 @@ fun LauncherRoot(
     }
     val stream = remember {
         val app = context.applicationContext as KittApplication
-        BrowserSession("stream", app.settings, app.userscripts, lite = { app.lite.value })
+        BrowserSession(
+            "stream", app.settings, app.userscripts, lite = { app.lite.value }, holdPopups = true,
+            onVisit = { title, url -> app.settings.streamVisits.set(SiteHomeRules.encodeVisits(SiteHomeRules.record(SiteHomeRules.decodeVisits(app.settings.streamVisits.value), title, url, System.currentTimeMillis()))) }
+        )
     }
     // AI and Games keep their tabs (and sign-ins) while you move between pages.
     val aiBrowser = remember {
@@ -592,7 +596,10 @@ fun LauncherRoot(
     }
     val gamesBrowser = remember {
         val app = context.applicationContext as KittApplication
-        BrowserSession("games", app.settings, app.userscripts, gamepad = true, lite = { app.lite.value })
+        BrowserSession(
+            "games", app.settings, app.userscripts, gamepad = true, lite = { app.lite.value }, holdPopups = true,
+            onVisit = { title, url -> app.settings.gameVisits.set(SiteHomeRules.encodeVisits(SiteHomeRules.record(SiteHomeRules.decodeVisits(app.settings.gameVisits.value), title, url, System.currentTimeMillis()))) }
+        )
     }
     DisposableEffect(aiBrowser, gamesBrowser) {
         onDispose {
@@ -614,11 +621,18 @@ fun LauncherRoot(
         when {
             browser.fullscreenView != null -> browser.exitFullscreen()
             browser.canGoBack() -> browser.goBack()
+            browser.immersive -> browser.immersive = false
             browser === stream -> stream.visible = false
         }
     }
+    // Game mode (Games page) and theater (stream window) hide the rail, dock and status strip.
+    val gameMode = gamesBrowser.immersive && pager.currentPage == HomePage.Games.ordinal
+    val theater = stream.immersive && stream.visible && pager.currentPage == HomePage.Drive.ordinal
+    val chromeless = (gameMode || theater) && overlay == LauncherOverlay.None
     LaunchedEffect(homeTrigger) {
         if (homeTrigger > 0) {
+            gamesBrowser.immersive = false
+            stream.immersive = false
             overlay = LauncherOverlay.None
             pager.animateScrollToPage(HomePage.Drive.ordinal)
         }
@@ -726,7 +740,7 @@ fun LauncherRoot(
             val configuration = LocalConfiguration.current
             val scannerHeight = DeviceProfile.scannerHeightDp(configuration.screenHeightDp.toFloat()).dp
             KittScanner(Modifier.fillMaxWidth().height(scannerHeight), alert = dash.alert?.severe == true, shift = dash.shift)
-            if (statusStrip) StatusStrip(onClick = { quickSettings = !quickSettings })
+            if (statusStrip && !chromeless) StatusStrip(onClick = { quickSettings = !quickSettings })
 
             // From the screen's shape, not the space left: the on-screen keyboard shrinks
             // maxHeight, and flipping the layout then would rebuild the map and drop its search.
@@ -736,7 +750,7 @@ fun LauncherRoot(
                 Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .padding(if (rail) 6.dp else 8.dp)
+                    .padding(if (chromeless) 0.dp else if (rail) 6.dp else 8.dp)
             ) {
                 val gap = if (rail) 6.dp else 8.dp
                 val dockHeight = (maxHeight * if (isTall) 0.15f else 0.20f).coerceIn(112.dp, 280.dp)
@@ -806,7 +820,8 @@ fun LauncherRoot(
                         state = pager,
                         modifier = pagesModifier.edgeSwipe(pager, scope),
                         // Swipe anywhere outside the map and web pages (they keep their own drags) to change page.
-                        userScrollEnabled = true,
+                        // In game mode every swipe belongs to the game.
+                        userScrollEnabled = !chromeless,
                         pageSpacing = gap
                     ) { page ->
                         // Web pages attach only on the page the pager settled on, never while pre-composed.
@@ -845,7 +860,12 @@ fun LauncherRoot(
                 }
                 val selectPage = { page: Int -> scope.launch { pager.animateScrollToPage(page) }; Unit }
 
-                if (rail) {
+                if (theater) {
+                    // Theater: the stream window takes the whole screen below the scanner.
+                    StreamWindow(stream, Modifier.fillMaxSize())
+                } else if (chromeless) {
+                    pages(Modifier.fillMaxSize())
+                } else if (rail) {
                     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(gap)) {
                         NavRail(
                             labels = HomePage.entries.map { it.label },
