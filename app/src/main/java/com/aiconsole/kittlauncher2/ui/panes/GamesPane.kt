@@ -100,7 +100,7 @@ fun GamesPane(session: BrowserSession, modifier: Modifier = Modifier) {
                     item {
                         KittButton(
                             "Input: ${session.controllerMode.label}",
-                            { session.setControllerMode(session.controllerMode.next()) },
+                            { session.changeControllerMode(session.controllerMode.next()) },
                             Modifier.height(40.dp),
                             LedGreen
                         )

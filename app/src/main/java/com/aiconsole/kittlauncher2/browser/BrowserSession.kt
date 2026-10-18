@@ -134,7 +134,7 @@ class BrowserSession(
     var controllerMode by mutableStateOf(ControllerMode.parse(settings.gamepadMode.value))
         private set
 
-    fun setControllerMode(mode: ControllerMode) {
+    fun changeControllerMode(mode: ControllerMode) {
         controllerMode = mode
         settings.gamepadMode.set(mode.name)
         pads.releaseAll()
