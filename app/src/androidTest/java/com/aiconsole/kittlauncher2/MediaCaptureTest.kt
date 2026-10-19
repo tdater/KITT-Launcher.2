@@ -56,7 +56,7 @@ class MediaCaptureTest {
         val intro = record("kitt")
         val intent = Intent(app, EditionComponents.mainActivity).putExtra(DemoSession.EXTRA, true)
         ActivityScenario.launch<Activity>(intent).use {
-            wait(14_000)
+            pause(14_000)
             stop(intro)
 
             for (page in listOf("Drive", "Gauges", "Media", "Ai", "Games", "Apps")) {
@@ -64,7 +64,7 @@ class MediaCaptureTest {
                 shot(page.lowercase())
             }
             LauncherBus.send(LauncherEvent.ShowStream)
-            wait(3_000)
+            pause(3_000)
             shot("stream")
             show("Drive")
 
@@ -73,7 +73,7 @@ class MediaCaptureTest {
             overlay(LauncherEvent.OpenTrips, "trips")
             // KITT Config: the top (system check, search), then further down.
             LauncherBus.send(LauncherEvent.OpenConfig)
-            wait(3_000)
+            pause(3_000)
             shot("config-1")
             repeat(5) { n ->
                 scroll()
@@ -90,7 +90,7 @@ class MediaCaptureTest {
             val themes = record("themes")
             for (theme in UiTheme.entries) {
                 main { app.settings.uiTheme.set(theme) }
-                wait(2_400)
+                pause(2_400)
                 shot("theme-" + theme.name.lowercase())
             }
             stop(themes)
@@ -100,7 +100,7 @@ class MediaCaptureTest {
                     app.settings.uiTheme.set(themeFor(edition))
                     app.settings.filmChoices.set("${edition.film.name}=${edition.name}:")
                 }
-                wait(2_400)
+                pause(2_400)
                 shot("edition-" + edition.name.lowercase())
             }
             stop(editions)
@@ -121,12 +121,12 @@ class MediaCaptureTest {
 
     private fun show(page: String, ms: Long = 3_000) {
         LauncherBus.send(LauncherEvent.ShowPage(page))
-        wait(ms)
+        pause(ms)
     }
 
     private fun overlay(event: LauncherEvent, name: String) {
         LauncherBus.send(event)
-        wait(3_000)
+        pause(3_000)
         shot(name)
         show("Drive", 1_500)
     }
@@ -135,7 +135,7 @@ class MediaCaptureTest {
         val size = shell("wm size").substringAfterLast(':').trim().split('x').mapNotNull { it.trim().toIntOrNull() }
         val (w, h) = (size.getOrNull(0) ?: 1024) to (size.getOrNull(1) ?: 600)
         shell("input swipe ${w / 2} ${h * 4 / 5} ${w / 2} ${h / 5} 400")
-        wait(1_500)
+        pause(1_500)
     }
 
     private fun shot(name: String) {
@@ -148,7 +148,7 @@ class MediaCaptureTest {
 
     private fun stop(recording: ParcelFileDescriptor) {
         shell("pkill -INT screenrecord")
-        wait(2_000)
+        pause(2_000)
         runCatching { recording.close() }
     }
 
@@ -159,7 +159,7 @@ class MediaCaptureTest {
     private fun main(block: () -> Unit) = instrumentation.runOnMainSync(block)
 
     // Plain sleeps: the scanner animates forever, so the main thread never goes idle.
-    private fun wait(ms: Long) = Thread.sleep(ms)
+    private fun pause(ms: Long) = Thread.sleep(ms)
 
     private companion object {
         const val DIR = "/data/local/tmp/media"
