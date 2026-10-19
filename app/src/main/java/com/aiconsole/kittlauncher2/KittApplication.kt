@@ -13,6 +13,7 @@ import com.aiconsole.kittlauncher2.assistant.AssistantRepository
 import com.aiconsole.kittlauncher2.assistant.DriveAssistant
 import com.aiconsole.kittlauncher2.assistant.GeminiAssistantClient
 import com.aiconsole.kittlauncher2.assistant.KittAlerts
+import com.aiconsole.kittlauncher2.assistant.OfflineWake
 import com.aiconsole.kittlauncher2.assistant.PerplexityAssistantClient
 import com.aiconsole.kittlauncher2.assistant.TextToSpeechHelper
 import com.aiconsole.kittlauncher2.assistant.WakeWordListener
@@ -100,7 +101,10 @@ class KittApplication : Application() {
     val navigator: RouteNavigator by lazy { RouteNavigator(gps, NavServices(), settings, kittVoice, appScope) }
 
     /** "Hey KITT" listener, active while the launcher is in front and idle. */
-    val wakeWord: WakeWordListener by lazy { WakeWordListener(this, settings, kittVoice, appScope) }
+    val wakeWord: WakeWordListener by lazy { WakeWordListener(this, settings, kittVoice, offlineWake, appScope) }
+
+    /** The offline "Hey KITT" and quick-command spotter (model downloaded on request). */
+    val offlineWake: OfflineWake by lazy { OfflineWake(this) }
 
     /** Userscripts for the home-screen stream window. */
     val userscripts: UserscriptStore by lazy { UserscriptStore(this) }

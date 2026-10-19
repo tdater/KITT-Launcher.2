@@ -68,14 +68,17 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.coerceIn
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.aiconsole.kittlauncher2.assistant.AlertAction
 import com.aiconsole.kittlauncher2.assistant.AssistantPrompt
 import com.aiconsole.kittlauncher2.assistant.KittAlert
 import com.aiconsole.kittlauncher2.assistant.LauncherBus
+import com.aiconsole.kittlauncher2.assistant.LauncherCommandRunner
 import com.aiconsole.kittlauncher2.assistant.LauncherEvent
 import com.aiconsole.kittlauncher2.assistant.MicGuard
 import com.aiconsole.kittlauncher2.assistant.SavageLines
+import com.aiconsole.kittlauncher2.assistant.VoiceCommands
 import com.aiconsole.kittlauncher2.browser.BrowserSession
 import com.aiconsole.kittlauncher2.browser.SiteHomeRules
 import com.aiconsole.kittlauncher2.browser.WebMedia
@@ -379,12 +382,43 @@ open class MainActivity : ComponentActivity() {
         ) {
             ObdConnectionService.start(this)
         }
-        if (settings.scannerOverlay.value && Settings.canDrawOverlays(this) && !SafeMode.active) {
+        // The first start shows the home screen first: the overlay, voice engine, greeting and
+        // checks wait until it has drawn, so a slow unit gets to a usable screen sooner.
+        if (!firstFrameDone) {
+            window.decorView.post {
+                lifecycleScope.launch {
+                    delay(STARTUP_DEFER_MS)
+                    firstFrameDone = true
+                    if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) afterHomeShown()
+                    prewarmWebView()
+                }
+            }
+            return
+        }
+        afterHomeShown()
+    }
+
+    private var firstFrameDone = false
+
+    private fun afterHomeShown() {
+        if (kitt.settings.scannerOverlay.value && Settings.canDrawOverlays(this) && !SafeMode.active) {
             ScannerOverlayService.start(this)
         }
         kitt.alerts.greetOnce()
         launchChecks()
         kitt.vehicle.reminder()?.let { kitt.alerts.remindMaintenance(it) }
+    }
+
+    /**
+     * Loads Android's WebView engine when the launcher is idle, so the first web page (AI, Games,
+     * stream) doesn't freeze the screen for a moment while it loads.
+     */
+    private fun prewarmWebView() {
+        if (SafeMode.active) return
+        android.os.Looper.myQueue().addIdleHandler {
+            runCatching { android.webkit.WebSettings.getDefaultUserAgent(applicationContext) }
+            false
+        }
     }
 
     /** Once per process: start-up whoosh, home-screen check, weekly backup and what's new. */
@@ -427,6 +461,8 @@ open class MainActivity : ComponentActivity() {
     private companion object {
         val VOICE_ACTIONS = setOf(Intent.ACTION_VOICE_COMMAND, Intent.ACTION_ASSIST)
         const val VOICE_DEBOUNCE_MS = 20_000L
+        // After the first frame: long enough for the pager, map and scanner to settle.
+        const val STARTUP_DEFER_MS = 1_500L
     }
 }
 
@@ -649,6 +685,16 @@ fun LauncherRoot(
             overlay = LauncherOverlay.Assistant
         }
     }
+    // "KITT, pause music" from the offline spotter: run it right here, no AI and no internet.
+    LaunchedEffect(Unit) {
+        val app = kittApp ?: return@LaunchedEffect
+        val runner = LauncherCommandRunner(app)
+        app.wakeWord.commands.collect { text ->
+            saver = false
+            val command = VoiceCommands.parse(text) ?: return@collect
+            app.kittVoice.speak(runner.run(command), interrupt = true)
+        }
+    }
     // Voice commands that change the home screen.
     LaunchedEffect(Unit) {
         LauncherBus.events.collect { event ->
@@ -668,6 +714,7 @@ fun LauncherRoot(
                 LauncherEvent.OpenDiagnostics -> overlay = LauncherOverlay.Diagnostics
                 LauncherEvent.OpenPursuit -> overlay = LauncherOverlay.Pursuit
                 LauncherEvent.OpenTrips -> overlay = LauncherOverlay.Trips
+                LauncherEvent.OpenConfig -> overlay = LauncherOverlay.Config
                 LauncherEvent.ShowStream -> {
                     overlay = LauncherOverlay.None
                     pager.animateScrollToPage(HomePage.Drive.ordinal)
@@ -756,7 +803,8 @@ fun LauncherRoot(
             ) {
                 val gap = if (rail) 6.dp else 8.dp
                 val dockHeight = (maxHeight * if (isTall) 0.15f else 0.20f).coerceIn(112.dp, 280.dp)
-                val dockBarHeight = (maxHeight * 0.11f).coerceIn(48.dp, 64.dp)
+                // Bigger targets while driving (driving layout on and moving steadily).
+                val dockBarHeight = if (driving) (maxHeight * 0.14f).coerceIn(60.dp, 84.dp) else (maxHeight * 0.11f).coerceIn(48.dp, 64.dp)
                 val portraitCellWidth = if (maxWidth >= 600.dp) 150.dp else 110.dp
                 val open = { target: LauncherOverlay -> overlay = target }
                 val onDrive = pager.currentPage == HomePage.Drive.ordinal
@@ -869,16 +917,18 @@ fun LauncherRoot(
                     pages(Modifier.fillMaxSize())
                 } else if (rail) {
                     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        // While driving: only the driving pages, so each button is bigger.
+                        val railPages = if (driving) DRIVING_PAGES else HomePage.entries
                         NavRail(
-                            labels = HomePage.entries.map { it.label },
-                            current = pager.currentPage,
-                            onSelect = selectPage,
+                            labels = railPages.map { it.label },
+                            current = railPages.indexOfFirst { it.ordinal == pager.currentPage },
+                            onSelect = { selectPage(railPages[it].ordinal) },
                             onKitt = {
                                 autoListen = false
                                 open(LauncherOverlay.Assistant)
                             },
                             kittSpeaking = dash.kittSpeaking,
-                            modifier = Modifier.fillMaxHeight().width(RailWidth)
+                            modifier = Modifier.fillMaxHeight().width(if (driving) RailWidth * 1.25f else RailWidth)
                         )
                         Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(gap)) {
                             pages(Modifier.fillMaxWidth().weight(1f))
@@ -989,6 +1039,9 @@ fun LauncherRoot(
 }
 
 private val RailWidth = 96.dp
+
+/** The pages the rail offers while driving (the others stay a swipe away). */
+private val DRIVING_PAGES = listOf(HomePage.Drive, HomePage.Gauges, HomePage.Media, HomePage.Ai)
 
 private const val DRIVING_ENTER_MS = 15_000L
 private const val DRIVING_EXIT_MS = 60_000L

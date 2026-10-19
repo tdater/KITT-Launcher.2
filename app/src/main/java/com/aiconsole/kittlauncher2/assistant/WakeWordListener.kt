@@ -60,6 +60,8 @@ class WakeWordListener(
     context: Context,
     private val settings: KittSettings,
     private val voice: TextToSpeechHelper,
+    /** The offline spotter, used instead of the recognizer when chosen and downloaded. */
+    private val offline: OfflineWake,
     scope: CoroutineScope
 ) : RecognitionListener {
 
@@ -77,6 +79,14 @@ class WakeWordListener(
     private val _wakes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val wakes: SharedFlow<Unit> = _wakes.asSharedFlow()
 
+    /** "KITT, pause music" heard offline: the command text for VoiceCommands. */
+    private val _commands = MutableSharedFlow<String>(extraBufferCapacity = 2)
+    val commands: SharedFlow<String> = _commands.asSharedFlow()
+
+    private var offlineChosen = settings.wakeOffline.value
+
+    private fun useOffline(): Boolean = offlineChosen && offline.installed.value && offline.unavailable == null
+
     init {
         // A takeover while listening for "Hey KITT" would repeat forever: turn the wake word off.
         scope.launch(Dispatchers.Main) {
@@ -89,6 +99,14 @@ class WakeWordListener(
             combine(settings.wakeWord.state, voice.speaking) { on, talking -> on to talking }.collect { (on, talking) ->
                 enabled = on
                 speaking = talking
+                update()
+            }
+        }
+        scope.launch(Dispatchers.Main) {
+            combine(settings.wakeOffline.state, offline.installed) { chosen, _ -> chosen }.collect { chosen ->
+                // Switching engines: stop the current one, then start the other.
+                stopAll()
+                offlineChosen = chosen
                 update()
             }
         }
@@ -115,7 +133,8 @@ class WakeWordListener(
         suspended = suspended,
         kittSpeaking = speaking,
         micBlocked = MicGuard.autoListenBlocked(),
-        mediaPlaying = mediaPlaying(),
+        // The offline spotter needs no audio focus and never chimes: it keeps listening over music.
+        mediaPlaying = !useOffline() && mediaPlaying(),
         micPermission = ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     )
 
@@ -138,6 +157,11 @@ class WakeWordListener(
 
     private fun startSession() {
         if (!shouldListen()) return
+        if (useOffline()) {
+            listening = offline.start(::heardOffline) { scheduleRestart(error = true) }
+            if (listening) MicGuard.listeningStarted()
+            return
+        }
         val target = SpeechRecognizers.resolve(appContext, settings.speechRecognizer.value)
         if (target == RecognizerTarget.Unavailable) {
             Log.w(TAG, "No safe speech recognizer; \"Hey KITT\" stays off")
@@ -165,8 +189,19 @@ class WakeWordListener(
 
     private fun stopAll() {
         listening = false
+        offline.stop()
         recognizer?.destroy()
         recognizer = null
+    }
+
+    private fun heardOffline(heard: OfflineHeard) {
+        when (heard) {
+            OfflineHeard.Wake -> {
+                stopAll() // Free the microphone for the assistant.
+                _wakes.tryEmit(Unit)
+            }
+            is OfflineHeard.Command -> _commands.tryEmit(heard.text)
+        }
     }
 
     private fun scheduleRestart(error: Boolean) {

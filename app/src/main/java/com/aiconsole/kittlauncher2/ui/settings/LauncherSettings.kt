@@ -62,6 +62,7 @@ import com.aiconsole.kittlauncher2.ui.theme.ScannerRed
 import java.io.IOException
 import kotlin.system.exitProcess
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -172,18 +173,67 @@ fun WakeWordToggle(app: KittApplication) {
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) app.settings.wakeWord.set(true)
     }
-    KittToggle(
-        "\"Hey KITT\" wake word",
-        on,
-        { enable ->
-            val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-            if (enable && !granted) permission.launch(Manifest.permission.RECORD_AUDIO) else app.settings.wakeWord.set(enable)
-        },
-        description = "Listens while the home screen is showing and nothing is playing (it pauses during music, " +
-            "which drowns it out anyway; use the steering-wheel voice button or KITT then). Uses the speech recognizer " +
-            "below; some chime each time they restart, and a network recognizer uses data. Say \"Hey KITT\", then your " +
-            "question or command."
-    )
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        KittToggle(
+            "\"Hey KITT\" wake word",
+            on,
+            { enable ->
+                val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                if (enable && !granted) permission.launch(Manifest.permission.RECORD_AUDIO) else app.settings.wakeWord.set(enable)
+            },
+            description = "Listens while the home screen is showing. Say \"Hey KITT\", then your question or command. " +
+                "With the speech recognizer below it pauses during music (some recognizers chime each restart, and a network " +
+                "one uses data); the offline listener below doesn't."
+        )
+        if (on) OfflineWakeSettings(app)
+    }
+}
+
+/** The offline "Hey KITT" / "KITT, <command>" listener: download (15 MB), use, delete. */
+@Composable
+private fun OfflineWakeSettings(app: KittApplication) {
+    val scope = rememberCoroutineScope()
+    val offline = app.offlineWake
+    val installed by offline.installed.collectAsState()
+    val progress by offline.download.collectAsState()
+    val chosen by app.settings.wakeOffline.state.collectAsState()
+    var message by remember { mutableStateOf<String?>(null) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        KittToggle(
+            "Offline listener",
+            chosen && installed,
+            { on ->
+                if (on && !installed) {
+                    message = "Downloading the offline listener (15 MB)…"
+                    scope.launch {
+                        message = try {
+                            offline.install()
+                            app.settings.wakeOffline.set(true)
+                            "Offline listener ready."
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: IOException) {
+                            "Download failed: ${e.message}"
+                        }
+                    }
+                } else {
+                    app.settings.wakeOffline.set(on)
+                }
+            },
+            description = "A small speech model on the head unit hears \"Hey KITT\" with no internet, no chimes, and even over " +
+                "music. It also runs quick commands on its own: say \"KITT, pause music\", \"KITT, next song\", \"KITT, find gas\", " +
+                "\"KITT, where did I park\", \"KITT, show gauges\" or \"KITT, cancel the route\". Questions still go to the AI."
+        )
+        progress?.let { Text("DOWNLOADING $it%", style = MaterialTheme.typography.labelMedium, color = DashAmber) }
+        offline.unavailable?.let { HelpText("The offline listener can't run on this head unit ($it).", color = DashAmber) }
+        if (installed && progress == null) {
+            KittButton("Delete offline listener", {
+                app.settings.wakeOffline.set(false)
+                offline.remove()
+            }, Modifier.height(40.dp), DashGrey)
+        }
+        message?.let { HelpText(it, color = DashAmber) }
+    }
 }
 
 /** Per-driver setups; switching restarts the launcher with the other driver's settings. */

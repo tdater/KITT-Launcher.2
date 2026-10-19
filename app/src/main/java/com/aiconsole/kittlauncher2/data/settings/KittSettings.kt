@@ -236,6 +236,8 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val streamVisits = stringPref("stream_visits", "")
     val navNotifications = boolPref("nav_notifications", true)
     val wakeWord = boolPref("wake_word", false)
+    /** "Hey KITT" from the offline keyword model (OfflineWake) instead of the speech recognizer. */
+    val wakeOffline = boolPref("wake_offline", false)
 
     // --- Driving extras ---
     /** KITT comments on hard stops, cold revs, long idling and full throttle. */

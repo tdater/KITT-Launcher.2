@@ -511,7 +511,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                     "Driving layout",
                     drivingLayout,
                     { settings.drivingMode.set(it) },
-                    description = "While moving, the Drive page swaps the app grid for big media controls, KITT and your top favourites."
+                    description = "While moving, the Drive page swaps the app grid for big media and volume controls, KITT and your top three apps, and the side rail and bottom bar get bigger with only the driving pages."
                 )
             }
             item {
@@ -566,6 +566,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                     description = "OpenStreetMap that follows the car. Needs location access; off shows the vector grid."
                 )
             }
+            if (showMap) item { OfflineMapSettings() }
             item {
                 KittToggle(
                     "Turn-by-turn from Maps / Waze",

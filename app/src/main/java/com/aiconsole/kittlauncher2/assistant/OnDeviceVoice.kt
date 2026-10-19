@@ -26,15 +26,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
-import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import java.io.File
-import java.io.FilterInputStream
 import java.io.IOException
-import java.io.InputStream
-import java.security.DigestInputStream
-import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 /** One synthesized line: mono float PCM. */
@@ -81,36 +74,8 @@ class OnDeviceVoice(context: Context) {
         temp.mkdirs()
         _download.value = voice.id to 0
         try {
-            val response = http.newCall(Request.Builder().url(voice.url).build()).execute()
-            response.use { r ->
-                if (!r.isSuccessful) throw IOException("Download failed (HTTP ${r.code})")
-                val body = r.body
-                val total = body.contentLength().takeIf { it > 0 } ?: (voice.sizeMb * 1_048_576L)
-                val digest = MessageDigest.getInstance("SHA-256")
-                val counted = Counting(DigestInputStream(body.byteStream(), digest)) { read -> _download.value = voice.id to (read * 100 / total).toInt().coerceIn(0, 99) }
-                val raw = counted.buffered()
-                val tar = TarArchiveInputStream(BZip2CompressorInputStream(raw))
-                try {
-                    while (true) {
-                        val entry = tar.nextEntry ?: break
-                        val path = LocalVoices.safeEntry(entry.name)?.let(LocalVoices::stripTop) ?: continue
-                        val out = File(temp, path)
-                        if (!out.canonicalPath.startsWith(temp.canonicalPath)) continue
-                        if (entry.isDirectory) out.mkdirs() else {
-                            out.parentFile?.mkdirs()
-                            out.outputStream().use { tar.copyTo(it) }
-                        }
-                    }
-                    // The checksum covers the whole download: read what the unpacker left, then compare.
-                    val rest = ByteArray(8192)
-                    while (raw.read(rest) >= 0) Unit
-                    val sum = digest.digest().joinToString("") { "%02x".format(it) }
-                    if (voice.sha256.isNotEmpty() && !sum.equals(voice.sha256, ignoreCase = true)) {
-                        throw IOException("The download was damaged or cut off (checksum didn't match)")
-                    }
-                } finally {
-                    tar.close()
-                }
+            ModelArchives.download(http, voice.url, voice.sha256, voice.bytes.takeIf { it > 0 } ?: (voice.sizeMb * 1_048_576L), temp) { percent ->
+                _download.value = voice.id to percent
             }
             if (temp.listFiles().orEmpty().none { it.name.endsWith(".onnx") }) throw IOException("The voice archive had no model in it")
             File(temp, READY).writeText(voice.archive)
@@ -229,23 +194,6 @@ class OnDeviceVoice(context: Context) {
         } finally {
             runCatching { track.stop() }
             track.release()
-        }
-    }
-
-    private class Counting(input: InputStream, private val onRead: (Long) -> Unit) : FilterInputStream(input) {
-        private var count = 0L
-        private var lastReport = 0L
-
-        override fun read(): Int = super.read().also { if (it >= 0) bump(1) }
-
-        override fun read(b: ByteArray, off: Int, len: Int): Int = super.read(b, off, len).also { if (it > 0) bump(it.toLong()) }
-
-        private fun bump(n: Long) {
-            count += n
-            if (count - lastReport > 256 * 1024) {
-                lastReport = count
-                onRead(count)
-            }
         }
     }
 

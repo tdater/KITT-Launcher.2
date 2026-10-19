@@ -31,13 +31,14 @@ import com.aiconsole.kittlauncher2.ui.components.AppIcon
 import com.aiconsole.kittlauncher2.ui.components.KittButton
 import com.aiconsole.kittlauncher2.ui.components.KittPanel
 import com.aiconsole.kittlauncher2.ui.components.VoiceModulator
+import com.aiconsole.kittlauncher2.ui.theme.DashAmber
 import com.aiconsole.kittlauncher2.ui.theme.DashWhite
 import com.aiconsole.kittlauncher2.ui.theme.KittBezel
 import com.aiconsole.kittlauncher2.ui.theme.KittBlack
 import com.aiconsole.kittlauncher2.ui.theme.ScannerRed
 
 /**
- * Replaces the app grid while moving: big media controls, a KITT button and the top favourite
+ * Replaces the app grid while moving: big media and volume controls, a KITT button and the top favourite
  * apps, so everything is a large, glanceable target.
  */
 @Composable
@@ -64,7 +65,12 @@ fun DrivingPanel(
         }
     }
 
-    KittPanel(title = "Driving", modifier = modifier, accent = ScannerRed, trailing = {
+    fun volume(direction: Int) {
+        context.getSystemService(AudioManager::class.java)
+            ?.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI)
+    }
+
+    KittPanel(title = "Driving",modifier = modifier, accent = ScannerRed, trailing = {
         now?.title?.let { Text(it.uppercase(), style = MaterialTheme.typography.labelMedium, color = DashWhite, maxLines = 1, overflow = TextOverflow.Ellipsis) }
     }) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -80,6 +86,7 @@ fun DrivingPanel(
                 KittButton("Next", { key(KeyEvent.KEYCODE_MEDIA_NEXT) }, Modifier.weight(1f).fillMaxHeight(), ScannerRed)
             }
             Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                KittButton("Vol −", { volume(AudioManager.ADJUST_LOWER) }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
                 Box(
                     Modifier.weight(1.3f).fillMaxHeight().clip(MaterialTheme.shapes.small).background(KittBlack)
                         .border(1.dp, ScannerRed, MaterialTheme.shapes.small).clickable(onClick = onKitt).padding(6.dp),
@@ -88,13 +95,19 @@ fun DrivingPanel(
                     VoiceModulator(active = kittSpeaking, modifier = Modifier.fillMaxSize())
                     Text("KITT", style = MaterialTheme.typography.titleLarge, color = ScannerRed)
                 }
-                favorites.take(4).forEach { app ->
-                    Box(
+                KittButton("Vol +", { volume(AudioManager.ADJUST_RAISE) }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
+            }
+            // Three favourites, icon and name: fewer and bigger than the app grid.
+            Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                favorites.take(3).forEach { app ->
+                    Row(
                         Modifier.weight(1f).fillMaxHeight().clip(MaterialTheme.shapes.small).background(KittBlack)
-                            .border(1.dp, KittBezel, MaterialTheme.shapes.small).clickable { onAppClick(app) },
-                        contentAlignment = Alignment.Center
+                            .border(1.dp, KittBezel, MaterialTheme.shapes.small).clickable { onAppClick(app) }.padding(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         AppIcon(app, Modifier.size(56.dp))
+                        Text(app.label, style = MaterialTheme.typography.titleMedium, color = DashWhite, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }

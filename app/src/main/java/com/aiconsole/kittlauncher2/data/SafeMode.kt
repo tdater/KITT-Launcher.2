@@ -51,6 +51,11 @@ object SafeMode {
     /** "Back to normal": clears safe mode and restarts the launcher. */
     fun exit(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().commit()
+        restart(context)
+    }
+
+    /** Restarts the launcher (a new process: safe mode off, a new map file picked up). */
+    fun restart(context: Context) {
         context.packageManager.getLaunchIntentForPackage(context.packageName)?.let {
             context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
         }

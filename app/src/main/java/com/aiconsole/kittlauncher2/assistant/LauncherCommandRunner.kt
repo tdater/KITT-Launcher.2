@@ -19,6 +19,7 @@ sealed interface LauncherEvent {
     data object OpenDiagnostics : LauncherEvent
     data object OpenPursuit : LauncherEvent
     data object OpenTrips : LauncherEvent
+    data object OpenConfig : LauncherEvent
     /** Back to the Drive page with the stream window showing (from the mini player). */
     data object ShowStream : LauncherEvent
 }
