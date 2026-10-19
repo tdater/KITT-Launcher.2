@@ -21,7 +21,7 @@ This is the owner's personal project, and they vibe code it. Deliver complete, w
 
   The owner's adapters are a Veepeak OBDCheck BLE and an OBDAi Gen-1 (likely Classic). The OBDAi connects on the head unit in Torque Pro and Car Scanner Pro, so the head unit supports Classic SPP. If our Classic connect fails there, treat it as an app bug; don't blame the hardware.
 - **Vehicle safety:** never clear DTCs, change ECU settings or send any vehicle write command (Mode 04, Mode 08, writes to Mode 2E/2F/31/3B, etc.) unless the owner explicitly asks for that operation. The existing user-initiated `ObdManager.clearCodes()` stays behind its explicit UI action. Never call it automatically, from the assistant, or during testing, and don't add new write paths unasked.
-- **Verify before calling it done:** after implementing, run `testDebugUnitTest` (plus any new tests), `lintDebug` and `assembleDebug`, locally or on GitHub Actions (see "Build / test commands"). Fix failures and rerun until they pass. A successful build or passing tests is not proof of a live adapter, ECU or head-unit behavior, so never claim otherwise.
+- **Verify before calling it done:** after implementing, run `testKitt2DebugUnitTest` (plus any new tests), `lintKitt2Debug` and `assembleKitt2Debug assembleKittDebug` (CI also runs the emulator smoke test), locally or on GitHub Actions (see "Build / test commands"). Fix failures and rerun until they pass. A successful build or passing tests is not proof of a live adapter, ECU or head-unit behavior, so never claim otherwise.
 - **Commit without asking:** commit your own changes. Stage only the files you changed, never the owner's unrelated uncommitted changes. Pushing a `claude/` work branch so CI can build it is fine without asking; merge to `main` once checks pass if the change was discussed; create `v*` tags only when asked.
 - **Final report:** end with:
   - what changed;
@@ -31,7 +31,12 @@ This is the owner's personal project, and they vibe code it. Deliver complete, w
 
 ## What this is
 
-**KITT Launcher.2**: a Knight Rider (KITT) themed Android **home-screen launcher** for aftermarket car head units, built for **7"–10" landscape** screens (1024x600 mdpi, 1280x720 hdpi, 1280x800 and similar) and light enough for cheap units. It was forked from the 12.1" portrait KITT Launcher (`com.aiconsole.knightriderlauncher`, `../KnightRiderLauncher`) and installs alongside it. Keep the two in sync: port every change here to the original (adapting for portrait) and add it to the features page in the releases repo. It includes:
+**KITT Launcher.2** and **KITT Launcher**: a Knight Rider (KITT) themed Android **home-screen launcher** for aftermarket car head units, for **7"–10" landscape** screens (1024x600 mdpi, 1280x720 hdpi, 1280x800 and similar) up to 12.1" portrait, and light enough for cheap units. Both editions build from this one codebase as product flavors (`app/build.gradle.kts`):
+- `kitt2` = KITT Launcher.2, app ID `com.aiconsole.kittlauncher2`, releases to `tdater/KITT-Launcher.2-releases`;
+- `kitt` = KITT Launcher (the original), app ID `com.aiconsole.knightriderlauncher`, releases to `tdater/KITT-Launcher-releases`. Its MainActivity and notification listener keep their original class names (`app/src/kitt/java/com/aiconsole/knightriderlauncher/`, subclasses of the shared ones) so updates stay the default home screen and keep notification access; code refers to them through `EditionComponents` (one per flavor), and the manifest through the `${mainActivity}` / `${notificationListener}` placeholders.
+- Edition name and update repo come from `BuildConfig.EDITION_NAME` / `UPDATE_REPO`; `app_name` is a flavor `resValue`. Both are signed with the same key (KITT.2's repo secrets sign both).
+
+The old `tdater/KnightRiderLauncher` repo is retired (its last state is v1.7); every change lands here once. Add what's new to the features page in `tdater/KITT-Launcher-releases`. It includes:
 - an ELM327 OBD-II scanner (Car Scanner-style gauges, codes and custom PIDs);
 - a voice/text AI copilot ("KITT") that sees live vehicle data;
 - an always-on red scanner light.
@@ -53,19 +58,19 @@ gh run view <run-id> --log-failed                                         # on f
 gh run download <run-id> -n app-debug -D "$env:USERPROFILE\Downloads\KITT2-<run-id>"   # the debug APK
 ```
 
-The owner installs the APK on the head unit, either from that download or from the run's page on GitHub (artifact `app-debug`, a zip). Instrumented tests can't run in CI. Without `gh` (e.g. a cloud session), push the branch and open a pull request instead; the workflow runs on pull requests. The `/android-finish` skill walks through the whole loop.
+The owner installs the APK on the head unit, either from that download or from the run's page on GitHub (artifact `app-debug`, a zip holding `app-kitt2-debug.apk` and `app-kitt-debug.apk`). Gradle tasks carry the flavor: `testKitt2DebugUnitTest`, `lintKitt2Debug`, `assembleKitt2Debug assembleKittDebug`. The `smoke` job runs `LauncherSmokeTest` (`connectedKitt2DebugAndroidTest`) on an API 34 emulator at 1280x720: demo mode, every page, every overlay. A tag (`v1.8`, or `v1.8-beta1` for a pre-release only beta-channel units see) releases both editions, in a `release` job that waits for `build` and `smoke`. Without `gh` (e.g. a cloud session), push the branch and open a pull request instead; the workflow runs on pull requests. The `/android-finish` skill walks through the whole loop.
 
 **Local mode:** Gradle needs a JDK; use Android Studio's bundled JBR:
 
 ```powershell
 $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
-.\gradlew.bat assembleDebug
-.\gradlew.bat testDebugUnitTest
-.\gradlew.bat testDebugUnitTest --tests "com.aiconsole.kittlauncher2.ObdProtocolTest"   # single class
-.\gradlew.bat lintDebug    # text report: app/build/intermediates/lint_intermediate_text_report/
+.\gradlew.bat assembleKitt2Debug assembleKittDebug
+.\gradlew.bat testKitt2DebugUnitTest
+.\gradlew.bat testKitt2DebugUnitTest --tests "com.aiconsole.kittlauncher2.ObdProtocolTest"   # single class
+.\gradlew.bat lintKitt2Debug    # text report: app/build/intermediates/lint_intermediate_text_report/
 ```
 
-CI: `.github/workflows/android.yml` runs tests, lint and the debug build; with signing secrets (`KITT_KEYSTORE_BASE64` etc.) it also builds a signed release, published on `v*` tags to `tdater/KITT-Launcher.2-releases` (that repo and a `RELEASES_TOKEN` secret must exist) for the in-app updater. CI sets `versionCode` from the run number.
+CI: `.github/workflows/android.yml` has three jobs. `build` runs tests, lint and both debug builds, and with signing secrets (`KITT_KEYSTORE_BASE64` etc.) both signed releases. `smoke` runs the emulator test. On `v*` tags, `release` publishes each edition to its releases repo for the in-app updater (`RELEASES_TOKEN` must be able to write both repos; tags with a `-` are pre-releases). CI sets `versionCode` from the run number (above the retired repo's numbers, so KITT Launcher updates in place).
 
 Toolchain: AGP 9.x with **built-in Kotlin** (no `kotlin-android` plugin), Compose BOM, KSP 2.3.x (decoupled from Kotlin version) for Room, OkHttp 5. Versions live in `gradle/libs.versions.toml`. minSdk 24, target/compile 37.
 
@@ -136,7 +141,7 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
   - **Headers:** CAN polling targets the engine header `7E0`; code reads switch to broadcast `7DF`.
   - **Units and logging:** values are stored in **metric base units** and converted with `Quantity.toDisplay`. Readings feed `TripMetricRecorder` at 1 Hz.
 - **`ObdConnectionService`:** just holds the foreground lifetime (type `connectedDevice`).
-- **Demo mode (`DemoSession`, debug builds only):** `am start -n com.aiconsole.kittlauncher2/.MainActivity --ez kitt.demo true` feeds simulated readings, a sample stored code and one past trip, labelled "DEMO (simulated)", for screenshots. Nothing is sent to an adapter; a real connect or disconnect ends it.
+- **Demo mode (`DemoSession`, debug builds only):** `am start -n com.aiconsole.kittlauncher2/.MainActivity --ez kitt.demo true` (KITT Launcher: `com.aiconsole.knightriderlauncher/.MainActivity`) feeds simulated readings, a sample stored code and one past trip, labelled "DEMO (simulated)", for screenshots. Nothing is sent to an adapter; a real connect or disconnect ends it.
 - **Diagnostics tools** (all read-only): `ReadinessDecoder`, `Mode06`, `ModuleScan`, `PerformanceTimer`, `BatteryHealth`, `VinDecoder` + NHTSA lookup, maintenance/fuel (`VehicleService`). The raw console goes through `ConsoleSafety`'s allow-list; keep it read-only. `ConnectionLog` tags events by `LinkLayer`. Saved adapters (`AdapterProfiles`) are tried in rotation.
 
 **PIDs:**
@@ -159,8 +164,14 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
 - **Persona:** `KittPersona` holds the personality plus non-negotiable accuracy and driving-safety rules. `PersonaStyle.Savage` is the default and the owner's explicit choice for this edition (Unfiltered turned up further: swearing in every sentence, sarcasm on every fact, a parting shot); `Unfiltered` and `Classic` remain. Check `persona.rude`, never `== Unfiltered`. Spoken lines go through `SavageLines.pick` (Savage appends a jab after the facts); `KittAlerts`, `LauncherCommandRunner` and `RouteRules` have the rude variants.
 - **Voice engines (`VoiceEngine`):** Gemini neural (needs a key), KITT neural offline (`OnDeviceVoice`: sherpa-onnx `OfflineTts` with Piper/Kokoro voices from `LocalVoices`, downloaded into filesDir/voices, played with `AudioTrack`; the AAR is fetched by `app/build.gradle.kts` into the git-ignored `app/libs` and SHA-256 checked; x86 native libs excluded), and device TTS. `TextToSpeechHelper.say` falls back Gemini → on-device → device (on-device has the same 3 s limit for urgent lines; with OnDevice chosen but no voice downloaded, a Gemini key keeps Gemini).
 - **Keys:** API keys are entered in-app and encrypted with an Android Keystore AES-GCM key (`SecureStore`). `BuildConfig.GEMINI_API_KEY` from `local.properties` is only a dev fallback.
-- **Voice commands:** `VoiceCommands` (pure parser) is tried before the AI; `LauncherCommandRunner` runs matches and sends home-screen changes over `LauncherBus`. `WakeWordListener` ("Hey KITT") restarts the recognizer in short sessions and pauses while an overlay or KITT's voice is active.
+- **Voice commands:** `VoiceCommands` (pure parser) is tried before the AI; `LauncherCommandRunner` runs matches and sends home-screen changes over `LauncherBus`. `WakeWordListener` ("Hey KITT") restarts the recognizer in short sessions and pauses while an overlay or KITT's voice is active. With `wakeOffline` it uses `OfflineWake` instead: a sherpa-onnx keyword spotter (gigaspeech 3.3M model, downloaded via `ModelArchives` with SHA-256) on a continuous `AudioRecord`, no audio focus, so it keeps listening over music. Keywords come from `OfflinePhrases` ("Hey KITT" plus "KITT, <command>" for the fixed `COMMANDS`, run through `VoiceCommands`), tokenized by `PieceTokenizer` from the model's own `bpe.model` (tested against the model's examples in `src/test/resources/kws`).
 - **Problem reports:** `ProblemReport` installs a crash handler (files in `filesDir/crashes`) and writes a text report (crashes, connection log, settings without keys, own logcat) from KITT Config.
+- **Safe mode (`data/SafeMode`, rules in `SafeModeRules`):** the crash handler records crashes within 60 s of process start; 3 in 10 min start the next run in safe mode (no WebViews: `BrowserView` shows a card; no scanner overlay, wake word or offline voice) with `SafeModeBar` (Report / Back to normal → `SafeMode.exit` restarts). A minute without crashing clears the count. New start-up work that could crash should respect `SafeMode.active`.
+- **Start-up order:** `MainActivity.startVehicleSystems` starts OBD at once; on the first start the overlay, greeting, launch checks and a WebView warm-up wait for the first frame + `STARTUP_DEFER_MS` (`afterHomeShown`).
+- **Updates:** `SelfUpdate.latest(repo, beta)`; `Versions` orders `1.8 > 1.8-beta2 > 1.8-beta1`; setting `betaUpdates`.
+- **Offline voice extras:** `OnDeviceVoice` frees its model after 5 idle minutes and on `onTrimMemory`; `LocalVoice.sha256`/`bytes` are the release's published digests (checked by `ModelArchives`).
+- **Settings search:** `SettingsSearch.ENTRIES` (label, anchor, keywords) and `SettingsListScope`, which counts the KITT Config LazyColumn's items so `anchor("name")` knows where each section starts. Add new sections to both.
+- **More:** `LinkMemory` (per-adapter connect method tried first), `LastDriveRules` (recap of the last drive with the greeting or on the next OBD connect; setting `driveRecap`), `OfflineMaps` (raster MBTiles/SQLite/GEMF in osmdroid's base folder; OSM's servers forbid bulk area downloads, so never add a region downloader for MAPNIK), driving layout (`DRIVING_PAGES` on the rail, bigger rail and dock, volume buttons in `DrivingPanel`).
 - **Subscriptions:** consumer subscriptions (Gemini/Claude/Perplexity Pro) can't be used via API; `AiAppHandoff` sends questions to those official apps instead.
 
 **Riding along (`assistant/DriveAssistant`, all read-only):**

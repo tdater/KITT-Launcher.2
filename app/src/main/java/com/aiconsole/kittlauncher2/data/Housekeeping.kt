@@ -11,6 +11,21 @@ object ReleaseNotes {
 
     val ALL = listOf(
         ReleaseNote(
+            5,
+            listOf(
+                "Offline \"Hey KITT\": a small listener on the head unit hears you with no internet, no chimes, even over " +
+                    "music, and runs quick commands by itself (\"KITT, pause music\", \"KITT, find gas\"). Turn it on under " +
+                    "KITT Config → \"Hey KITT\" wake word.",
+                "Safe mode: if KITT ever crashes at start-up a few times in a row, it starts without web pages and extras " +
+                    "so you're never stuck, with a button to send a report or go back to normal.",
+                "One line on your last drive when you set off: fault codes still on, a weak battery, your grade.",
+                "Bigger buttons while driving, with volume controls and your top three apps.",
+                "Search in KITT Config, beta updates (Updates → Beta updates), and offline map files for dead zones.",
+                "Faster start-up; OBD adapters reconnect faster; the offline voice frees its memory when idle and " +
+                    "checks every download.",
+            )
+        ),
+        ReleaseNote(
             4,
             listOf(
                 "Film themes now come in editions: T-800, Liquid Metal and Future War; Visor, ED-209 and OCP Delta City; " +
