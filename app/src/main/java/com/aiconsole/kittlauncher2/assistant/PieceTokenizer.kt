@@ -146,7 +146,10 @@ class PieceTokenizer private constructor(private val scores: Map<String, Float>,
             when (wire) {
                 0 -> varint()
                 1 -> pos += 8
-                2 -> pos += varint().toInt()
+                2 -> {
+                    val len = varint().toInt() // read first: `pos += varint()` would add to the old position
+                    pos += len
+                }
                 5 -> pos += 4
                 else -> pos = end
             }

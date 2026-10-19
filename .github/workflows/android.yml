@@ -28,6 +28,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
 
+      # The emulator's data partition needs several GB the stock runner doesn't have free.
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/node_modules "$AGENT_TOOLSDIRECTORY"
+
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -41,6 +45,7 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
+          disk-size: 3G
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             adb shell wm size 1280x720
