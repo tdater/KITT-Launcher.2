@@ -39,9 +39,12 @@ jobs:
           target: google_apis
           disable-animations: false
           disk-size: 3G
+          ram-size: 4096M
+          heap-size: 512M
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            chmod +x gradlew
+            chmod +x gradlew && mkdir -p raw/kitt2 raw/kitt
+            (adb logcat -v time > raw/logcat.txt &)
             adb shell settings put global sysui_demo_allowed 1
             adb shell am broadcast -a com.android.systemui.demo -e command enter
             adb shell am broadcast -a com.android.systemui.demo -e command clock -e hhmm 0930
@@ -49,11 +52,12 @@ jobs:
             adb shell am broadcast -a com.android.systemui.demo -e command battery -e level 100 -e plugged false
             adb shell cmd overlay enable com.android.internal.systemui.navbar.gestural || true
             adb shell wm size 1024x600 && adb shell wm density 160 && sleep 5
-            ./gradlew connectedKitt2DebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.aiconsole.kittlauncher2.MediaCaptureTest
-            mkdir -p raw/kitt2 raw/kitt && adb pull /data/local/tmp/media/. raw/kitt2/ && adb shell rm -rf /data/local/tmp/media
+            ./gradlew connectedKitt2DebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.aiconsole.kittlauncher2.MediaCaptureTest || echo "::warning::capture test failed; keeping what was captured"
+            adb pull /data/local/tmp/media/. raw/kitt2/ || true
+            adb shell rm -rf /data/local/tmp/media || true
             adb shell wm size 800x1151 && adb shell wm density 160 && sleep 5
-            ./gradlew connectedKittDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.aiconsole.kittlauncher2.MediaCaptureTest
-            adb pull /data/local/tmp/media/. raw/kitt/
+            ./gradlew connectedKittDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.aiconsole.kittlauncher2.MediaCaptureTest || echo "::warning::capture test failed; keeping what was captured"
+            adb pull /data/local/tmp/media/. raw/kitt/ || true
 
       - name: Convert to the page's formats
         run: |
@@ -61,11 +65,13 @@ jobs:
           mkdir -p out/screenshots out/videos
           convert_set() { # dir thumb-width thumb-height video-width
             for f in "$1"/*.png; do
+              [ -e "$f" ] || continue
               n=$(basename "$f" .png)
               cwebp -quiet -q 82 "$f" -o "out/screenshots/$n.webp"
               cwebp -quiet -q 78 -resize "$2" "$3" "$f" -o "out/screenshots/$n-thumb.webp"
             done
             for f in "$1"/*.mp4; do
+              [ -e "$f" ] || continue
               n=$(basename "$f" .mp4)
               ffmpeg -loglevel error -y -i "$f" -vf "fps=24,scale=$4:-2" -c:v libx264 -crf 31 -preset slow -pix_fmt yuv420p -an -movflags +faststart "out/videos/$n.mp4"
               ffmpeg -loglevel error -y -ss 2 -i "out/videos/$n.mp4" -frames:v 1 "raw/$n-poster.png"
@@ -82,7 +88,9 @@ jobs:
           path: out/
 
       - uses: actions/upload-artifact@v7
-        if: failure()
+        if: always()
         with:
-          name: capture-report
-          path: app/build/reports/androidTests/
+          name: capture-logs
+          path: |
+            app/build/reports/androidTests/
+            raw/

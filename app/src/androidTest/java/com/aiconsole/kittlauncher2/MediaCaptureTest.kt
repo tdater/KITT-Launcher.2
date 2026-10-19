@@ -144,7 +144,7 @@ class MediaCaptureTest {
 
     /** Starts screenrecord in the background; [stop] ends it so the file is finished properly. */
     private fun record(name: String): ParcelFileDescriptor =
-        instrumentation.uiAutomation.executeShellCommand("screenrecord --bit-rate 6000000 --time-limit 120 $DIR/$prefix$name.mp4")
+        instrumentation.uiAutomation.executeShellCommand("screenrecord --bit-rate 3000000 --time-limit 120 $DIR/$prefix$name.mp4")
 
     private fun stop(recording: ParcelFileDescriptor) {
         shell("pkill -INT screenrecord")
