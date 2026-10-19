@@ -13,6 +13,7 @@ import com.aiconsole.kittlauncher2.assistant.AssistantRepository
 import com.aiconsole.kittlauncher2.assistant.DriveAssistant
 import com.aiconsole.kittlauncher2.assistant.GeminiAssistantClient
 import com.aiconsole.kittlauncher2.assistant.KittAlerts
+import com.aiconsole.kittlauncher2.assistant.OfflineBrain
 import com.aiconsole.kittlauncher2.assistant.OfflineWake
 import com.aiconsole.kittlauncher2.assistant.PerplexityAssistantClient
 import com.aiconsole.kittlauncher2.assistant.TextToSpeechHelper
@@ -136,9 +137,14 @@ class KittApplication : Application() {
                         battery = vehicle.battery().warnings.joinToString("; ").ifEmpty { null }
                     )
                 }
-            }
+            },
+            offline = offlineBrain
         )
     }
+
+    /** The on-device model KITT answers with when the online AI can't (downloaded on request). */
+    private val offlineBrainLazy = lazy { OfflineBrain(this) }
+    val offlineBrain: OfflineBrain by offlineBrainLazy
 
     /** Questions queued for KITT from other screens; the assistant consumes and clears them. */
     val assistantInbox = MutableStateFlow<AssistantPrompt?>(null)
@@ -262,6 +268,7 @@ class KittApplication : Application() {
         WebMedia.trimMemory(level)
         // The offline voice's model is the next biggest thing (loaded again on the next line).
         if (kittVoiceLazy.isInitialized()) kittVoice.onDevice.trimMemory(level)
+        if (offlineBrainLazy.isInitialized()) offlineBrain.trimMemory(level)
     }
 
     private companion object {

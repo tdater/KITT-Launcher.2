@@ -101,11 +101,18 @@ android {
     }
     packaging {
         jniLibs {
-            // The on-device voice engine's native code: head units are ARM, so the x86 builds
-            // only add size. Compressed in the APK (smaller self-updates), unpacked on install.
-            excludes += listOf("lib/x86/**", "lib/x86_64/**")
+            // Native code (offline voice, wake word, offline AI): head units are ARM, so the x86
+            // builds only add size. Debug builds keep x86_64 so CI's emulator can run the models
+            // (see androidComponents below). Compressed in the APK, unpacked on install.
+            excludes += listOf("lib/x86/**")
             useLegacyPackaging = true
         }
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        variant.packaging.jniLibs.excludes.add("lib/x86_64/**")
     }
 }
 
@@ -128,6 +135,7 @@ if (!sherpaAar.exists() || sha256(sherpaAar) != sherpaSha256) {
 dependencies {
     implementation(files(sherpaAar))
     implementation(libs.commons.compress)
+    implementation(libs.litertlm)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)

@@ -52,6 +52,29 @@ object ModelArchives {
         }
     }
 
+    /** Downloads a single model file to [target] (via a .part file), checked against [sha256]. */
+    fun downloadFile(http: OkHttpClient, url: String, sha256: String, expectedBytes: Long, target: File, onProgress: (Int) -> Unit) {
+        val part = File(target.path + ".part")
+        try {
+            http.newCall(Request.Builder().url(url).build()).execute().use { r ->
+                if (!r.isSuccessful) throw IOException("Download failed (HTTP ${r.code})")
+                val body = r.body
+                val total = body.contentLength().takeIf { it > 0 } ?: expectedBytes.coerceAtLeast(1)
+                val digest = MessageDigest.getInstance("SHA-256")
+                Counting(DigestInputStream(body.byteStream(), digest)) { read -> onProgress((read * 100 / total).toInt().coerceIn(0, 99)) }
+                    .use { input -> part.outputStream().use { input.copyTo(it, 64 * 1024) } }
+                val sum = digest.digest().joinToString("") { "%02x".format(it) }
+                if (sha256.isNotEmpty() && !sum.equals(sha256, ignoreCase = true)) {
+                    throw IOException("The download was damaged or cut off (checksum didn't match)")
+                }
+            }
+            target.delete()
+            if (!part.renameTo(target)) throw IOException("Couldn't save the model")
+        } finally {
+            part.delete()
+        }
+    }
+
     private class Counting(input: InputStream, private val onRead: (Long) -> Unit) : FilterInputStream(input) {
         private var count = 0L
         private var lastReport = 0L

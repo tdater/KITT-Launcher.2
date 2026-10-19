@@ -7,7 +7,9 @@ import com.aiconsole.kittlauncher2.data.settings.AiProvider
 import com.aiconsole.kittlauncher2.data.settings.KittSettings
 import com.aiconsole.kittlauncher2.data.trip.TripMetricDao
 import com.aiconsole.kittlauncher2.data.trip.TripMetricRecorder
+import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 
 /**
  * Builds KITT's vehicle context (live OBD data, fault codes, 30-day baseline) and routes the
@@ -19,13 +21,38 @@ class AssistantRepository(
     private val perplexity: PerplexityAssistantClient,
     private val dao: TripMetricDao,
     private val recorder: TripMetricRecorder,
-    private val vehicleContext: () -> VehicleContext?
+    private val vehicleContext: () -> VehicleContext?,
+    /** The on-device model for when the online AI can't answer (null in tests). */
+    private val offline: OfflineBrain? = null
 ) {
     suspend fun ask(prompt: String, history: List<ChatTurn>, diagnostic: Boolean = false): AssistantResult {
         val useDiagnosticModel = diagnostic || KittPersona.isDiagnostic(prompt)
         val context = VehicleContextFormatter.vehicleContext(vehicleContext(), baselineSummary())
         val driverName = settings.driverName.value
 
+        val online = askOnline(prompt, history, useDiagnosticModel, context, driverName)
+        // No signal, no key or the service failed: the offline model answers if it's set up.
+        val brain = offline
+        if (online !is AssistantResult.Failure || brain == null || !brain.ready()) return online
+        return try {
+            AssistantResult.Answer(
+                brain.answer(prompt, history, settings.persona.value, driverName, context),
+                engine = OFFLINE_ENGINE
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            AssistantResult.Failure("${online.message} (${e.message})", online.offline)
+        }
+    }
+
+    private suspend fun askOnline(
+        prompt: String,
+        history: List<ChatTurn>,
+        useDiagnosticModel: Boolean,
+        context: String,
+        driverName: String
+    ): AssistantResult {
         return when (settings.provider.value) {
             AiProvider.Gemini -> {
                 val modelPref = if (useDiagnosticModel) settings.diagnosticModel else settings.chatModel
@@ -73,6 +100,7 @@ class AssistantRepository(
 
     private companion object {
         const val BASELINE_DAYS = 30L
+        const val OFFLINE_ENGINE = "KITT offline (Qwen3 0.6B)"
     }
 
     /** The film theme's character, when one is on and the driver wants it. */

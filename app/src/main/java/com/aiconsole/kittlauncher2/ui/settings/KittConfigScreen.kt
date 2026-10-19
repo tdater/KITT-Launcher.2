@@ -311,6 +311,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
             }
 
             // ---------------- Personality ----------------
+            item { OfflineAiSettings(app) }
             anchor("personality")
             item { SectionHeader("Personality") }
             item { ChoiceRow(PersonaStyle.entries, persona, { it.label }, { settings.persona.set(it) }, color = ScannerRed) }

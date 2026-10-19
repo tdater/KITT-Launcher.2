@@ -16,7 +16,7 @@ object SettingsSearch {
 
     val ENTRIES = listOf(
         SettingsEntry("System check", "check", "permissions problems fix setup default home launcher webview version"),
-        SettingsEntry("AI provider and keys", "ai", "ai gemini perplexity api key model provider diagnostics search"),
+        SettingsEntry("AI provider and keys", "ai", "ai gemini perplexity api key model provider diagnostics search offline ai no signal local model"),
         SettingsEntry("Personality", "personality", "persona savage classic unfiltered karr swearing rude sarcasm name"),
         SettingsEntry("Voice engine", "voice", "voice offline neural kokoro ryan piper gemini device tts speech speak download pitch"),
         SettingsEntry("Microphone and speech input", "mic", "mic microphone speech input recognizer listen dictation google fix"),
