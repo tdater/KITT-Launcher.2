@@ -12,7 +12,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
-import com.aiconsole.kittlauncher2.nav.NavNotificationListener
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -47,7 +46,7 @@ class MediaBridge(context: Context) {
 
     private val appContext = context.applicationContext
     private val manager = appContext.getSystemService(MediaSessionManager::class.java)
-    private val listener = ComponentName(appContext, NavNotificationListener::class.java)
+    private val listener = ComponentName(appContext, com.aiconsole.kittlauncher2.EditionComponents.notificationListener)
     private val main = Handler(Looper.getMainLooper())
 
     private val _nowPlaying = MutableStateFlow<NowPlaying?>(null)

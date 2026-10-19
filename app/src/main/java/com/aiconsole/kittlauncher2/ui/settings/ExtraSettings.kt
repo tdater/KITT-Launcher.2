@@ -252,7 +252,7 @@ fun ExtrasSettings(app: KittApplication) {
             "Weekly backup",
             backup,
             { s.autoBackup.set(it) },
-            description = "Saves your setup to Downloads/KITT every week (the last four are kept). Restore it into either KITT Launcher or KITT Launcher.2 with Restore below." +
+            description = "Saves your setup to Downloads/KITT every week (the last four are kept). Restore it into either edition (KITT Launcher or KITT Launcher.2) with Restore below." +
                 if (last > 0) " Last: " + java.text.DateFormat.getDateInstance().format(java.util.Date(last)) + "." else ""
         )
     }

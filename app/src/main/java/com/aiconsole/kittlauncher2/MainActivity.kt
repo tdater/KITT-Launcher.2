@@ -159,7 +159,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+open class MainActivity : ComponentActivity() {
 
     private var apps by mutableStateOf<List<LauncherApp>>(emptyList())
 
@@ -523,7 +523,7 @@ private fun rememberDashState(app: KittApplication): DashState {
 /**
  * Responsive shell under a permanent KITT scanner strip.
  *
- * Landscape (the 7"–10" head units KITT Launcher.2 is built for): a side rail with KITT and the
+ * Landscape (7"–10" head units and other wide screens): a side rail with KITT and the
  * page buttons, the pages, and a slim one-row dock, so the pages get nearly the full height.
  * Tall (portrait head units, e.g. 9:16): stacked 50% map / 35% grid / 15% dock.
  * Full-screen features are overlays drawn below the scanner, so it never disappears.

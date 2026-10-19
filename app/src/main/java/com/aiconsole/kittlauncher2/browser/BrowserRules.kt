@@ -104,7 +104,7 @@ object Bookmarks {
         appendLine("<!DOCTYPE NETSCAPE-Bookmark-file-1>")
         appendLine("<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=UTF-8\">")
         appendLine("<TITLE>Bookmarks</TITLE>")
-        appendLine("<H1>KITT Launcher.2</H1>")
+        appendLine("<H1>${com.aiconsole.kittlauncher2.BuildConfig.EDITION_NAME}</H1>")
         appendLine("<DL><p>")
         items.forEach { (title, url) -> appendLine("    <DT><A HREF=\"${escape(url)}\">${escape(title)}</A>") }
         appendLine("</DL><p>")

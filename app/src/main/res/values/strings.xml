@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">KITT Launcher.2</string>
+    <!-- app_name comes from the edition (productFlavors in app/build.gradle.kts). -->
     <string name="nav_listener_label">KITT navigation relay</string>
 </resources>

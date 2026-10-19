@@ -10,6 +10,8 @@ on:
 permissions:
   contents: write
 
+# One codebase, two editions (product flavors): kitt2 = KITT Launcher.2, kitt = KITT Launcher.
+# A tag (v1.8) releases both, each to its own downloads repo for its in-app updater.
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,45 +32,61 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5 # v6+ caching needs Gradle's proprietary terms
 
-      - name: Unit tests, lint and debug APK
+      # The editions share every source file but two tiny class stubs, so tests and lint run once.
+      - name: Unit tests, lint and debug APKs
         run: |
           chmod +x gradlew
-          ./gradlew testDebugUnitTest lintDebug assembleDebug
+          ./gradlew testKitt2DebugUnitTest lintKitt2Debug assembleKitt2Debug assembleKittDebug
 
       - uses: actions/upload-artifact@v7
         with:
           name: app-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            app/build/outputs/apk/kitt2/debug/app-kitt2-debug.apk
+            app/build/outputs/apk/kitt/debug/app-kitt-debug.apk
 
-      # Signed release for in-app updates, when the signing secrets are configured.
-      - name: Signed release APK
+      # Signed releases for in-app updates, when the signing secrets are configured.
+      - name: Signed release APKs
         if: env.KITT_KEYSTORE_BASE64 != ''
         run: |
           echo "$KITT_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/kitt.jks"
-          KITT_KEYSTORE="$RUNNER_TEMP/kitt.jks" ./gradlew assembleRelease
+          KITT_KEYSTORE="$RUNNER_TEMP/kitt.jks" ./gradlew assembleKitt2Release assembleKittRelease
 
-      # Tags (v1.2) publish the signed APK to the public downloads-only repository, which the
-      # in-app updater checks. Needs a RELEASES_TOKEN secret allowed to write its releases.
-      - name: Prepare release
-        if: startsWith(github.ref, 'refs/tags/v') && hashFiles('app/build/outputs/apk/release/app-release.apk') != ''
+      # Tags publish each signed APK to its public downloads-only repository, which that
+      # edition's in-app updater checks. RELEASES_TOKEN must be allowed to write both.
+      - name: Prepare releases
+        if: startsWith(github.ref, 'refs/tags/v') && hashFiles('app/build/outputs/apk/kitt2/release/app-kitt2-release.apk') != ''
         run: |
-          cp app/build/outputs/apk/release/app-release.apk "KITT-Launcher.2-$GITHUB_REF_NAME.apk"
+          cp app/build/outputs/apk/kitt2/release/app-kitt2-release.apk "KITT-Launcher.2-$GITHUB_REF_NAME.apk"
+          cp app/build/outputs/apk/kitt/release/app-kitt-release.apk "KITT-Launcher-$GITHUB_REF_NAME.apk"
           previous=$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)
-          {
-            echo "KITT Launcher.2 $GITHUB_REF_NAME"
-            echo
-            echo "Download the APK below and open it on the head unit, or use KITT Config → Updates."
-            echo
-            echo "Changes:"
-            git log --no-merges --pretty='- %s' ${previous:+$previous..}"$GITHUB_REF_NAME" | head -40
-          } > release-notes.md
+          for edition in "KITT Launcher.2" "KITT Launcher"; do
+            {
+              echo "$edition $GITHUB_REF_NAME"
+              echo
+              echo "Download the APK below and open it on the head unit, or use KITT Config → Updates."
+              echo
+              echo "Changes:"
+              git log --no-merges --pretty='- %s' ${previous:+$previous..}"$GITHUB_REF_NAME" | head -40
+            } > "release-notes-${edition// /-}.md"
+          done
 
-      - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v') && hashFiles('app/build/outputs/apk/release/app-release.apk') != ''
+      - name: Publish KITT Launcher.2
+        if: startsWith(github.ref, 'refs/tags/v') && hashFiles('app/build/outputs/apk/kitt2/release/app-kitt2-release.apk') != ''
         uses: softprops/action-gh-release@v3
         with:
           repository: tdater/KITT-Launcher.2-releases
           token: ${{ secrets.RELEASES_TOKEN }}
           name: KITT Launcher.2 ${{ github.ref_name }}
-          body_path: release-notes.md
+          body_path: release-notes-KITT-Launcher.2.md
           files: KITT-Launcher.2-${{ github.ref_name }}.apk
+
+      - name: Publish KITT Launcher
+        if: startsWith(github.ref, 'refs/tags/v') && hashFiles('app/build/outputs/apk/kitt/release/app-kitt-release.apk') != ''
+        uses: softprops/action-gh-release@v3
+        with:
+          repository: tdater/KITT-Launcher-releases
+          token: ${{ secrets.RELEASES_TOKEN }}
+          name: KITT Launcher ${{ github.ref_name }}
+          body_path: release-notes-KITT-Launcher.md
+          files: KITT-Launcher-${{ github.ref_name }}.apk

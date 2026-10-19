@@ -31,7 +31,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import com.aiconsole.kittlauncher2.KittApplication
-import com.aiconsole.kittlauncher2.MainActivity
 import com.aiconsole.kittlauncher2.assistant.MicGuard
 import com.aiconsole.kittlauncher2.data.DriverProfiles
 import com.aiconsole.kittlauncher2.data.HardwareKeys
@@ -253,7 +252,7 @@ fun DriverProfileSettings() {
 /** Relaunches the launcher so settings read at start pick up new values. */
 private fun restartLauncher(context: android.content.Context) {
     context.startActivity(
-        Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        Intent(context, com.aiconsole.kittlauncher2.EditionComponents.mainActivity).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
     )
     exitProcess(0)
 }
@@ -282,7 +281,7 @@ fun UpdateSettings(app: KittApplication) {
         SectionHeader("Updates")
         Text("INSTALLED: $current", style = MaterialTheme.typography.labelLarge, color = DashWhite)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            KittTextField(repo, { app.settings.updateRepo.set(it.trim()) }, "GitHub repo, e.g. tdater/KITT-Launcher.2-releases", Modifier.weight(1f))
+            KittTextField(repo, { app.settings.updateRepo.set(it.trim()) }, "GitHub repo, e.g. ${com.aiconsole.kittlauncher2.BuildConfig.UPDATE_REPO}", Modifier.weight(1f))
             KittButton(
                 if (checking) "Checking…" else "Check",
                 {
@@ -321,9 +320,9 @@ fun UpdateSettings(app: KittApplication) {
         }
         when (val s = state) {
             UpdateState.NeedsPermission -> {
-                HelpText("Android needs your OK for KITT Launcher.2 to install updates. Allow it on the next screen, come back, and tap Install again.", color = DashAmber)
+                HelpText("Android needs your OK for ${com.aiconsole.kittlauncher2.BuildConfig.EDITION_NAME} to install updates. Allow it on the next screen, come back, and tap Install again.", color = DashAmber)
                 KittButton(
-                    "Allow installs from KITT Launcher.2",
+                    "Allow installs from ${com.aiconsole.kittlauncher2.BuildConfig.EDITION_NAME}",
                     { runCatching { context.startActivity(updater.installPermissionIntent()) } },
                     Modifier.fillMaxWidth().height(48.dp),
                     DashAmber,
@@ -517,7 +516,7 @@ fun BackupSettings(app: KittApplication) {
             message ?: ("Report a problem saves a text file with recent crashes, the OBD connection log, settings (no API keys) " +
                 "and this app's log; Send report to phone gets it onto your phone with a QR code or the share sheet. " +
                 "Save backup saves settings, gauges, custom PIDs and userscripts to a file (USB stick, Downloads…); a backup " +
-                "restores into either KITT Launcher or KITT Launcher.2. " +
+                "restores into either edition (KITT Launcher or KITT Launcher.2). " +
                 "API keys aren't included; re-enter them after restoring. Restoring restarts the launcher.")
         )
     }

@@ -28,7 +28,6 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import com.aiconsole.kittlauncher2.KittApplication
-import com.aiconsole.kittlauncher2.MainActivity
 import com.aiconsole.kittlauncher2.R
 import com.aiconsole.kittlauncher2.nav.SpeedLimits
 import com.aiconsole.kittlauncher2.obd.ObdManager
@@ -125,7 +124,7 @@ class SidePanelService : Service() {
             addView(button("▶ ❚❚") { mediaKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) })
             addView(button("▶▶") { mediaKey(KeyEvent.KEYCODE_MEDIA_NEXT) })
             addView(button("KITT", RED) {
-                val intent = Intent(Intent.ACTION_VOICE_COMMAND).setClass(this@SidePanelService, MainActivity::class.java)
+                val intent = Intent(Intent.ACTION_VOICE_COMMAND).setClass(this@SidePanelService, com.aiconsole.kittlauncher2.EditionComponents.mainActivity)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 runCatching { startActivity(intent) }
             })

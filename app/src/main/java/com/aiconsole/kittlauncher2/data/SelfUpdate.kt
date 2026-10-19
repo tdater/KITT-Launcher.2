@@ -69,7 +69,7 @@ object UpdateRules {
 
     const val DIFFERENT_KEY =
         "This head unit has a build signed with a different key (a debug or locally built APK), so Android won't " +
-            "update it in place. Save your setup with Backup, uninstall KITT Launcher.2 once, then install the release APK " +
+            "update it in place. Save your setup with Backup, uninstall ${com.aiconsole.kittlauncher2.BuildConfig.EDITION_NAME} once, then install the release APK " +
             "from the download page. After that, updates install from here."
 
     /** Why a downloaded APK can't update the installed app, or null when it can. */
@@ -94,7 +94,7 @@ object UpdateRules {
         return when (status) {
             STATUS_SUCCESS -> "Updated. The launcher restarts now."
             STATUS_FAILURE_ABORTED -> "Install cancelled."
-            STATUS_FAILURE_BLOCKED -> "This head unit blocked the install$detail. Allow installs from unknown apps for KITT Launcher.2 in Settings."
+            STATUS_FAILURE_BLOCKED -> "This head unit blocked the install$detail. Allow installs from unknown apps for ${com.aiconsole.kittlauncher2.BuildConfig.EDITION_NAME} in Settings."
             STATUS_FAILURE_CONFLICT, STATUS_FAILURE_INCOMPATIBLE ->
                 if (systemMessage?.contains("version", ignoreCase = true) == true && systemMessage.contains("downgrade", ignoreCase = true)) {
                     "Android refused a downgrade$detail."

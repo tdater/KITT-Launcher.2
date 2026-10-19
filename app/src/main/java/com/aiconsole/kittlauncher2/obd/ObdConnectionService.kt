@@ -14,7 +14,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.aiconsole.kittlauncher2.KittApplication
-import com.aiconsole.kittlauncher2.MainActivity
 import com.aiconsole.kittlauncher2.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -78,7 +77,7 @@ class ObdConnectionService : Service() {
 
     private fun notification(text: String): Notification {
         val open = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
+            this, 0, Intent(this, com.aiconsole.kittlauncher2.EditionComponents.mainActivity), PendingIntent.FLAG_IMMUTABLE
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_kitt)

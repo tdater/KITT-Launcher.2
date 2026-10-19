@@ -22,7 +22,7 @@ enum class AiProvider(val label: String) {
 }
 
 enum class PersonaStyle(val label: String) {
-    /** Maximum sarcasm and profanity: the KITT Launcher.2 default. */
+    /** Maximum sarcasm and profanity: the default. */
     Savage("Savage KITT"),
     Unfiltered("Unfiltered KITT"),
     Classic("Classic KITT"),
@@ -317,7 +317,7 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
 
     companion object {
         /** Public downloads-only repository the release workflow publishes signed APKs to. */
-        const val DEFAULT_UPDATE_REPO = "tdater/KITT-Launcher.2-releases"
+        val DEFAULT_UPDATE_REPO = com.aiconsole.kittlauncher2.BuildConfig.UPDATE_REPO
         const val DEFAULT_CHAT_MODEL = "gemini-3.5-flash-lite"
         const val DEFAULT_DIAGNOSTIC_MODEL = "gemini-3.8-flash"
         /** The model behind Perplexity's "fast" preset. */

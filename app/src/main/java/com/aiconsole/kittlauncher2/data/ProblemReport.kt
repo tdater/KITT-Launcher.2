@@ -71,7 +71,7 @@ object ProblemReport {
             writer.write("\n")
             writer.flush()
         }
-        section("KITT LAUNCHER.2 PROBLEM REPORT") {
+        section("${com.aiconsole.kittlauncher2.BuildConfig.EDITION_NAME.uppercase()} PROBLEM REPORT") {
             appendLine("Created: ${stamp.format(Date())}")
             val pkg = runCatching { context.packageManager.getPackageInfo(context.packageName, 0) }.getOrNull()
             appendLine("App: ${context.packageName} ${pkg?.versionName ?: "?"}")

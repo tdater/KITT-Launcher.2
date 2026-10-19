@@ -44,7 +44,7 @@ object NavBridge {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             android.content.Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).putExtra(
                 Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
-                ComponentName(context, NavNotificationListener::class.java).flattenToString()
+                ComponentName(context, com.aiconsole.kittlauncher2.EditionComponents.notificationListener).flattenToString()
             )
         } else {
             android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
@@ -56,7 +56,7 @@ object NavBridge {
  * the next turn over its own map. Only those apps' ongoing notifications are looked at;
  * everything else is ignored and nothing is stored.
  */
-class NavNotificationListener : NotificationListenerService() {
+open class NavNotificationListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         runCatching { activeNotifications }.getOrNull()

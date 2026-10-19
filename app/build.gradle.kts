@@ -41,6 +41,33 @@ android {
         )
     }
 
+    // Two editions from one codebase. Each keeps its own app ID (they install side by side), name
+    // and releases repo for the in-app updater. Both are signed with the same key. The classic
+    // edition keeps its original MainActivity and notification-listener class names
+    // (subclasses in src/kitt), so updating it keeps it as the default home screen and keeps
+    // notification access.
+    flavorDimensions += "edition"
+    productFlavors {
+        create("kitt2") {
+            dimension = "edition"
+            applicationId = "com.aiconsole.kittlauncher2"
+            resValue("string", "app_name", "KITT Launcher.2")
+            buildConfigField("String", "EDITION_NAME", "\"KITT Launcher.2\"")
+            buildConfigField("String", "UPDATE_REPO", "\"tdater/KITT-Launcher.2-releases\"")
+            manifestPlaceholders["mainActivity"] = "com.aiconsole.kittlauncher2.MainActivity"
+            manifestPlaceholders["notificationListener"] = "com.aiconsole.kittlauncher2.nav.NavNotificationListener"
+        }
+        create("kitt") {
+            dimension = "edition"
+            applicationId = "com.aiconsole.knightriderlauncher"
+            resValue("string", "app_name", "KITT Launcher")
+            buildConfigField("String", "EDITION_NAME", "\"KITT Launcher\"")
+            buildConfigField("String", "UPDATE_REPO", "\"tdater/KITT-Launcher-releases\"")
+            manifestPlaceholders["mainActivity"] = "com.aiconsole.knightriderlauncher.MainActivity"
+            manifestPlaceholders["notificationListener"] = "com.aiconsole.knightriderlauncher.nav.NavNotificationListener"
+        }
+    }
+
     // Release signing from the environment (CI secrets); unsigned release builds without it.
     // In-app updates only install over a build signed with the same key.
     val keystore = System.getenv("KITT_KEYSTORE")?.let(::file)?.takeIf { it.exists() }
@@ -70,6 +97,7 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        resValues = true
     }
     packaging {
         jniLibs {
