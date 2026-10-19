@@ -12,6 +12,10 @@ import com.k2fsa.sherpa.onnx.OfflineTtsKokoroModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +33,8 @@ import java.io.File
 import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
+import java.security.DigestInputStream
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 /** One synthesized line: mono float PCM. */
@@ -80,8 +86,11 @@ class OnDeviceVoice(context: Context) {
                 if (!r.isSuccessful) throw IOException("Download failed (HTTP ${r.code})")
                 val body = r.body
                 val total = body.contentLength().takeIf { it > 0 } ?: (voice.sizeMb * 1_048_576L)
-                val counted = Counting(body.byteStream()) { read -> _download.value = voice.id to (read * 100 / total).toInt().coerceIn(0, 99) }
-                TarArchiveInputStream(BZip2CompressorInputStream(counted.buffered())).use { tar ->
+                val digest = MessageDigest.getInstance("SHA-256")
+                val counted = Counting(DigestInputStream(body.byteStream(), digest)) { read -> _download.value = voice.id to (read * 100 / total).toInt().coerceIn(0, 99) }
+                val raw = counted.buffered()
+                val tar = TarArchiveInputStream(BZip2CompressorInputStream(raw))
+                try {
                     while (true) {
                         val entry = tar.nextEntry ?: break
                         val path = LocalVoices.safeEntry(entry.name)?.let(LocalVoices::stripTop) ?: continue
@@ -92,6 +101,15 @@ class OnDeviceVoice(context: Context) {
                             out.outputStream().use { tar.copyTo(it) }
                         }
                     }
+                    // The checksum covers the whole download: read what the unpacker left, then compare.
+                    val rest = ByteArray(8192)
+                    while (raw.read(rest) >= 0) Unit
+                    val sum = digest.digest().joinToString("") { "%02x".format(it) }
+                    if (voice.sha256.isNotEmpty() && !sum.equals(voice.sha256, ignoreCase = true)) {
+                        throw IOException("The download was damaged or cut off (checksum didn't match)")
+                    }
+                } finally {
+                    tar.close()
                 }
             }
             if (temp.listFiles().orEmpty().none { it.name.endsWith(".onnx") }) throw IOException("The voice archive had no model in it")
@@ -127,11 +145,34 @@ class OnDeviceVoice(context: Context) {
         if (unavailable != null || !isInstalled(voice)) return null
         return withContext(Dispatchers.IO) {
             engineLock.withLock {
+                idleRelease?.cancel()
                 val tts = load(voice) ?: return@withLock null
                 val audio = tts.generate(text, sid = LocalVoices.speaker(voice, speaker), speed = speed)
+                // The model holds 60-300 MB: let it go after a few quiet minutes (it reloads in a second or two).
+                idleRelease = scope.launch {
+                    delay(IDLE_RELEASE_MS)
+                    release()
+                }
                 VoiceClip(audio.samples, audio.sampleRate).takeIf { it.samples.isNotEmpty() }
             }
         }
+    }
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var idleRelease: Job? = null
+
+    /** Frees the loaded model (idle, or Android is short of memory). */
+    suspend fun release() = engineLock.withLock {
+        idleRelease?.cancel()
+        idleRelease = null
+        engine?.release()
+        engine = null
+        engineId = null
+    }
+
+    /** From Application.onTrimMemory: a loaded model goes when memory runs low. */
+    fun trimMemory(level: Int) {
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) scope.launch { release() }
     }
 
     /** Loads (or reuses) the voice's model. Called with [engineLock] held. */
@@ -209,6 +250,7 @@ class OnDeviceVoice(context: Context) {
     }
 
     private companion object {
+        const val IDLE_RELEASE_MS = 5 * 60_000L
         const val TAG = "OnDeviceVoice"
         const val READY = ".ready"
     }

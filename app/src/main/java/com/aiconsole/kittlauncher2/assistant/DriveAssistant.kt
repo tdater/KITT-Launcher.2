@@ -2,6 +2,8 @@ package com.aiconsole.kittlauncher2.assistant
 
 import android.util.Log
 import com.aiconsole.kittlauncher2.data.settings.KittSettings
+import com.aiconsole.kittlauncher2.data.trip.LastDrive
+import com.aiconsole.kittlauncher2.data.trip.LastDriveRules
 import com.aiconsole.kittlauncher2.data.trip.ReportCards
 import com.aiconsole.kittlauncher2.data.trip.TripMetricDao
 import com.aiconsole.kittlauncher2.data.trip.TripSummarizer
@@ -22,6 +24,7 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -39,6 +42,8 @@ class DriveAssistant(
     private val settings: KittSettings,
     private val dao: TripMetricDao,
     private val rangeKm: () -> Double?,
+    /** Battery and charging warnings from the last few minutes (VehicleService.battery). */
+    private val batteryWarnings: () -> List<String>,
     private val scope: CoroutineScope
 ) {
     private val monitor = DrivingMonitor()
@@ -62,6 +67,11 @@ class DriveAssistant(
                     departedAt.value = now
                     fuelWarned = false
                     monitor.reset()
+                    // What KITT noticed last time, once the greeting and link chatter are done.
+                    scope.launch(Dispatchers.Main) {
+                        delay(RECAP_DELAY_MS)
+                        alerts.speakLastDriveRecap()
+                    }
                 } else if (state !is ObdState.Connected && connected) {
                     connected = false
                     // A link that was up for a couple of minutes and went away: the ignition went off.
@@ -119,6 +129,14 @@ class DriveAssistant(
                     settings.parkingSpot.set(spot.copy(address = address).encode())
                 }
             }
+            // For the next drive's recap: codes still reported and battery warnings, then the grade.
+            val dtc = obd.dtcs.value
+            val ended = LastDrive(
+                endedAt = System.currentTimeMillis(),
+                codes = dtc?.let { (it.stored + it.pending + it.permanent).distinct() }.orEmpty(),
+                battery = runCatching { batteryWarnings() }.getOrDefault(emptyList())
+            )
+            settings.lastDrive.set(LastDriveRules.encode(ended))
             if (!settings.reportCards.value) return@launch
             try {
                 val (trip, avg) = withContext(Dispatchers.IO) {
@@ -130,6 +148,7 @@ class DriveAssistant(
                 trip ?: return@launch
                 val card = ReportCards.grade(trip, hardBrakes, coldRevs, avg) ?: return@launch
                 settings.reportCardLog.set(ReportCards.encode(ReportCards.add(ReportCards.decode(settings.reportCardLog.value), card)))
+                settings.lastDrive.set(LastDriveRules.encode(ended.copy(grade = card.grade, distanceKm = card.distanceKm)))
                 withContext(Dispatchers.Main) { alerts.reportCard(ReportCards.summary(card, settings.metricUnits.value), card.grade) }
             } catch (e: CancellationException) {
                 throw e
@@ -144,5 +163,6 @@ class DriveAssistant(
         const val WATCH_KEY = "drive_assistant"
         const val MIN_DRIVE_MS = 2 * 60_000L
         const val OVER_HOLD_MS = 6_000L
+        const val RECAP_DELAY_MS = 12_000L
     }
 }

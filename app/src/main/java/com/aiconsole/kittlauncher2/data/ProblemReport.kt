@@ -30,6 +30,7 @@ object ProblemReport {
         val appContext = context.applicationContext
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            runCatching { SafeMode.recordCrash(appContext) }
             try {
                 val dir = crashDir(appContext).apply { mkdirs() }
                 val trace = StringWriter().also { error.printStackTrace(PrintWriter(it)) }

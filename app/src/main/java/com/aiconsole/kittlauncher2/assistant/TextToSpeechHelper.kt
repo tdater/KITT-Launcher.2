@@ -184,8 +184,8 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
     /** The free offline voice: chosen, or standing in for Gemini; only once a voice is downloaded. */
     private fun useOnDevice(): Boolean = settings.voiceEngine.value != VoiceEngine.Device && onDeviceReady()
 
-    private fun onDeviceReady(): Boolean =
-        onDevice.unavailable == null && onDevice.isInstalled(LocalVoices.byId(settings.localVoice.value))
+    private fun onDeviceReady(): Boolean = !com.aiconsole.kittlauncher2.data.SafeMode.active &&
+        onDevice.unavailable == null &&onDevice.isInstalled(LocalVoices.byId(settings.localVoice.value))
 
     /** Plays chunks through the on-device voice, synthesizing the next while one plays. Returns how many were spoken. */
     private suspend fun sayOnDevice(chunks: List<String>, urgent: Boolean): Int = supervisorScope {

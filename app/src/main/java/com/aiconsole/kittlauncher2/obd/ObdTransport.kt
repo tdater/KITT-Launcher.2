@@ -75,6 +75,7 @@ abstract class StreamTransport : ObdTransport {
 
 /** Bluetooth Classic SPP: the vast majority of ELM327 dongles. */
 class ClassicBluetoothTransport(context: Context, private val address: String) : StreamTransport() {
+    private val appContext = context.applicationContext
     private val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
     private var socket: BluetoothSocket? = null
 
@@ -95,12 +96,16 @@ class ClassicBluetoothTransport(context: Context, private val address: String) :
         // Head-unit Bluetooth stacks differ a lot from phones, so try every way in:
         // 1) secure SPP via SDP, 2) insecure SPP (modules that can't do authenticated links),
         // 3) raw RFCOMM channel 1, secure then insecure (clones with broken SDP records).
-        val attempts: List<Pair<String, () -> BluetoothSocket>> = listOf(
-            "secure SPP" to { device.createRfcommSocketToServiceRecord(SPP_UUID) },
-            "insecure SPP" to { device.createInsecureRfcommSocketToServiceRecord(SPP_UUID) },
-            "RFCOMM channel 1" to { channelSocket(device, "createRfcommSocket") },
-            "insecure RFCOMM channel 1" to { channelSocket(device, "createInsecureRfcommSocket") }
-        )
+        // The way that worked last time goes first (LinkMemory).
+        val attempts: List<Pair<String, () -> BluetoothSocket>> = LinkOrder.preferred(
+            listOf(
+                "secure SPP" to { device.createRfcommSocketToServiceRecord(SPP_UUID) },
+                "insecure SPP" to { device.createInsecureRfcommSocketToServiceRecord(SPP_UUID) },
+                "RFCOMM channel 1" to { channelSocket(device, "createRfcommSocket") },
+                "insecure RFCOMM channel 1" to { channelSocket(device, "createInsecureRfcommSocket") }
+            ),
+            LinkMemory.get(appContext, address)
+        ) { it.first }
         val failures = mutableListOf<String>()
         var connected: BluetoothSocket? = null
         for ((index, attempt) in attempts.withIndex()) {
@@ -113,6 +118,7 @@ class ClassicBluetoothTransport(context: Context, private val address: String) :
                 candidate = open()
                 connectCancellable(candidate)
                 connected = candidate
+                LinkMemory.put(appContext, address, name)
                 break
             } catch (e: CancellationException) {
                 runCatching { candidate?.close() }

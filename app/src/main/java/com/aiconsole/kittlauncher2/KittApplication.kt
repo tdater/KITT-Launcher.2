@@ -20,6 +20,8 @@ import com.aiconsole.kittlauncher2.browser.WebMedia
 import com.aiconsole.kittlauncher2.data.DeviceProfile
 import com.aiconsole.kittlauncher2.data.FreezeWatchdog
 import com.aiconsole.kittlauncher2.data.ProblemReport
+import com.aiconsole.kittlauncher2.data.SafeMode
+import com.aiconsole.kittlauncher2.data.SafeModeRules
 import com.aiconsole.kittlauncher2.data.StartupRoutine
 import com.aiconsole.kittlauncher2.data.settings.KittSettings
 import com.aiconsole.kittlauncher2.data.trip.TripDatabase
@@ -109,7 +111,8 @@ class KittApplication : Application() {
     val dataLogger: DataLogger by lazy { DataLogger(this, obd, settings, appScope) }
 
     /** KITT's one voice, shared by the assistant and alerts. */
-    val kittVoice: TextToSpeechHelper by lazy { TextToSpeechHelper(this, settings, appScope) }
+    private val kittVoiceLazy = lazy { TextToSpeechHelper(this, settings, appScope) }
+    val kittVoice: TextToSpeechHelper by kittVoiceLazy
 
     val alerts: KittAlerts by lazy { KittAlerts(settings, obd, gauges, kittVoice, appScope) }
 
@@ -146,7 +149,7 @@ class KittApplication : Application() {
     val driveAssistant: DriveAssistant by lazy {
         DriveAssistant(obd, gps, navigator, speedLimits, alerts, settings, tripDatabase.tripMetricDao(), {
             vehicle.rangeKm(null)
-        }, appScope)
+        }, { vehicle.battery().warnings }, appScope)
     }
 
     /** Cheap head-unit hardware (little RAM or few cores): lite mode's Auto setting turns on. */
@@ -199,6 +202,9 @@ class KittApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         ProblemReport.installCrashHandler(this)
+        SafeMode.init(this)
+        if (SafeMode.active) Log.w("KittApplication", "Starting in safe mode after repeated start-up crashes")
+        else android.os.Handler(mainLooper).postDelayed({ SafeMode.markStable(this) }, SafeModeRules.STARTUP_WINDOW_MS)
         FreezeWatchdog.start(this)
         // The home pager pre-composes neighbouring pages in pieces across frames. With a WebView
         // (AndroidView) on those pages that crashed the launcher on the head unit ("LayoutNode
@@ -250,6 +256,8 @@ class KittApplication : Application() {
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         WebMedia.trimMemory(level)
+        // The offline voice's model is the next biggest thing (loaded again on the next line).
+        if (kittVoiceLazy.isInitialized()) kittVoice.onDevice.trimMemory(level)
     }
 
     private companion object {

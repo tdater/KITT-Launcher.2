@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
@@ -86,6 +87,9 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val app = context.applicationContext as KittApplication
     val settings = app.settings
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+    val anchors = remember { mutableMapOf<String, Int>() }
+    var query by remember { mutableStateOf("") }
 
     val provider by settings.provider.state.collectAsState()
     val persona by settings.persona.state.collectAsState()
@@ -175,9 +179,27 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
         accent = DashAmber,
         trailing = { KittButton("Close", onDismiss, Modifier.height(32.dp).width(80.dp), DashGrey) }
     ) {
-        LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Search: type a word ("voice", "beta", "shift light") and jump to that section.
+        val matches = remember(query) { SettingsSearch.match(query) }
+        KittTextField(query, { query = it }, "Search settings", Modifier.fillMaxWidth())
+        if (query.isNotBlank()) {
+            if (matches.isEmpty()) HelpText("Nothing matches \"$query\".")
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(matches) { entry ->
+                    KittButton(entry.label, {
+                        query = ""
+                        anchors[entry.anchor]?.let { scope.launch { listState.animateScrollToItem(it) } }
+                    }, Modifier.height(40.dp), DashAmber)
+                }
+            }
+        }
+        LazyColumn(Modifier.fillMaxSize(), state = listState, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          SettingsListScope(this, anchors).run {
             // ---------------- AI core ----------------
+            anchor("check")
             item { SelfCheckPanel(app) }
+            anchor("ai")
             item { SectionHeader("AI core") }
             item { ChoiceRow(AiProvider.entries, provider, { it.label }, { settings.provider.set(it) }, color = ScannerRed) }
 
@@ -289,6 +311,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
             }
 
             // ---------------- Personality ----------------
+            anchor("personality")
             item { SectionHeader("Personality") }
             item { ChoiceRow(PersonaStyle.entries, persona, { it.label }, { settings.persona.set(it) }, color = ScannerRed) }
             item {
@@ -313,6 +336,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                     )
                 }
             }
+            anchor("voice")
             item { Text("VOICE", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
             item {
                 ChoiceRow(
@@ -367,6 +391,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                 )
             }
             if (voices.isEmpty()) item { HelpText("Voices appear once the text-to-speech engine is ready; reopen this screen if the list is empty.") }
+            anchor("mic")
             item { Text("SPEECH INPUT (MIC BUTTON)", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
             item { ChoiceRow(SpeechInput.entries, speechInput, { it.label }, { settings.speechInput.set(it) }) }
             item {
@@ -399,8 +424,10 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                         "head unit to another app, its built-in voice assistant is the recognizer: pick a different one here."
                 )
             }
+            anchor("wake")
             item { KittToggle("Speak replies", voiceReply, { settings.voiceReply.set(it) }) }
             item { WakeWordToggle(app) }
+            anchor("messages")
             item { Text("READ INCOMING MESSAGES", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
             item {
                 ChoiceRow(MessageReadout.entries, readMessages, { it.label }, { settings.readMessages.set(it) })
@@ -417,6 +444,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
             }
 
             // ---------------- Display ----------------
+            anchor("display")
             item { SectionHeader("Display") }
             item { Text("SCREEN SIZE", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
             item { ChoiceRow(UiScale.entries, uiScale, { it.label }, { settings.uiScale.set(it) }, color = ScannerRed) }
@@ -426,6 +454,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                         "a little larger on big 10\" panels; portrait screens keep their normal size. Compact fits more on screen; Large is easier to hit while driving."
                 )
             }
+            anchor("performance")
             item { Text("PERFORMANCE", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
             item { ChoiceRow(LiteMode.entries, liteMode, { it.label }, { settings.liteMode.set(it) }, color = LedGreen) }
             item {
@@ -436,11 +465,13 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                         "3 GB of RAM or less or four CPU cores or fewer" + (if (app.lowEndDevice) " (like this one)." else ".")
                 )
             }
+            anchor("theme")
             item { Text("THEME", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
             item { ChoiceRow(UiTheme.entries, theme, { it.label }, { settings.uiTheme.set(it) }, color = ScannerRed) }
             if (theme.hud != null) {
                 item { FilmThemeSettings(app) }
             }
+            anchor("accent")
             item { Text("ACCENT COLOUR", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
             item {
                 LazyRow(Modifier.height(44.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -463,6 +494,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
             if (theme == UiTheme.Colorado) {
                 item { KittToggle("Digital rain", rain, { settings.matrixRain.set(it) }, description = "Falling code glyphs behind the panels.") }
             }
+            anchor("night")
             item { Text("NIGHT MODE", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
             item { ChoiceRow(NightMode.entries, nightMode, { it.label }, { settings.nightMode.set(it) }) }
             item {
@@ -473,6 +505,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
             }
             item { NightThemeSetting(app) }
             item { ChoiceRow(listOf(false, true), metric, { if (it) "Metric" else "Imperial" }, { settings.metricUnits.set(it) }) }
+            anchor("drivinglayout")
             item {
                 KittToggle(
                     "Driving layout",
@@ -523,6 +556,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
             }
 
             // ---------------- Navigation ----------------
+            anchor("navigation")
             item { SectionHeader("Navigation") }
             item {
                 KittToggle(
@@ -565,15 +599,23 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                 }
             }
 
+            anchor("driving")
             item { DrivingExtrasSettings(app) }
+            anchor("extras")
             item { ExtrasSettings(app) }
+            anchor("home")
             item { HomeScreenSettings(app) }
+            anchor("buttons")
             item { ButtonSettings(app) }
+            anchor("profiles")
             item { DriverProfileSettings() }
+            anchor("backup")
             item { BackupSettings(app) }
+            anchor("updates")
             item { UpdateSettings(app) }
 
             // ---------------- Quick links ----------------
+            anchor("links")
             item { SectionHeader("Quick links") }
             item {
                 Row(Modifier.fillMaxWidth().height(44.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -598,6 +640,8 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
                 }
             }
             item { Column(Modifier.height(24.dp)) {} }
+          }
+        }
         }
     }
 }

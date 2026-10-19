@@ -163,7 +163,7 @@ fun SelfCheckPanel(app: KittApplication) {
             scope.launch {
                 update = "Checking…"
                 update = try {
-                    val latest = updater.latest(app.settings.updateRepo.value)
+                    val latest = updater.latest(app.settings.updateRepo.value, app.settings.betaUpdates.value)
                     if (Versions.isNewer(latest.tag, installed)) "Version ${latest.tag} is available: install it under Updates below." else "Up to date ($installed)."
                 } catch (e: IOException) {
                     "Couldn't check: ${e.message}"
@@ -205,6 +205,7 @@ fun DrivingExtrasSettings(app: KittApplication) {
     val s = app.settings
     val commentary by s.drivingCommentary.state.collectAsState()
     val cards by s.reportCards.state.collectAsState()
+    val recap by s.driveRecap.state.collectAsState()
     val fuel by s.fuelAlerts.state.collectAsState()
     val limits by s.speedLimits.state.collectAsState()
     val alerts by s.speedAlerts.state.collectAsState()
@@ -215,6 +216,7 @@ fun DrivingExtrasSettings(app: KittApplication) {
         SectionHeader("Driving")
         KittToggle("Driving commentary", commentary, { s.drivingCommentary.set(it) }, description = "KITT speaks up about hard stops, revving a cold engine, long idling and full throttle.")
         KittToggle("Report card", cards, { s.reportCards.set(it) }, description = "KITT grades each drive when you switch off; past grades are on the Trips screen.")
+        KittToggle("Last-drive recap", recap, { s.driveRecap.set(it) }, description = "When the next drive starts, one line on what KITT noticed last time: fault codes still on, a weak battery, the grade.")
         KittToggle("Low fuel warning", fuel, { s.fuelAlerts.set(it) }, description = "Below 12% (or about 37 miles of range), KITT offers the nearest gas station.")
         KittToggle("Speed limits", limits, { s.speedLimits.set(it) }, description = "Shows the road's limit on the map, from OpenStreetMap (not every road has one). Needs data.")
         KittToggle("Speed warning", alerts, { s.speedAlerts.set(it) }, description = "KITT warns when you stay over the limit by more than the margin below.")

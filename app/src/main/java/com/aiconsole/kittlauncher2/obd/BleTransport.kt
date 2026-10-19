@@ -148,13 +148,18 @@ class BleTransport(context: Context, private val address: String) : ObdTransport
         var device = adapter.getRemoteDevice(normalized)
         val unknown = runCatching { device.type == BluetoothDevice.DEVICE_TYPE_UNKNOWN }.getOrDefault(true)
         if (unknown) AdapterDiscovery.findBle(appContext, normalized, FIND_MS)?.let { device = it }
-        val attempts = buildList {
-            add(Triple("direct", device, false))
-            add(Triple("auto", device, true))
-            if (unknown && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                add(Triple("random address", adapter.getRemoteLeDevice(normalized, BluetoothDevice.ADDRESS_TYPE_RANDOM), false))
-            }
-        }
+        // The way that worked last time goes first (LinkMemory).
+        val remembered = LinkMemory.get(appContext, normalized)
+        val attempts = LinkOrder.preferred(
+            buildList {
+                add(Triple("direct", device, false))
+                add(Triple("auto", device, true))
+                if ((unknown || remembered == "random address") && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    add(Triple("random address", adapter.getRemoteLeDevice(normalized, BluetoothDevice.ADDRESS_TYPE_RANDOM), false))
+                }
+            },
+            remembered
+        ) { it.first }
         val failures = mutableListOf<String>()
         for ((index, attempt) in attempts.withIndex()) {
             val (name, target, auto) = attempt
@@ -162,6 +167,7 @@ class BleTransport(context: Context, private val address: String) : ObdTransport
             try {
                 connectOnce(target, auto)
                 linked = true
+                LinkMemory.put(appContext, normalized, name)
                 return
             } catch (e: IOException) {
                 failures += "$name: ${e.message}"

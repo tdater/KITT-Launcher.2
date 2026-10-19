@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
@@ -36,9 +37,21 @@ data class ReleaseInfo(val tag: String, val apkUrl: String, val notes: String, v
 
 /** Plain-Kotlin version comparison for update checks ("v1.0.42" vs "1.0.37"). */
 object Versions {
+    /** The numbers before any pre-release suffix: "v1.8-beta2" → [1, 8]. */
     fun parts(version: String): List<Int> =
-        version.trim().removePrefix("v").removePrefix("V").split('.', '-', '+').mapNotNull { it.toIntOrNull() }
+        core(version).split('.', '+').mapNotNull { it.toIntOrNull() }
 
+    private fun core(version: String) = version.trim().removePrefix("v").removePrefix("V").substringBefore('-')
+
+    /** Beta number of a pre-release ("1.8-beta2" → 2, "1.8-beta" → 0), or null for a final release. */
+    fun beta(version: String): Int? {
+        val suffix = version.trim().substringAfter('-', "").takeIf { it.isNotEmpty() } ?: return null
+        return suffix.filter(Char::isDigit).toIntOrNull() ?: 0
+    }
+
+    fun isBeta(version: String): Boolean = beta(version) != null
+
+    /** 1.8 > 1.8-beta2 > 1.8-beta1 > 1.7. */
     fun isNewer(candidate: String, current: String): Boolean {
         val a = parts(candidate)
         val b = parts(current)
@@ -47,8 +60,18 @@ object Versions {
             val y = b.getOrElse(i) { 0 }
             if (x != y) return x > y
         }
-        return false
+        val pa = beta(candidate)
+        val pb = beta(current)
+        return when {
+            pa == null -> pb != null
+            pb == null -> false
+            else -> pa > pb
+        }
     }
+
+    /** The newest of [tags], betas only when [beta] is on. */
+    fun pick(tags: List<String>, beta: Boolean): String? =
+        tags.filter { beta || !isBeta(it) }.fold(null as String?) { best, tag -> if (best == null || isNewer(tag, best)) tag else best }
 
     fun isValidRepo(repo: String): Boolean = repo.matches(Regex("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+"))
 }
@@ -137,10 +160,12 @@ class SelfUpdate(context: Context) {
             .build()
     }
 
-    suspend fun latest(repo: String): ReleaseInfo = withContext(Dispatchers.IO) {
+    /** The newest release; with [beta], test releases (pre-releases, "v1.8-beta1") count too. */
+    suspend fun latest(repo: String, beta: Boolean = false): ReleaseInfo = withContext(Dispatchers.IO) {
         if (!Versions.isValidRepo(repo)) throw IOException("Enter the repository as owner/name")
+        val path = if (beta) "releases?per_page=20" else "releases/latest"
         val request = Request.Builder()
-            .url("https://api.github.com/repos/$repo/releases/latest")
+            .url("https://api.github.com/repos/$repo/$path")
             .header("Accept", "application/vnd.github+json")
             .build()
         val body = http.newCall(request).await().use { r ->
@@ -150,7 +175,13 @@ class SelfUpdate(context: Context) {
             r.body.string()
         }
         try {
-            val json = JSONObject(body)
+            val json = if (beta) {
+                val list = JSONArray(body).let { a -> (0 until a.length()).map { a.getJSONObject(it) } }.filter { !it.optBoolean("draft") }
+                val tag = Versions.pick(list.map { it.getString("tag_name") }, beta = true) ?: throw IOException("No releases published yet")
+                list.first { it.getString("tag_name") == tag }
+            } else {
+                JSONObject(body)
+            }
             val assets = json.getJSONArray("assets")
             val apk = (0 until assets.length()).map { assets.getJSONObject(it) }
                 .firstOrNull { it.getString("name").endsWith(".apk") }

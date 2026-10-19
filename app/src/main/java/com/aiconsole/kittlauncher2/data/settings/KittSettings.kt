@@ -194,6 +194,8 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val navRecents = stringPref("nav_recents", "")
     /** GitHub repository (owner/name) whose releases the in-app updater checks. */
     val updateRepo = stringPref("update_repo", DEFAULT_UPDATE_REPO)
+    /** Also offer test releases ("v1.8-beta1", GitHub pre-releases) in Updates. */
+    val betaUpdates = boolPref("beta_updates", false)
     /** Fill-up log (FuelLog format). */
     val fuelLog = stringPref("fuel_log", "")
     /** Clock, connectivity, GPS and OBD status under the scanner. */
@@ -242,6 +244,10 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val reportCards = boolPref("report_cards", true)
     /** Graded drives (ReportCards format). */
     val reportCardLog = stringPref("report_card_log", "")
+    /** A one-line recap of the last drive (codes still on, battery, grade) when the next one starts. */
+    val driveRecap = boolPref("drive_recap", true)
+    /** The last drive, for that recap (LastDriveRules format); cleared once spoken. */
+    val lastDrive = stringPref("last_drive", "")
     /** Speak up when fuel runs low and offer the nearest gas station. */
     val fuelAlerts = boolPref("fuel_alerts", true)
     /** Look up the road's speed limit (OpenStreetMap) and show it on the map. */

@@ -3,6 +3,7 @@
 import android.util.Log
 import com.aiconsole.kittlauncher2.data.settings.KittSettings
 import com.aiconsole.kittlauncher2.data.settings.PersonaStyle
+import com.aiconsole.kittlauncher2.data.trip.LastDriveRules
 import com.aiconsole.kittlauncher2.obd.DrivingEvent
 import com.aiconsole.kittlauncher2.ui.theme.ThemeState
 import com.aiconsole.kittlauncher2.obd.DtcDecoder
@@ -128,9 +129,11 @@ class KittAlerts(
         val name = settings.driverName.value.trim()
         val who = if (name.isNotEmpty()) ", $name" else ""
         val film = if (settings.filmCharacters.value) ThemeState.filmCharacter else null
+        // The last drive's recap rides along with the greeting (facts after the hello).
+        val recap = lastDriveRecap()?.let { " $it" }.orEmpty()
         if (film != null) {
             val hello = film.greeting(part, who)
-            raise("greeting", line(hello, "$hello Try not to crash this damn thing.", "$hello Now drive, for fuck's sake."), severe = false, cooldownMs = 0)
+            raise("greeting", line(hello, "$hello Try not to crash this damn thing.", "$hello Now drive, for fuck's sake.") + recap, severe = false, cooldownMs = 0)
             return
         }
         raise(
@@ -140,10 +143,32 @@ class KittAlerts(
                 "$part$who. KITT's online, unfortunately for both of us. Try not to hit any damn thing today.",
                 "$part$who. Oh good, you again. Buckle up, I've seen how you fucking drive.",
                 "$part$who. Systems online, and already regretting it. Let's go terrify the other drivers, shall we, ace?"
-            ),
+            ) + recap,
             severe = false,
             cooldownMs = 0
         )
+    }
+
+    /**
+     * One line on what KITT noticed by the end of the last drive (codes still on, battery, grade),
+     * once per drive: with the greeting, or when the next drive's OBD link comes up.
+     */
+    fun lastDriveRecap(): String? {
+        val drive = LastDriveRules.decode(settings.lastDrive.value) ?: return null
+        val now = System.currentTimeMillis()
+        if (!settings.driveRecap.value || LastDriveRules.isStale(drive, now)) {
+            settings.lastDrive.set("")
+            return null
+        }
+        val recap = LastDriveRules.recap(drive, now, settings.metricUnits.value) ?: return null
+        settings.lastDrive.set("")
+        return recap
+    }
+
+    /** [lastDriveRecap] spoken on its own (the greeting already happened this run). */
+    fun speakLastDriveRecap() {
+        val recap = lastDriveRecap() ?: return
+        raise("last_drive", line(recap, "$recap Just so you know, genius."), severe = false, cooldownMs = 0)
     }
 
     /** Reads out an incoming message (the driver chose this in KITT Config). */

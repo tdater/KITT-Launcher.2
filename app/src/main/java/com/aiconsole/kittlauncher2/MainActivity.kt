@@ -80,6 +80,7 @@ import com.aiconsole.kittlauncher2.browser.BrowserSession
 import com.aiconsole.kittlauncher2.browser.SiteHomeRules
 import com.aiconsole.kittlauncher2.browser.WebMedia
 import com.aiconsole.kittlauncher2.data.AppLists
+import com.aiconsole.kittlauncher2.data.SafeMode
 import com.aiconsole.kittlauncher2.data.AppUsage
 import com.aiconsole.kittlauncher2.data.AutoBackup
 import com.aiconsole.kittlauncher2.data.HomeScreen
@@ -320,7 +321,7 @@ open class MainActivity : ComponentActivity() {
         // Some ROMs refuse widget hosting; the Widgets page then just shows nothing.
         runCatching { kitt.widgetHost.startListening() }
         kitt.startup.onLauncherShown()
-        kitt.wakeWord.setVisible(true)
+        if (!SafeMode.active) kitt.wakeWord.setVisible(true)
         kitt.weather.start()
         kitt.speedLimits.start()
         WebMedia.setLauncherVisible(true)
@@ -378,7 +379,7 @@ open class MainActivity : ComponentActivity() {
         ) {
             ObdConnectionService.start(this)
         }
-        if (settings.scannerOverlay.value && Settings.canDrawOverlays(this)) {
+        if (settings.scannerOverlay.value && Settings.canDrawOverlays(this) && !SafeMode.active) {
             ScannerOverlayService.start(this)
         }
         kitt.alerts.greetOnce()
@@ -741,6 +742,7 @@ fun LauncherRoot(
             val scannerHeight = DeviceProfile.scannerHeightDp(configuration.screenHeightDp.toFloat()).dp
             KittScanner(Modifier.fillMaxWidth().height(scannerHeight), alert = dash.alert?.severe == true, shift = dash.shift)
             if (statusStrip && !chromeless) StatusStrip(onClick = { quickSettings = !quickSettings })
+            if (SafeMode.active) SafeModeBar(onReport = { overlay = LauncherOverlay.Config })
 
             // From the screen's shape, not the space left: the on-screen keyboard shrinks
             // maxHeight, and flipping the layout then would rebuild the map and drop its search.
@@ -1094,6 +1096,27 @@ private fun AlertBanner(alert: KittAlert, onDismiss: () -> Unit, modifier: Modif
         alert.action?.let { action ->
             KittButton(action.label, { onAction(action) }, Modifier.height(48.dp).width(120.dp), LedGreen, active = true)
         }
+    }
+}
+
+/** Safe mode (see SafeMode): what's off, a way to the problem report, and back to normal. */
+@Composable
+private fun SafeModeBar(onReport: () -> Unit) {
+    val context = LocalContext.current
+    Row(
+        Modifier.fillMaxWidth().background(KittBlack).padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            "SAFE MODE: KITT crashed at start-up several times. Web pages, the scanner overlay, \"Hey KITT\" and the offline voice are off.",
+            Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall,
+            color = DashAmber,
+            maxLines = 2
+        )
+        KittButton("Report", onReport, Modifier.height(36.dp).width(88.dp), DashAmber)
+        KittButton("Back to normal", { SafeMode.exit(context) }, Modifier.height(36.dp), LedGreen)
     }
 }
 

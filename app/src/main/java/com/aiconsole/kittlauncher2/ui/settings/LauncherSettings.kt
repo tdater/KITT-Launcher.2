@@ -264,6 +264,7 @@ fun UpdateSettings(app: KittApplication) {
     val scope = rememberCoroutineScope()
     val updater = remember { SelfUpdate(context) }
     val repo by app.settings.updateRepo.state.collectAsState()
+    val beta by app.settings.betaUpdates.state.collectAsState()
     val state by SelfUpdate.state.collectAsState()
     var release by remember { mutableStateOf<ReleaseInfo?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -280,6 +281,16 @@ fun UpdateSettings(app: KittApplication) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         SectionHeader("Updates")
         Text("INSTALLED: $current", style = MaterialTheme.typography.labelLarge, color = DashWhite)
+        KittToggle(
+            "Beta updates",
+            beta,
+            {
+                app.settings.betaUpdates.set(it)
+                release = null
+            },
+            description = "Also offer test releases (e.g. v1.8-beta1) so you can try one in the car before it goes to everyone. " +
+                "The final release replaces a beta as usual."
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             KittTextField(repo, { app.settings.updateRepo.set(it.trim()) }, "GitHub repo, e.g. ${com.aiconsole.kittlauncher2.BuildConfig.UPDATE_REPO}", Modifier.weight(1f))
             KittButton(
@@ -289,7 +300,7 @@ fun UpdateSettings(app: KittApplication) {
                     SelfUpdate.reset()
                     scope.launch {
                         message = try {
-                            val latest = updater.latest(repo)
+                            val latest = updater.latest(repo, beta)
                             release = latest.takeIf { Versions.isNewer(it.tag, current) }
                             if (release == null) "Up to date (latest is ${latest.tag})." else "Version ${latest.tag} is available."
                         } catch (e: IOException) {

@@ -79,6 +79,7 @@ jobs:
           token: ${{ secrets.RELEASES_TOKEN }}
           name: KITT Launcher.2 ${{ github.ref_name }}
           body_path: release-notes-KITT-Launcher.2.md
+          prerelease: ${{ contains(github.ref_name, '-') }} # v1.8-beta1: only beta-channel units see it
           files: KITT-Launcher.2-${{ github.ref_name }}.apk
 
       - name: Publish KITT Launcher
@@ -89,4 +90,5 @@ jobs:
           token: ${{ secrets.RELEASES_TOKEN }}
           name: KITT Launcher ${{ github.ref_name }}
           body_path: release-notes-KITT-Launcher.md
+          prerelease: ${{ contains(github.ref_name, '-') }} # v1.8-beta1: only beta-channel units see it
           files: KITT-Launcher-${{ github.ref_name }}.apk

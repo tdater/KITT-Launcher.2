@@ -99,6 +99,11 @@ fun BrowserView(
     /** Drawn over a web page (not the home page), e.g. the Games page's touch pad. */
     pageOverlay: @Composable BoxScope.() -> Unit = {}
 ) {
+    // Safe mode (repeated start-up crashes): no web pages at all, so none can be the cause.
+    if (com.aiconsole.kittlauncher2.data.SafeMode.active) {
+        HelpText("Safe mode: web pages are off. Tap \"Back to normal\" at the top of the screen to turn them on again.", modifier, color = DashAmber)
+        return
+    }
     val context = LocalContext.current
     val app = context.applicationContext as KittApplication
     val scripts by app.userscripts.scripts.collectAsState()
