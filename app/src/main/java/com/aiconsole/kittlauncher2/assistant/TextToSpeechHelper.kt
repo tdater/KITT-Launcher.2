@@ -174,7 +174,7 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
         if (spoken < chunks.size) sayLocal(chunks.drop(spoken))
     }
 
-    // On-device is the default since v1.5: a driver with a Gemini key keeps Gemini until a voice is downloaded.
+    // On-device is now the default: a driver with a Gemini key keeps Gemini until a voice is downloaded.
     private fun useNeural(): Boolean = settings.geminiKey.isNotEmpty() && when (settings.voiceEngine.value) {
         VoiceEngine.Gemini -> true
         VoiceEngine.OnDevice -> !onDeviceReady()
