@@ -1,0 +1,88 @@
+name: Page media
+
+# Screenshots and clips for the features page (tdater/KITT-Launcher-releases): both editions in
+# demo mode on an emulator shaped like their head units (KITT Launcher.2 1024x600 landscape, KITT
+# Launcher 800x1151 portrait), captured by MediaCaptureTest and converted to the page's webp and
+# mp4 files. Run by hand; download the "page-media" artifact and copy it into the page repo.
+on:
+  workflow_dispatch:
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      # First, so nothing a later step installs is removed.
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/node_modules /usr/share/swift
+
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Capture on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: false
+          disk-size: 3G
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            chmod +x gradlew
+            adb shell settings put global sysui_demo_allowed 1
+            adb shell am broadcast -a com.android.systemui.demo -e command enter
+            adb shell am broadcast -a com.android.systemui.demo -e command clock -e hhmm 0930
+            adb shell am broadcast -a com.android.systemui.demo -e command notifications -e visible false
+            adb shell am broadcast -a com.android.systemui.demo -e command battery -e level 100 -e plugged false
+            adb shell cmd overlay enable com.android.internal.systemui.navbar.gestural || true
+            adb shell wm size 1024x600 && adb shell wm density 160 && sleep 5
+            ./gradlew connectedKitt2DebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.aiconsole.kittlauncher2.MediaCaptureTest
+            mkdir -p raw/kitt2 raw/kitt && adb pull /data/local/tmp/media/. raw/kitt2/ && adb shell rm -rf /data/local/tmp/media
+            adb shell wm size 800x1151 && adb shell wm density 160 && sleep 5
+            ./gradlew connectedKittDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.aiconsole.kittlauncher2.MediaCaptureTest
+            adb pull /data/local/tmp/media/. raw/kitt/
+
+      - name: Convert to the page's formats
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq webp ffmpeg > /dev/null
+          mkdir -p out/screenshots out/videos
+          convert_set() { # dir thumb-width thumb-height video-width
+            for f in "$1"/*.png; do
+              n=$(basename "$f" .png)
+              cwebp -quiet -q 82 "$f" -o "out/screenshots/$n.webp"
+              cwebp -quiet -q 78 -resize "$2" "$3" "$f" -o "out/screenshots/$n-thumb.webp"
+            done
+            for f in "$1"/*.mp4; do
+              n=$(basename "$f" .mp4)
+              ffmpeg -loglevel error -y -i "$f" -vf "fps=24,scale=$4:-2" -c:v libx264 -crf 31 -preset slow -pix_fmt yuv420p -an -movflags +faststart "out/videos/$n.mp4"
+              ffmpeg -loglevel error -y -ss 2 -i "out/videos/$n.mp4" -frames:v 1 "raw/$n-poster.png"
+              cwebp -quiet -q 80 "raw/$n-poster.png" -o "out/videos/$n-poster.webp"
+            done
+          }
+          convert_set raw/kitt2 480 281 1024
+          convert_set raw/kitt 400 576 600
+          ls -la out/screenshots out/videos
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: page-media
+          path: out/
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: capture-report
+          path: app/build/reports/androidTests/

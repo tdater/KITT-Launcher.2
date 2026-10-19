@@ -51,7 +51,7 @@ jobs:
           script: |
             adb shell wm size 1280x720
             adb shell wm density 160
-            chmod +x gradlew && ./gradlew connectedKitt2DebugAndroidTest
+            chmod +x gradlew && ./gradlew connectedKitt2DebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.aiconsole.kittlauncher2.LauncherSmokeTest
 
       - uses: actions/upload-artifact@v7
         if: failure()

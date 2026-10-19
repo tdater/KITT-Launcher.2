@@ -20,6 +20,8 @@ sealed interface LauncherEvent {
     data object OpenPursuit : LauncherEvent
     data object OpenTrips : LauncherEvent
     data object OpenConfig : LauncherEvent
+    /** KITT's screen without starting the microphone (screenshots). */
+    data object OpenAssistant : LauncherEvent
     /** Back to the Drive page with the stream window showing (from the mini player). */
     data object ShowStream : LauncherEvent
 }

@@ -715,6 +715,10 @@ fun LauncherRoot(
                 LauncherEvent.OpenPursuit -> overlay = LauncherOverlay.Pursuit
                 LauncherEvent.OpenTrips -> overlay = LauncherOverlay.Trips
                 LauncherEvent.OpenConfig -> overlay = LauncherOverlay.Config
+                LauncherEvent.OpenAssistant -> {
+                    autoListen = false
+                    overlay = LauncherOverlay.Assistant
+                }
                 LauncherEvent.ShowStream -> {
                     overlay = LauncherOverlay.None
                     pager.animateScrollToPage(HomePage.Drive.ordinal)
