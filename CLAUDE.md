@@ -31,7 +31,7 @@ This is the owner's personal project, and they vibe code it. Deliver complete, w
 
 ## What this is
 
-**KITT Launcher.2**: a Knight Rider (KITT) themed Android **home-screen launcher** for aftermarket car head units, built for **7"–10" landscape** screens (1024x600 mdpi, 1280x720 hdpi, 1280x800 and similar) and light enough for cheap units. It was forked from the 12.1" portrait KITT Launcher (`com.aiconsole.knightriderlauncher`) and installs alongside it. It includes:
+**KITT Launcher.2**: a Knight Rider (KITT) themed Android **home-screen launcher** for aftermarket car head units, built for **7"–10" landscape** screens (1024x600 mdpi, 1280x720 hdpi, 1280x800 and similar) and light enough for cheap units. It was forked from the 12.1" portrait KITT Launcher (`com.aiconsole.knightriderlauncher`, `../KnightRiderLauncher`) and installs alongside it. Keep the two in sync: port every change here to the original (adapting for portrait) and add it to the features page in the releases repo. It includes:
 - an ELM327 OBD-II scanner (Car Scanner-style gauges, codes and custom PIDs);
 - a voice/text AI copilot ("KITT") that sees live vehicle data;
 - an always-on red scanner light.
