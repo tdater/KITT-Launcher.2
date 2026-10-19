@@ -13,6 +13,9 @@ import com.aiconsole.kittlauncher2.assistant.AssistantRepository
 import com.aiconsole.kittlauncher2.assistant.DriveAssistant
 import com.aiconsole.kittlauncher2.assistant.GeminiAssistantClient
 import com.aiconsole.kittlauncher2.assistant.KittAlerts
+import com.aiconsole.kittlauncher2.obd.DtcDecoder
+import com.aiconsole.kittlauncher2.obd.ObdState
+import com.aiconsole.kittlauncher2.assistant.OfflineFacts
 import com.aiconsole.kittlauncher2.assistant.OfflineWake
 import com.aiconsole.kittlauncher2.assistant.PerplexityAssistantClient
 import com.aiconsole.kittlauncher2.assistant.TextToSpeechHelper
@@ -136,6 +139,21 @@ class KittApplication : Application() {
                         battery = vehicle.battery().warnings.joinToString("; ").ifEmpty { null }
                     )
                 }
+            },
+            offlineFacts = {
+                val now = System.currentTimeMillis()
+                val dtc = obd.dtcs.value
+                OfflineFacts(
+                    connected = obd.state.value is ObdState.Connected,
+                    readings = obd.readings.value.filterValues { now - it.timestamp < 10_000 }.mapValues { it.value.value },
+                    metric = settings.metricUnits.value,
+                    storedCodes = dtc?.let { (it.stored + it.permanent).distinct() }.orEmpty(),
+                    pendingCodes = dtc?.pending.orEmpty(),
+                    batteryWarnings = vehicle.battery().warnings,
+                    maintenance = vehicle.reminder(),
+                    rangeKm = vehicle.rangeKm(null),
+                    describe = DtcDecoder::describe
+                )
             }
         )
     }

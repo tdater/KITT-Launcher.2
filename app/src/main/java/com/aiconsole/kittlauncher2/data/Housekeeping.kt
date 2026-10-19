@@ -11,6 +11,13 @@ object ReleaseNotes {
 
     val ALL = listOf(
         ReleaseNote(
+            6,
+            listOf(
+                "No signal? KITT still answers the common questions from the car itself: engine temperature, battery, " +
+                    "fuel, speed, fault codes and \"is everything OK?\", instantly, with any warning first.",
+            )
+        ),
+        ReleaseNote(
             5,
             listOf(
                 "Offline \"Hey KITT\": a small listener on the head unit hears you with no internet, no chimes, even over " +
