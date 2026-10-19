@@ -12,6 +12,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.aiconsole.kittlauncher2.assistant.LauncherBus
 import com.aiconsole.kittlauncher2.assistant.LauncherEvent
 import com.aiconsole.kittlauncher2.obd.DemoSession
+import com.aiconsole.kittlauncher2.data.settings.NightMode
 import com.aiconsole.kittlauncher2.ui.theme.FilmEdition
 import com.aiconsole.kittlauncher2.ui.theme.UiTheme
 import com.aiconsole.kittlauncher2.ui.theme.hud
@@ -43,78 +44,115 @@ class MediaCaptureTest {
             if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
         }.forEach { runCatching { automation.grantRuntimePermission(app.packageName, it) } }
         shell("mkdir -p $DIR")
+        // KITT is the home screen (no "another launcher took over" alert), and nothing dims it.
+        shell("cmd package set-home-activity ${app.packageName}/${EditionComponents.mainActivity.name}")
         main {
             app.settings.filmIntros.set(false)
             app.settings.uiTheme.set(UiTheme.Kitt)
             app.settings.drivingMode.set(false)
+            app.settings.nightMode.set(NightMode.Off)
+        }
+    }
+
+    private fun launch(): ActivityScenario<Activity> =
+        ActivityScenario.launch(Intent(app, EditionComponents.mainActivity).putExtra(DemoSession.EXTRA, true))
+
+    // One small group per emulator (page-media.yml runs each on its own): the CI emulator gives
+    // out after a few minutes of this, and a group that dies takes only its own files with it.
+
+    @Test
+    fun pages() = launch().use {
+        pause(10_000)
+        for (page in listOf("Drive", "Gauges", "Media", "Ai", "Games", "Apps")) {
+            show(page)
+            shot(page.lowercase())
+        }
+        LauncherBus.send(LauncherEvent.ShowStream)
+        pause(3_000)
+        shot("stream")
+        show("Drive")
+        overlay(LauncherEvent.OpenAssistant, "kitt")
+        overlay(LauncherEvent.OpenDiagnostics, "codes")
+        overlay(LauncherEvent.OpenTrips, "trips")
+    }
+
+    @Test
+    fun config() = launch().use {
+        pause(8_000)
+        // KITT Config: the top (system check, search), then further down.
+        LauncherBus.send(LauncherEvent.OpenConfig)
+        pause(3_000)
+        shot("config-1")
+        repeat(5) { n ->
+            scroll()
+            shot("config-${n + 2}")
         }
     }
 
     @Test
-    fun capture() {
+    fun themes() = launch().use {
+        pause(8_000)
+        for (theme in UiTheme.entries) {
+            main { app.settings.uiTheme.set(theme) }
+            pause(2_400)
+            shot("theme-" + theme.name.lowercase())
+        }
+    }
+
+    @Test
+    fun editions() = launch().use {
+        pause(8_000)
+        // Future War last: it has taken the CI emulator down before, and the rest are saved by then.
+        for (edition in FilmEdition.entries.sortedBy { it == FilmEdition.FutureWar }) {
+            edition(edition)
+            pause(2_400)
+            shot("edition-" + edition.name.lowercase())
+        }
+    }
+
+    @Test
+    fun driving() = launch().use {
+        // The driving layout switches in after steady driving (demo mode cruises at ~60 km/h).
+        main { app.settings.drivingMode.set(true) }
+        pause(30_000)
+        shot("driving")
+    }
+
+    /** The clips: KITT coming online and the page tour. */
+    @Test
+    fun clips() {
         // KITT comes online: the clip starts before the launcher does.
         val intro = record("kitt")
-        val intent = Intent(app, EditionComponents.mainActivity).putExtra(DemoSession.EXTRA, true)
-        ActivityScenario.launch<Activity>(intent).use {
-            pause(14_000)
+        launch().use {
+            pause(12_000)
             stop(intro)
-
-            for (page in listOf("Drive", "Gauges", "Media", "Ai", "Games", "Apps")) {
-                show(page)
-                shot(page.lowercase())
-            }
-            LauncherBus.send(LauncherEvent.ShowStream)
-            pause(3_000)
-            shot("stream")
-            show("Drive")
-
-            overlay(LauncherEvent.OpenAssistant, "kitt")
-            overlay(LauncherEvent.OpenDiagnostics, "codes")
-            overlay(LauncherEvent.OpenTrips, "trips")
-            // KITT Config: the top (system check, search), then further down.
-            LauncherBus.send(LauncherEvent.OpenConfig)
-            pause(3_000)
-            shot("config-1")
-            repeat(5) { n ->
-                scroll()
-                shot("config-${n + 2}")
-            }
-            show("Drive")
-
-            // Around the pages.
             val tour = record("tour")
-            for (page in listOf("Drive", "Gauges", "Media", "Ai", "Games", "Apps", "Drive")) show(page, 2_200)
+            for (page in listOf("Drive", "Gauges", "Media", "Ai", "Games", "Apps", "Drive")) show(page, 2_000)
             stop(tour)
-
-            // Themes, then the film editions.
-            val themes = record("themes")
-            for (theme in UiTheme.entries) {
-                main { app.settings.uiTheme.set(theme) }
-                pause(2_400)
-                shot("theme-" + theme.name.lowercase())
-            }
-            stop(themes)
-            val editions = record("editions")
-            for (edition in FilmEdition.entries) {
-                main {
-                    app.settings.uiTheme.set(themeFor(edition))
-                    app.settings.filmChoices.set("${edition.film.name}=${edition.name}:")
-                }
-                pause(2_400)
-                shot("edition-" + edition.name.lowercase())
-            }
-            stop(editions)
-            main {
-                app.settings.uiTheme.set(UiTheme.Kitt)
-                app.settings.filmChoices.set("")
-            }
-
-            // The driving layout switches in after steady driving (demo mode cruises at ~60 km/h).
-            main { app.settings.drivingMode.set(true) }
-            show("Drive", 20_000)
-            shot("driving")
-            main { app.settings.drivingMode.set(false) }
         }
+    }
+
+    /** The clips: themes and film editions. */
+    @Test
+    fun themeClips() = launch().use {
+        pause(8_000)
+        val themes = record("themes")
+        for (theme in listOf(UiTheme.Kitt, UiTheme.Karr, UiTheme.Outrun, UiTheme.Terminator, UiTheme.RoboCop, UiTheme.Colorado, UiTheme.BackToTheFuture)) {
+            main { app.settings.uiTheme.set(theme) }
+            pause(2_000)
+        }
+        stop(themes)
+        val editions = record("editions")
+        for (edition in listOf(FilmEdition.T1000, FilmEdition.Ed209, FilmEdition.Zion, FilmEdition.Frontier1885)) {
+            edition(edition)
+            pause(2_500)
+        }
+        stop(editions)
+    }
+
+    private fun edition(edition: FilmEdition) = main {
+        app.settings.uiTheme.set(themeFor(edition))
+        app.settings.filmChoices.set("${edition.film.name}=${edition.name}:")
     }
 
     private fun themeFor(edition: FilmEdition): UiTheme = UiTheme.entries.first { it.hud == edition.film }
@@ -144,12 +182,13 @@ class MediaCaptureTest {
 
     /** Starts screenrecord in the background; [stop] ends it so the file is finished properly. */
     private fun record(name: String): ParcelFileDescriptor =
-        instrumentation.uiAutomation.executeShellCommand("screenrecord --bit-rate 6000000 --time-limit 120 $DIR/$prefix$name.mp4")
+        instrumentation.uiAutomation.executeShellCommand("screenrecord --bit-rate 3000000 --time-limit 120 $DIR/$prefix$name.mp4")
 
     private fun stop(recording: ParcelFileDescriptor) {
         shell("pkill -INT screenrecord")
         pause(2_000)
         runCatching { recording.close() }
+        pause(3_000)
     }
 
     /** Runs a shell command and waits for it to finish; returns its output. */

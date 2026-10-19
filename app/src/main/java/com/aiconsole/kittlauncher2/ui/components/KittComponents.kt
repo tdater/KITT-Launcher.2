@@ -199,7 +199,8 @@ fun KittPanel(
                     // Editions mark their panels their own way: liquid metal's diamond, the future
                     // war's warning sign, ED-209's hazard tag, OCP's corporate chevrons.
                     edition == FilmEdition.T1000 -> "◆ ${title.uppercase()}"
-                    edition == FilmEdition.FutureWar -> "⚠ ${title.uppercase()}"
+                    // ︎: the text form of ⚠, not the colour emoji (a big bitmap glyph on every panel title).
+                    edition == FilmEdition.FutureWar -> "⚠︎ ${title.uppercase()}"
                     hud == HudStyle.Terminator -> "▌${title.uppercase()}"
                     edition == FilmEdition.Ed209 -> "[!] ${title.uppercase()}"
                     edition == FilmEdition.DeltaCity -> "‹ ${title.uppercase()} ›"
