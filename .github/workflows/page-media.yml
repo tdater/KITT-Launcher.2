@@ -1,8 +1,9 @@
 name: Page media
 
 # Screenshots and clips for the features page (tdater/KITT-Launcher-releases): both editions in
-# demo mode on an emulator shaped like their head units (KITT Launcher.2 1024x600 landscape, KITT
-# Launcher 800x1151 portrait), captured by MediaCaptureTest and converted to the page's webp and
+# demo mode on emulators shaped like their head units (KITT Launcher.2 1024x600 landscape, KITT
+# Launcher 800x1151 portrait), captured by MediaCaptureTest one small group per emulator (the CI
+# emulator gives out after a few minutes of it), then merged and converted to the page's webp and
 # mp4 files. Run by hand; download the "page-media" artifact and copy it into the page repo.
 on:
   workflow_dispatch:
@@ -10,7 +11,14 @@ on:
 jobs:
   capture:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        edition:
+          - { flavor: Kitt2, size: 1024x600, dir: kitt2 }
+          - { flavor: Kitt, size: 800x1151, dir: kitt }
+        group: [pages, config, themes, editions, driving, clips, themeClips]
     steps:
       # First, so nothing a later step installs is removed.
       - name: Free disk space
@@ -42,13 +50,29 @@ jobs:
           ram-size: 4096M
           heap-size: 512M
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: |
-            chmod +x gradlew && bash .github/scripts/capture-media.sh
+          script: chmod +x gradlew && bash .github/scripts/capture-media.sh ${{ matrix.edition.flavor }} ${{ matrix.edition.size }} ${{ matrix.group }} ${{ matrix.edition.dir }}
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: raw-${{ matrix.edition.dir }}-${{ matrix.group }}
+          path: raw/
+
+  convert:
+    needs: capture
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: raw-*
+          path: raw
+          merge-multiple: true
 
       - name: Convert to the page's formats
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq webp ffmpeg > /dev/null
-          mkdir -p out/screenshots out/videos
+          mkdir -p out/screenshots out/videos tmp
           convert_set() { # dir thumb-width thumb-height video-width
             for f in "$1"/*.png; do
               [ -e "$f" ] || continue
@@ -59,9 +83,8 @@ jobs:
             for f in "$1"/*.mp4; do
               [ -e "$f" ] || continue
               n=$(basename "$f" .mp4)
-              ffmpeg -loglevel error -y -i "$f" -vf "fps=24,scale=$4:-2" -c:v libx264 -crf 31 -preset slow -pix_fmt yuv420p -an -movflags +faststart "out/videos/$n.mp4"
-              ffmpeg -loglevel error -y -ss 2 -i "out/videos/$n.mp4" -frames:v 1 "raw/$n-poster.png"
-              cwebp -quiet -q 80 "raw/$n-poster.png" -o "out/videos/$n-poster.webp"
+              ffmpeg -loglevel error -y -i "$f" -vf "fps=24,scale=$4:-2" -c:v libx264 -crf 31 -preset slow -pix_fmt yuv420p -an -movflags +faststart "out/videos/$n.mp4" || continue
+              ffmpeg -loglevel error -y -ss 2 -i "out/videos/$n.mp4" -frames:v 1 "tmp/$n-poster.png" && cwebp -quiet -q 80 "tmp/$n-poster.png" -o "out/videos/$n-poster.webp"
             done
           }
           convert_set raw/kitt2 480 281 1024
@@ -72,11 +95,3 @@ jobs:
         with:
           name: page-media
           path: out/
-
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: capture-logs
-          path: |
-            app/build/reports/androidTests/
-            raw/

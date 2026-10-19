@@ -53,83 +53,96 @@ class MediaCaptureTest {
     private fun launch(): ActivityScenario<Activity> =
         ActivityScenario.launch(Intent(app, EditionComponents.mainActivity).putExtra(DemoSession.EXTRA, true))
 
-    /** Every still. Run first and pulled on its own, so a recorder crash later can't lose them. */
+    // One small group per emulator (page-media.yml runs each on its own): the CI emulator gives
+    // out after a few minutes of this, and a group that dies takes only its own files with it.
+
     @Test
-    fun screens() {
-        launch().use {
-            pause(10_000)
-            for (page in listOf("Drive", "Gauges", "Media", "Ai", "Games", "Apps")) {
-                show(page)
-                shot(page.lowercase())
-            }
-            LauncherBus.send(LauncherEvent.ShowStream)
-            pause(3_000)
-            shot("stream")
-            show("Drive")
+    fun pages() = launch().use {
+        pause(10_000)
+        for (page in listOf("Drive", "Gauges", "Media", "Ai", "Games", "Apps")) {
+            show(page)
+            shot(page.lowercase())
+        }
+        LauncherBus.send(LauncherEvent.ShowStream)
+        pause(3_000)
+        shot("stream")
+        show("Drive")
+        overlay(LauncherEvent.OpenAssistant, "kitt")
+        overlay(LauncherEvent.OpenDiagnostics, "codes")
+        overlay(LauncherEvent.OpenTrips, "trips")
+    }
 
-            overlay(LauncherEvent.OpenAssistant, "kitt")
-            overlay(LauncherEvent.OpenDiagnostics, "codes")
-            overlay(LauncherEvent.OpenTrips, "trips")
-            // KITT Config: the top (system check, search), then further down.
-            LauncherBus.send(LauncherEvent.OpenConfig)
-            pause(3_000)
-            shot("config-1")
-            repeat(5) { n ->
-                scroll()
-                shot("config-${n + 2}")
-            }
-            show("Drive")
-
-            for (theme in UiTheme.entries) {
-                main { app.settings.uiTheme.set(theme) }
-                pause(2_400)
-                shot("theme-" + theme.name.lowercase())
-            }
-            for (edition in FilmEdition.entries) {
-                edition(edition)
-                pause(2_400)
-                shot("edition-" + edition.name.lowercase())
-            }
-            main {
-                app.settings.uiTheme.set(UiTheme.Kitt)
-                app.settings.filmChoices.set("")
-            }
-
-            // The driving layout switches in after steady driving (demo mode cruises at ~60 km/h).
-            main { app.settings.drivingMode.set(true) }
-            show("Drive", 20_000)
-            shot("driving")
-            main { app.settings.drivingMode.set(false) }
+    @Test
+    fun config() = launch().use {
+        pause(8_000)
+        // KITT Config: the top (system check, search), then further down.
+        LauncherBus.send(LauncherEvent.OpenConfig)
+        pause(3_000)
+        shot("config-1")
+        repeat(5) { n ->
+            scroll()
+            shot("config-${n + 2}")
         }
     }
 
-    /** The clips, short, with a breather between recordings (the emulator's encoder is fragile). */
     @Test
-    fun videos() {
+    fun themes() = launch().use {
+        pause(8_000)
+        for (theme in UiTheme.entries) {
+            main { app.settings.uiTheme.set(theme) }
+            pause(2_400)
+            shot("theme-" + theme.name.lowercase())
+        }
+    }
+
+    @Test
+    fun editions() = launch().use {
+        pause(8_000)
+        for (edition in FilmEdition.entries) {
+            edition(edition)
+            pause(2_400)
+            shot("edition-" + edition.name.lowercase())
+        }
+    }
+
+    @Test
+    fun driving() = launch().use {
+        // The driving layout switches in after steady driving (demo mode cruises at ~60 km/h).
+        main { app.settings.drivingMode.set(true) }
+        pause(30_000)
+        shot("driving")
+    }
+
+    /** The clips: KITT coming online and the page tour. */
+    @Test
+    fun clips() {
         // KITT comes online: the clip starts before the launcher does.
         val intro = record("kitt")
         launch().use {
             pause(12_000)
             stop(intro)
-
             val tour = record("tour")
             for (page in listOf("Drive", "Gauges", "Media", "Ai", "Games", "Apps", "Drive")) show(page, 2_000)
             stop(tour)
-
-            val themes = record("themes")
-            for (theme in listOf(UiTheme.Kitt, UiTheme.Karr, UiTheme.Outrun, UiTheme.Terminator, UiTheme.RoboCop, UiTheme.Colorado, UiTheme.BackToTheFuture)) {
-                main { app.settings.uiTheme.set(theme) }
-                pause(2_000)
-            }
-            stop(themes)
-
-            val editions = record("editions")
-            for (edition in listOf(FilmEdition.T1000, FilmEdition.Ed209, FilmEdition.Zion, FilmEdition.Frontier1885)) {
-                edition(edition)
-                pause(2_500)
-            }
-            stop(editions)
         }
+    }
+
+    /** The clips: themes and film editions. */
+    @Test
+    fun themeClips() = launch().use {
+        pause(8_000)
+        val themes = record("themes")
+        for (theme in listOf(UiTheme.Kitt, UiTheme.Karr, UiTheme.Outrun, UiTheme.Terminator, UiTheme.RoboCop, UiTheme.Colorado, UiTheme.BackToTheFuture)) {
+            main { app.settings.uiTheme.set(theme) }
+            pause(2_000)
+        }
+        stop(themes)
+        val editions = record("editions")
+        for (edition in listOf(FilmEdition.T1000, FilmEdition.Ed209, FilmEdition.Zion, FilmEdition.Frontier1885)) {
+            edition(edition)
+            pause(2_500)
+        }
+        stop(editions)
     }
 
     private fun edition(edition: FilmEdition) = main {
