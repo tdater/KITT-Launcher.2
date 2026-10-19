@@ -102,8 +102,9 @@ class MediaCaptureTest {
     @Test
     fun editions() = launch().use {
         pause(8_000)
-        // Future War last: it has taken the CI emulator down before, and the rest are saved by then.
-        for (edition in FilmEdition.entries.sortedBy { it == FilmEdition.FutureWar }) {
+        // Not Future War: switching to it takes the CI emulator's software GPU down every time (the app
+        // itself doesn't crash; the emulator process dies). The page keeps its earlier picture.
+        for (edition in FilmEdition.entries - FilmEdition.FutureWar) {
             edition(edition)
             pause(2_400)
             shot("edition-" + edition.name.lowercase())
