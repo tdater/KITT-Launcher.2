@@ -50,15 +50,14 @@ class MediaCaptureTest {
         }
     }
 
-    @Test
-    fun capture() {
-        // KITT comes online: the clip starts before the launcher does.
-        val intro = record("kitt")
-        val intent = Intent(app, EditionComponents.mainActivity).putExtra(DemoSession.EXTRA, true)
-        ActivityScenario.launch<Activity>(intent).use {
-            pause(14_000)
-            stop(intro)
+    private fun launch(): ActivityScenario<Activity> =
+        ActivityScenario.launch(Intent(app, EditionComponents.mainActivity).putExtra(DemoSession.EXTRA, true))
 
+    /** Every still. Run first and pulled on its own, so a recorder crash later can't lose them. */
+    @Test
+    fun screens() {
+        launch().use {
+            pause(10_000)
             for (page in listOf("Drive", "Gauges", "Media", "Ai", "Games", "Apps")) {
                 show(page)
                 shot(page.lowercase())
@@ -81,29 +80,16 @@ class MediaCaptureTest {
             }
             show("Drive")
 
-            // Around the pages.
-            val tour = record("tour")
-            for (page in listOf("Drive", "Gauges", "Media", "Ai", "Games", "Apps", "Drive")) show(page, 2_200)
-            stop(tour)
-
-            // Themes, then the film editions.
-            val themes = record("themes")
             for (theme in UiTheme.entries) {
                 main { app.settings.uiTheme.set(theme) }
                 pause(2_400)
                 shot("theme-" + theme.name.lowercase())
             }
-            stop(themes)
-            val editions = record("editions")
             for (edition in FilmEdition.entries) {
-                main {
-                    app.settings.uiTheme.set(themeFor(edition))
-                    app.settings.filmChoices.set("${edition.film.name}=${edition.name}:")
-                }
+                edition(edition)
                 pause(2_400)
                 shot("edition-" + edition.name.lowercase())
             }
-            stop(editions)
             main {
                 app.settings.uiTheme.set(UiTheme.Kitt)
                 app.settings.filmChoices.set("")
@@ -115,6 +101,40 @@ class MediaCaptureTest {
             shot("driving")
             main { app.settings.drivingMode.set(false) }
         }
+    }
+
+    /** The clips, short, with a breather between recordings (the emulator's encoder is fragile). */
+    @Test
+    fun videos() {
+        // KITT comes online: the clip starts before the launcher does.
+        val intro = record("kitt")
+        launch().use {
+            pause(12_000)
+            stop(intro)
+
+            val tour = record("tour")
+            for (page in listOf("Drive", "Gauges", "Media", "Ai", "Games", "Apps", "Drive")) show(page, 2_000)
+            stop(tour)
+
+            val themes = record("themes")
+            for (theme in listOf(UiTheme.Kitt, UiTheme.Karr, UiTheme.Outrun, UiTheme.Terminator, UiTheme.RoboCop, UiTheme.Colorado, UiTheme.BackToTheFuture)) {
+                main { app.settings.uiTheme.set(theme) }
+                pause(2_000)
+            }
+            stop(themes)
+
+            val editions = record("editions")
+            for (edition in listOf(FilmEdition.T1000, FilmEdition.Ed209, FilmEdition.Zion, FilmEdition.Frontier1885)) {
+                edition(edition)
+                pause(2_500)
+            }
+            stop(editions)
+        }
+    }
+
+    private fun edition(edition: FilmEdition) = main {
+        app.settings.uiTheme.set(themeFor(edition))
+        app.settings.filmChoices.set("${edition.film.name}=${edition.name}:")
     }
 
     private fun themeFor(edition: FilmEdition): UiTheme = UiTheme.entries.first { it.hud == edition.film }
@@ -150,6 +170,7 @@ class MediaCaptureTest {
         shell("pkill -INT screenrecord")
         pause(2_000)
         runCatching { recording.close() }
+        pause(3_000)
     }
 
     /** Runs a shell command and waits for it to finish; returns its output. */
