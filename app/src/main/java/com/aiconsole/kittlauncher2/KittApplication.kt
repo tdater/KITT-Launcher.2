@@ -16,6 +16,7 @@ import com.aiconsole.kittlauncher2.assistant.KittAlerts
 import com.aiconsole.kittlauncher2.obd.DtcDecoder
 import com.aiconsole.kittlauncher2.obd.ObdState
 import com.aiconsole.kittlauncher2.assistant.OfflineFacts
+import com.aiconsole.kittlauncher2.assistant.OfflineSpeech
 import com.aiconsole.kittlauncher2.assistant.OfflineWake
 import com.aiconsole.kittlauncher2.assistant.PerplexityAssistantClient
 import com.aiconsole.kittlauncher2.assistant.TextToSpeechHelper
@@ -108,6 +109,9 @@ class KittApplication : Application() {
 
     /** The offline "Hey KITT" and quick-command spotter (model downloaded on request). */
     val offlineWake: OfflineWake by lazy { OfflineWake(this) }
+
+    /** Offline speech-to-text for the mic button (model downloaded on request). */
+    val offlineSpeech: OfflineSpeech by lazy { OfflineSpeech(this) }
 
     /** Userscripts for the home-screen stream window. */
     val userscripts: UserscriptStore by lazy { UserscriptStore(this) }
@@ -280,6 +284,7 @@ class KittApplication : Application() {
         WebMedia.trimMemory(level)
         // The offline voice's model is the next biggest thing (loaded again on the next line).
         if (kittVoiceLazy.isInitialized()) kittVoice.onDevice.trimMemory(level)
+        offlineSpeech.trimMemory(level)
     }
 
     private companion object {

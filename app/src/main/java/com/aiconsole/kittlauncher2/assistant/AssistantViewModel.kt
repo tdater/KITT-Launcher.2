@@ -21,7 +21,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private val app = application as KittApplication
     private val repository = app.assistantRepository
     private val voice = app.kittVoice
-    val speech = SpeechToTextHelper(application, app.settings)
+    val speech = SpeechToTextHelper(application, app.settings, app.offlineSpeech)
     private val commands = LauncherCommandRunner(app)
 
     val speaking: StateFlow<Boolean> = voice.speaking

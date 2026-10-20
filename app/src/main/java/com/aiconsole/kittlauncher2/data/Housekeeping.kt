@@ -15,6 +15,8 @@ object ReleaseNotes {
             listOf(
                 "No signal? KITT still answers the common questions from the car itself: engine temperature, battery, " +
                     "fuel, speed, fault codes and \"is everything OK?\", instantly, with any warning first.",
+                "KITT offline speech: the mic understands full questions and commands with no signal and no Google " +
+                    "recognizer. Download it under KITT Config → Speech input (30 MB).",
             )
         ),
         ReleaseNote(

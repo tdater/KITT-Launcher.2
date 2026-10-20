@@ -397,9 +397,11 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
             item {
                 HelpText(
                     "KITT (Gemini) records the mic itself and has Gemini transcribe it, so the head unit's own voice " +
-                        "assistant is never involved. Auto uses it whenever a Gemini key is set."
+                        "assistant is never involved. Auto uses it whenever a Gemini key is set. KITT offline transcribes on " +
+                        "the head unit itself (download below)."
                 )
             }
+            item { OfflineSpeechSettings(app) }
             item { MicFixSettings(app) }
             item { Text("SPEECH RECOGNIZER (MICROPHONE)", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
             item {

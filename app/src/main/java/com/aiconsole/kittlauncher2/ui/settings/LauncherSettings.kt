@@ -47,6 +47,7 @@ import com.aiconsole.kittlauncher2.data.SelfUpdate
 import com.aiconsole.kittlauncher2.data.UpdateRules
 import com.aiconsole.kittlauncher2.data.UpdateState
 import com.aiconsole.kittlauncher2.data.Versions
+import com.aiconsole.kittlauncher2.data.settings.SpeechInput
 import com.aiconsole.kittlauncher2.ui.components.ChoiceRow
 import com.aiconsole.kittlauncher2.ui.components.HelpText
 import com.aiconsole.kittlauncher2.ui.components.KittButton
@@ -230,6 +231,48 @@ private fun OfflineWakeSettings(app: KittApplication) {
             KittButton("Delete offline listener", {
                 app.settings.wakeOffline.set(false)
                 offline.remove()
+            }, Modifier.height(40.dp), DashGrey)
+        }
+        message?.let { HelpText(it, color = DashAmber) }
+    }
+}
+
+/** Offline speech-to-text for the mic button: download (30 MB), use, delete. */
+@Composable
+fun OfflineSpeechSettings(app: KittApplication) {
+    val scope = rememberCoroutineScope()
+    val offline = app.offlineSpeech
+    val installed by offline.installed.collectAsState()
+    val progress by offline.download.collectAsState()
+    var message by remember { mutableStateOf<String?>(null) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (!installed && progress == null) {
+            KittButton("Download KITT offline speech (30 MB)", {
+                message = "Downloading KITT offline speech (30 MB)…"
+                scope.launch {
+                    message = try {
+                        offline.install()
+                        "KITT offline speech ready. Auto uses it when there's no signal."
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: IOException) {
+                        "Download failed: ${e.message}"
+                    }
+                }
+            }, Modifier.height(44.dp), LedGreen)
+        }
+        progress?.let { Text("DOWNLOADING $it%", style = MaterialTheme.typography.labelMedium, color = DashAmber) }
+        offline.unavailable?.let { HelpText("Offline speech can't run on this head unit ($it).", color = DashAmber) }
+        HelpText(
+            "KITT offline speech is a small English speech model that runs on the head unit: ask a full question or give a " +
+                "command with no signal and no Google recognizer. Auto uses it when there's no Gemini key or recognizer, and " +
+                "when Gemini or the recognizer can't reach the internet. Pair it with the offline \"Hey KITT\" listener for " +
+                "voice that works anywhere."
+        )
+        if (installed && progress == null) {
+            KittButton("Delete offline speech", {
+                if (app.settings.speechInput.value == SpeechInput.Offline) app.settings.speechInput.set(SpeechInput.Auto)
+                scope.launch { offline.remove() }
             }, Modifier.height(40.dp), DashGrey)
         }
         message?.let { HelpText(it, color = DashAmber) }

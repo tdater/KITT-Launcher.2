@@ -63,7 +63,7 @@ import com.aiconsole.kittlauncher2.ui.theme.ScannerRed
 fun AiPane(session: BrowserSession, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val app = context.applicationContext as KittApplication
-    val speech = remember { SpeechToTextHelper(context, app.settings) }
+    val speech = remember { SpeechToTextHelper(context, app.settings, app.offlineSpeech) }
     DisposableEffect(speech) { onDispose { speech.release() } }
     val speechState by speech.state.collectAsState()
     var prompt by remember { mutableStateOf("") }

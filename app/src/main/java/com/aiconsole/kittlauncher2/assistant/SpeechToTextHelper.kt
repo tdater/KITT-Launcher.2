@@ -34,7 +34,11 @@ sealed interface SpeechState {
  * main thread; audio capture and recognition run in the recognition service's own process,
  * so nothing heavy happens on the UI thread. Callbacks just update [state].
  */
-class SpeechToTextHelper(context: Context, private val settings: KittSettings) : RecognitionListener {
+class SpeechToTextHelper(
+    context: Context,
+    private val settings: KittSettings,
+    private val offline: OfflineSpeech
+) : RecognitionListener {
 
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -43,6 +47,7 @@ class SpeechToTextHelper(context: Context, private val settings: KittSettings) :
     private val transcriber = GeminiTranscriber(settings)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var geminiJob: Job? = null
+    private var offlineRetried = false
 
     private val _state = MutableStateFlow<SpeechState>(SpeechState.Idle)
     val state: StateFlow<SpeechState> = _state.asStateFlow()
@@ -62,26 +67,28 @@ class SpeechToTextHelper(context: Context, private val settings: KittSettings) :
     }
 
     fun start() = onMain {
-        val useGemini = when (settings.speechInput.value) {
-            SpeechInput.Gemini -> true
-            SpeechInput.Device -> false
-            SpeechInput.Auto -> settings.geminiKey.isNotEmpty()
-        }
-        if (useGemini) {
-            startGemini()
-            return@onMain
-        }
+        offlineRetried = false
         val target = SpeechRecognizers.resolve(appContext, settings.speechRecognizer.value)
-        if (target == RecognizerTarget.Unavailable) {
-            _state.value = SpeechState.Error(
-                "No safe speech recognizer here. Add a Gemini key in KITT Config to use KITT's own speech input, or pick a recognizer there."
-            )
-            return@onMain
+        val deviceUsable = target != RecognizerTarget.Unavailable &&
+            (target != RecognizerTarget.SystemDefault || SpeechRecognizer.isRecognitionAvailable(appContext))
+        when (SpeechRoutes.choose(settings.speechInput.value, settings.geminiKey.isNotEmpty(), deviceUsable, offline.ready)) {
+            SpeechPath.Gemini -> startRecording(gemini = true)
+            SpeechPath.Offline -> startRecording(gemini = false)
+            SpeechPath.Device -> startDevice(target)
+            SpeechPath.None -> _state.value = SpeechState.Error(noPathMessage())
         }
-        if (target == RecognizerTarget.SystemDefault && !SpeechRecognizer.isRecognitionAvailable(appContext)) {
-            _state.value = SpeechState.Error("Voice input isn't available on this head unit. Type your question instead.")
-            return@onMain
-        }
+    }
+
+    private fun noPathMessage(): String = when (settings.speechInput.value) {
+        SpeechInput.Offline ->
+            offline.unavailable?.let { "Offline speech can't run on this head unit ($it)." }
+                ?: "Download KITT offline speech first (KITT Config → Speech input)."
+        SpeechInput.Device ->
+            "Voice input isn't available on this head unit. Pick KITT offline in KITT Config → Speech input, or type your question."
+        else -> "No safe speech recognizer here. Download KITT offline speech or add a Gemini key in KITT Config, or pick a recognizer there."
+    }
+
+    private fun startDevice(target: RecognizerTarget) {
         if (target != boundTarget) {
             recognizer?.destroy()
             recognizer = null
@@ -100,14 +107,17 @@ class SpeechToTextHelper(context: Context, private val settings: KittSettings) :
         active.startListening(intent)
     }
 
-    /** KITT's own path: record, then Gemini transcribes. No system recognizer involved. */
-    private fun startGemini() {
-        if (settings.geminiKey.isEmpty()) {
+    /**
+     * KITT's own path: record the mic, then Gemini or the offline model transcribes. No system
+     * recognizer involved. If Gemini can't be reached, the same clip goes to the offline model.
+     */
+    private fun startRecording(gemini: Boolean, prompt: String = "") {
+        if (gemini && settings.geminiKey.isEmpty()) {
             _state.value = SpeechState.Error("KITT's speech input needs a Gemini key (KITT Config).")
             return
         }
         geminiJob?.cancel()
-        _state.value = SpeechState.Listening()
+        _state.value = SpeechState.Listening(partial = prompt)
         MicGuard.listeningStarted()
         geminiJob = scope.launch {
             _state.value = try {
@@ -122,7 +132,7 @@ class SpeechToTextHelper(context: Context, private val settings: KittSettings) :
                     SpeechState.Error("Didn't catch that.")
                 } else {
                     _state.value = SpeechState.Processing
-                    transcriber.transcribe(pcm).let { if (it.isBlank()) SpeechState.Error("Didn't catch that.") else SpeechState.Result(it) }
+                    transcribe(pcm, gemini).let { if (it.isBlank()) SpeechState.Error("Didn't catch that.") else SpeechState.Result(it) }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -131,6 +141,16 @@ class SpeechToTextHelper(context: Context, private val settings: KittSettings) :
             } catch (e: IOException) {
                 SpeechState.Error(e.message ?: "Voice input failed.")
             }
+        }
+    }
+
+    private suspend fun transcribe(pcm: ByteArray, gemini: Boolean): String {
+        if (!gemini) return offline.transcribe(pcm)
+        return try {
+            transcriber.transcribe(pcm)
+        } catch (e: IOException) {
+            if (!offline.ready) throw e
+            offline.transcribe(pcm)
         }
     }
 
@@ -186,6 +206,13 @@ class SpeechToTextHelper(context: Context, private val settings: KittSettings) :
 
     override fun onError(error: Int) {
         MicGuard.listeningEnded()
+        val network = error == SpeechRecognizer.ERROR_NETWORK || error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT
+        if (network && !offlineRetried && SpeechRoutes.retryOfflineAfterNetworkError(settings.speechInput.value, offline.ready)) {
+            // The recognizer needed a signal: listen again with the offline model.
+            offlineRetried = true
+            startRecording(gemini = false, prompt = "No signal. Listening offline, say it again.")
+            return
+        }
         _state.value = SpeechState.Error(errorMessage(error))
     }
 

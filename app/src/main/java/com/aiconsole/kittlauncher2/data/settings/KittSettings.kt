@@ -44,7 +44,9 @@ enum class VoiceEngine(val label: String) {
 enum class SpeechInput(val label: String) {
     Auto("Auto"),
     Gemini("KITT (Gemini)"),
-    Device("Device recognizer")
+    Device("Device recognizer"),
+    /** The downloaded offline model (OfflineSpeech): no internet, no Google recognizer. */
+    Offline("KITT offline")
 }
 
 enum class NightMode(val label: String) {
@@ -132,7 +134,7 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val speechRecognizer = stringPref("speech_recognizer", SpeechRecognizers.AUTO)
     /** Record with the "voice recognition" mic source instead of the plain mic. */
     val voiceRecognitionMic = boolPref("voice_recognition_mic", false)
-    /** Auto: KITT's own Gemini transcription when a key is set, else a safe device recognizer. */
+    /** Auto: KITT's own Gemini transcription when a key is set, else a safe device recognizer, else the offline model. */
     val speechInput = Pref(
         "speech_input", SpeechInput.Auto,
         { k, d -> runCatching { SpeechInput.valueOf(getString(k, d.name)!!) }.getOrDefault(d) },
