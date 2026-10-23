@@ -105,7 +105,7 @@ class MediaLibrary(context: Context) {
     private val covers = object : LruCache<String, Bitmap>(80) {}
     private val http by lazy { OkHttpClient.Builder().callTimeout(8, TimeUnit.SECONDS).build() }
 
-    val lastUsed: String? get() = prefs.getString(KEY_LAST, null)
+    val lastUsed: String? get() = if (demo) DEMO_SOURCE.packageName else prefs.getString(KEY_LAST, null)
 
     /** Finds the installed apps that offer a library. [nowPlaying] and the last-used app go first. */
     fun refreshSources(nowPlaying: String?) {
