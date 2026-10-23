@@ -364,8 +364,7 @@ class KittAlerts(
             }
             val since = limitSince.getOrPut(gauge.id) { now }
             if (now - since >= LIMIT_HOLD_MS) {
-                Log.i(TAG, "Limit alert ${gauge.pidId} = $value, raw [${obd.rawDataOf(gauge.pidId)}], past the limit for ${(now - since) / 1000} s")
-                raise(
+                val raised = raise(
                     "gauge_${gauge.id}",
                     line(
                         "${def.name} is ${spoken(def, value, metric)}, outside the limit you set.",
@@ -375,14 +374,19 @@ class KittAlerts(
                     severe = false,
                     cooldownMs = 3 * 60_000
                 )
+                // Checked several times a second: log when it fires, not every check.
+                if (raised) {
+                    Log.i(TAG, "Limit alert ${gauge.pidId} = $value, raw [${obd.rawDataOf(gauge.pidId)}], past the limit for ${(now - since) / 1000} s")
+                }
             }
         }
     }
 
-    private fun raise(key: String, message: String, severe: Boolean, cooldownMs: Long, action: AlertAction? = null) {
+    /** Shows (and maybe speaks) the alert; false while [key] is still cooling down. */
+    private fun raise(key: String, message: String, severe: Boolean, cooldownMs: Long, action: AlertAction? = null): Boolean {
         val now = System.currentTimeMillis()
         val last = lastRaised[key]
-        if (last != null && now - last < cooldownMs) return
+        if (last != null && now - last < cooldownMs) return false
         lastRaised[key] = now
         _active.value = KittAlert(message, severe, now, action)
         val spoken = spokenCount[key] ?: 0
@@ -395,6 +399,7 @@ class KittAlerts(
             delay(if (severe || action != null) 20_000 else 8_000)
             if (_active.value?.at == now) _active.value = null
         }
+        return true
     }
 
     private fun spoken(def: PidDefinition, base: Double, metric: Boolean): String {

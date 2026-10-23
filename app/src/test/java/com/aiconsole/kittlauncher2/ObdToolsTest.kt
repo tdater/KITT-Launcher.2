@@ -127,6 +127,16 @@ class ObdToolsTest {
     }
 
     @Test
+    fun smartChargingIdleIsNotAWarning() {
+        val rpm = listOf(PidHistory.Point(0, 550.0), PidHistory.Point(10_000, 545.0))
+        val r = BatteryHealth.analyze(listOf(PidHistory.Point(5_000, 12.68)), rpm)
+        assertTrue(r.chargingState!!.startsWith("Charging lightly"))
+        assertTrue(r.warnings.isEmpty())
+        val dead = BatteryHealth.analyze(listOf(PidHistory.Point(5_000, 11.7)), rpm)
+        assertEquals(listOf("Not charging properly: check the alternator and belt"), dead.warnings)
+    }
+
+    @Test
     fun zeroToSixtyTimesTheRun() {
         val t = PerformanceTimer(PerformanceRun.ZeroToSixty, metric = false)
         t.feed(0, 0.0)
