@@ -102,3 +102,28 @@ class ReturnHomeAndLibraryTest {
         assertEquals(1, MediaBrowseRules.sampleSize(0, 0, 160))
     }
 }
+
+class PlayMusicCommandTest {
+    private fun parse(t: String) = com.aiconsole.kittlauncher2.assistant.VoiceCommands.parse(t)
+
+    @Test
+    fun playWithAnAppNameSearchesThatApp() {
+        assertEquals(
+            com.aiconsole.kittlauncher2.assistant.VoiceCommand.PlayMusic("nightcall by kavinsky", "spotify"),
+            parse("Hey KITT, play Nightcall by Kavinsky on Spotify")
+        )
+    }
+
+    @Test
+    fun playWithoutAnAppUsesWhateverIsHandy() {
+        assertEquals(com.aiconsole.kittlauncher2.assistant.VoiceCommand.PlayMusic("road trip playlist", null), parse("play the road trip playlist".replace("the ", "")))
+        assertEquals(com.aiconsole.kittlauncher2.assistant.VoiceCommand.PlayMusic("daft punk", null), parse("play some daft punk"))
+    }
+
+    @Test
+    fun existingPlayAndWindowCommandsStillWin() {
+        assertEquals(com.aiconsole.kittlauncher2.assistant.VoiceCommand.Play, parse("play music"))
+        assertEquals(com.aiconsole.kittlauncher2.assistant.VoiceCommand.Play, parse("resume"))
+        assertEquals(com.aiconsole.kittlauncher2.assistant.VoiceCommand.Stream("netflix"), parse("play netflix on the screen"))
+    }
+}

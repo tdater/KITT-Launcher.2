@@ -107,8 +107,11 @@ class MediaLibrary(context: Context) {
         _sources.value = MediaBrowseRules.order(list, { it.packageName }, { it.label }, nowPlaying, lastUsed)
     }
 
-    /** Connects to [source] and shows the top of its library. */
-    fun open(source: MediaSource) {
+    /**
+     * Connects to [source] and shows the top of its library. With [thenSearch] (voice command) it
+     * asks the app to play that as soon as it connects, then lets go of the connection.
+     */
+    fun open(source: MediaSource, thenSearch: String? = null) {
         disconnect()
         prefs.edit().putString(KEY_LAST, source.packageName).apply()
         _source.value = source
@@ -122,6 +125,10 @@ class MediaLibrary(context: Context) {
                 val root = b.root
                 _path.value = BrowsePath().push(Crumb(root, source.label))
                 load(root)
+                if (thenSearch != null) {
+                    search(thenSearch)
+                    main.postDelayed({ if (gen == generation) disconnect() }, HEADLESS_HOLD_MS)
+                }
             }
 
             override fun onConnectionFailed() = fail(gen, "${source.label} wouldn't share its library. Some apps only allow approved car apps; open the app instead.")
@@ -290,6 +297,7 @@ class MediaLibrary(context: Context) {
         const val SERVICE_INTERFACE = "android.media.browse.MediaBrowserService"
         const val EXTRA_MEDIA_FOCUS = "android.intent.extra.focus"
         const val CONNECT_TIMEOUT_MS = 8_000L
+        const val HEADLESS_HOLD_MS = 5_000L
         const val COVER_PX = 160
         const val MAX_COVER_BYTES = 2L * 1024 * 1024
     }
