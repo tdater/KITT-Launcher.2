@@ -63,3 +63,48 @@ data class BrowsePath(val crumbs: List<Crumb> = emptyList()) {
         return if (titles.size > 3) "… › " + titles.takeLast(2).joinToString(" › ") else titles.joinToString(" › ")
     }
 }
+
+/** Something the driver played from the Library tab or by voice, kept so it is one tap away next time. */
+data class RecentPlay(
+    val sourcePackage: String,
+    val sourceLabel: String,
+    /** The item's media id, or null when it was a search. */
+    val mediaId: String?,
+    /** The search text, when it was a search. */
+    val query: String?,
+    val title: String,
+    val subtitle: String?,
+    val iconUri: String?
+) {
+    /** The same thing, played again: same app and same item or search. */
+    val key: String get() = "$sourcePackage|${mediaId ?: ""}|${query ?: ""}"
+}
+
+/** Pure list and storage rules for [RecentPlay] (stored as text; org.json isn't available to JVM tests). */
+object RecentPlays {
+
+    const val MAX = 12
+    private const val FIELD = '\u001F'
+    private const val RECORD = '\u001E'
+
+    /** [entry] goes first; an earlier copy of it is dropped; the list is cut to [MAX]. */
+    fun push(list: List<RecentPlay>, entry: RecentPlay): List<RecentPlay> =
+        (listOf(entry) + list.filterNot { it.key == entry.key }).take(MAX)
+
+    /** The recents shown for [sourcePackage], or every app's when it is null. */
+    fun forSource(list: List<RecentPlay>, sourcePackage: String?): List<RecentPlay> =
+        if (sourcePackage == null) list else list.filter { it.sourcePackage == sourcePackage }
+
+    fun encode(list: List<RecentPlay>): String = list.joinToString(RECORD.toString()) { r ->
+        listOf(r.sourcePackage, r.sourceLabel, r.mediaId, r.query, r.title, r.subtitle, r.iconUri)
+            .joinToString(FIELD.toString()) { clean(it) }
+    }
+
+    fun decode(text: String): List<RecentPlay> = text.split(RECORD).mapNotNull { record ->
+        val f = record.split(FIELD)
+        if (f.size != 7 || f[0].isEmpty() || f[4].isEmpty()) return@mapNotNull null
+        RecentPlay(f[0], f[1], f[2].ifEmpty { null }, f[3].ifEmpty { null }, f[4], f[5].ifEmpty { null }, f[6].ifEmpty { null })
+    }.take(MAX)
+
+    private fun clean(value: String?) = value.orEmpty().replace(FIELD, ' ').replace(RECORD, ' ')
+}

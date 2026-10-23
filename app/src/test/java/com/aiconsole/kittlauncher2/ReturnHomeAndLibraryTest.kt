@@ -127,3 +127,49 @@ class PlayMusicCommandTest {
         assertEquals(com.aiconsole.kittlauncher2.assistant.VoiceCommand.Stream("netflix"), parse("play netflix on the screen"))
     }
 }
+
+class RecentPlaysTest {
+    private fun r(pkg: String, id: String?, q: String? = null, title: String = "T$id$q") =
+        com.aiconsole.kittlauncher2.media.RecentPlay(pkg, pkg.uppercase(), id, q, title, if (q != null) "Search" else null, null)
+
+    @Test
+    fun newestFirstWithoutDuplicates() {
+        val P = com.aiconsole.kittlauncher2.media.RecentPlays
+        var list = emptyList<com.aiconsole.kittlauncher2.media.RecentPlay>()
+        list = P.push(list, r("spot", "a"))
+        list = P.push(list, r("spot", "b"))
+        list = P.push(list, r("spot", "a"))
+        assertEquals(listOf("a", "b"), list.map { it.mediaId })
+    }
+
+    @Test
+    fun listIsCutAtTheLimit() {
+        val P = com.aiconsole.kittlauncher2.media.RecentPlays
+        var list = emptyList<com.aiconsole.kittlauncher2.media.RecentPlay>()
+        repeat(P.MAX + 5) { list = P.push(list, r("spot", "id$it")) }
+        assertEquals(P.MAX, list.size)
+        assertEquals("id${P.MAX + 4}", list.first().mediaId)
+    }
+
+    @Test
+    fun sameTextInTwoAppsIsTwoEntries() {
+        val P = com.aiconsole.kittlauncher2.media.RecentPlays
+        val list = P.push(P.push(emptyList(), r("spot", null, "daft punk")), r("ytm", null, "daft punk"))
+        assertEquals(2, list.size)
+        assertEquals(listOf("spot"), P.forSource(list, "spot").map { it.sourcePackage })
+        assertEquals(2, P.forSource(list, null).size)
+    }
+
+    @Test
+    fun survivesStorageIncludingAwkwardText() {
+        val P = com.aiconsole.kittlauncher2.media.RecentPlays
+        val list = listOf(r("spot", "a", title = "Tab\there \u001F and \u001E"), r("ytm", null, "kavinsky"))
+        val back = P.decode(P.encode(list))
+        assertEquals(2, back.size)
+        assertEquals("Tab\there   and  ", back[0].title)
+        assertEquals("kavinsky", back[1].query)
+        assertNull(back[1].mediaId)
+        assertTrue(P.decode("").isEmpty())
+        assertTrue(P.decode("garbage").isEmpty())
+    }
+}
