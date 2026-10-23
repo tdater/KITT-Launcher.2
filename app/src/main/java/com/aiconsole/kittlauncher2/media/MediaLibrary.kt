@@ -251,9 +251,9 @@ class MediaLibrary(context: Context) {
             val parsed = Uri.parse(uri)
             when (parsed.scheme) {
                 "http", "https" -> http.newCall(Request.Builder().url(uri).build()).execute().use { r ->
-                    if (r.isSuccessful) r.body.bytes() else null
+                    if (r.isSuccessful && r.body.contentLength() <= MAX_COVER_BYTES) r.body.byteStream().use(::readCapped) else null
                 }
-                "content", "android.resource" -> app.contentResolver.openInputStream(parsed)?.use { it.readBytes() }
+                "content", "android.resource" -> app.contentResolver.openInputStream(parsed)?.use(::readCapped)
                 else -> null
             }
         } catch (e: java.io.IOException) {
@@ -270,6 +270,19 @@ class MediaLibrary(context: Context) {
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
     }
 
+    /** Icon addresses come from other apps, so reads stop at [MAX_COVER_BYTES]; null when the file is bigger. */
+    private fun readCapped(input: java.io.InputStream): ByteArray? {
+        val out = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(8 * 1024)
+        while (true) {
+            val n = input.read(buffer)
+            if (n < 0) break
+            if (out.size() + n > MAX_COVER_BYTES) return null
+            out.write(buffer, 0, n)
+        }
+        return out.toByteArray()
+    }
+
     private companion object {
         const val TAG = "MediaLibrary"
         const val PREFS = "media_library"
@@ -278,5 +291,6 @@ class MediaLibrary(context: Context) {
         const val EXTRA_MEDIA_FOCUS = "android.intent.extra.focus"
         const val CONNECT_TIMEOUT_MS = 8_000L
         const val COVER_PX = 160
+        const val MAX_COVER_BYTES = 2L * 1024 * 1024
     }
 }
