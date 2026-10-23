@@ -134,6 +134,8 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val speechRecognizer = stringPref("speech_recognizer", SpeechRecognizers.AUTO)
     /** Record with the "voice recognition" mic source instead of the plain mic. */
     val voiceRecognitionMic = boolPref("voice_recognition_mic", false)
+    /** Bring the launcher back when the head unit's stock source screen covers it right after KITT audio or the mic. */
+    val returnToLauncher = boolPref("return_to_launcher", true)
     /** Auto: KITT's own Gemini transcription when a key is set, else a safe device recognizer, else the offline model. */
     val speechInput = Pref(
         "speech_input", SpeechInput.Auto,

@@ -12,6 +12,8 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import com.aiconsole.kittlauncher2.data.ReturnHome
+import com.aiconsole.kittlauncher2.ui.scanner.LauncherVisibility
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -88,12 +90,17 @@ class MediaBridge(context: Context) {
 
     fun playPause() {
         val c = current ?: return
-        if (c.playbackState?.state == PlaybackState.STATE_PLAYING) c.transportControls.pause() else c.transportControls.play()
+        if (c.playbackState?.state == PlaybackState.STATE_PLAYING) {
+            c.transportControls.pause()
+        } else {
+            ReturnHome.noteAudio()
+            c.transportControls.play()
+        }
     }
 
-    fun next() = current?.transportControls?.skipToNext()
+    fun next() = current?.transportControls?.skipToNext().also { ReturnHome.noteAudio() }
 
-    fun previous() = current?.transportControls?.skipToPrevious()
+    fun previous() = current?.transportControls?.skipToPrevious().also { ReturnHome.noteAudio() }
 
     fun seekTo(positionMs: Long) = current?.transportControls?.seekTo(positionMs)
 
@@ -124,7 +131,10 @@ class MediaBridge(context: Context) {
         val chosen = controllers.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
             ?: controllers.firstOrNull()
         current = chosen
-        _nowPlaying.value = chosen?.let(::snapshot)
+        val next = chosen?.let(::snapshot)
+        // Audio starting while the launcher is showing can make some head units throw up their radio screen.
+        if (next?.playing == true && _nowPlaying.value?.playing != true && LauncherVisibility.visible.value) ReturnHome.noteAudio()
+        _nowPlaying.value = next
     }
 
     private fun snapshot(c: MediaController): NowPlaying {

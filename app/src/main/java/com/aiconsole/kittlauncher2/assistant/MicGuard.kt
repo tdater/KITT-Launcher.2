@@ -49,6 +49,7 @@ object MicGuard {
 
     fun listeningStarted() {
         listeningSince = SystemClock.elapsedRealtime()
+        com.aiconsole.kittlauncher2.data.ReturnHome.noteAudio()
     }
 
     fun listeningEnded() {

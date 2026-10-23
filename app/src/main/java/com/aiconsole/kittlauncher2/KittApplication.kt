@@ -86,6 +86,7 @@ class KittApplication : Application() {
 
     /** Now-playing from the active media session (needs notification access). */
     val media: MediaBridge by lazy { MediaBridge(this) }
+    val mediaLibrary: com.aiconsole.kittlauncher2.media.MediaLibrary by lazy { com.aiconsole.kittlauncher2.media.MediaLibrary(this) }
 
     /** VIN identity, odometer, maintenance, fuel range and battery health. */
     val vehicle: VehicleService by lazy { VehicleService(obd, settings, pidHistory, appScope) }

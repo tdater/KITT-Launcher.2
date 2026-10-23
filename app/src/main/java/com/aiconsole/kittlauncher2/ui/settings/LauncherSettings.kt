@@ -471,6 +471,7 @@ fun MicFixSettings(app: KittApplication) {
     val context = LocalContext.current
     val last by MicGuard.last.collectAsState()
     val vrMic by app.settings.voiceRecognitionMic.state.collectAsState()
+    val returnHome by app.settings.returnToLauncher.state.collectAsState()
     var usage by remember { mutableStateOf(MicGuard.hasUsageAccess(context)) }
     var copied by remember { mutableStateOf(false) }
     val pkg = last?.packageName
@@ -502,6 +503,12 @@ fun MicFixSettings(app: KittApplication) {
             vrMic,
             { app.settings.voiceRecognitionMic.set(it) },
             description = "Off (recommended) records from the plain microphone, which head units are less likely to hand to their own voice system."
+        )
+        KittToggle(
+            "Return to KITT after a radio takeover",
+            returnHome,
+            { app.settings.returnToLauncher.set(it) },
+            description = "If the head unit throws its stock radio screen over KITT within a few seconds of KITT speaking, the mic opening or music starting from here, bring KITT back. Opening an app yourself is never undone."
         )
         Row(Modifier.fillMaxWidth().height(44.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             KittButton("Default assistant", { open(Intent(android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS)) }, Modifier.weight(1f).fillMaxHeight(), DashAmber)

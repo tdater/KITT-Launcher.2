@@ -19,7 +19,7 @@ object SettingsSearch {
         SettingsEntry("AI provider and keys", "ai", "ai gemini perplexity api key model provider diagnostics search"),
         SettingsEntry("Personality", "personality", "persona savage classic unfiltered karr swearing rude sarcasm name"),
         SettingsEntry("Voice engine", "voice", "voice offline neural kokoro ryan piper gemini device tts speech speak download pitch"),
-        SettingsEntry("Microphone and speech input", "mic", "mic microphone speech input recognizer listen dictation google fix offline no signal transcribe"),
+        SettingsEntry("Microphone and speech input", "mic", "mic microphone speech input recognizer listen dictation google fix offline no signal transcribe radio takeover stock source return"),
         SettingsEntry("Hey KITT and replies", "wake", "hey kitt wake word speak replies hands free offline listener quick commands"),
         SettingsEntry("Read messages aloud", "messages", "messages texts sms whatsapp read aloud notifications greeting"),
         SettingsEntry("Screen size", "display", "display screen size scale zoom text big small"),

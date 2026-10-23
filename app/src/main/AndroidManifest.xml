@@ -86,6 +86,10 @@
         <intent>
             <action android:name="com.gau.go.launcherex.theme" />
         </intent>
+        <!-- Music apps whose library the Media page can browse. -->
+        <intent>
+            <action android:name="android.media.browse.MediaBrowserService" />
+        </intent>
         <!-- Home-screen widget providers for the Widgets page. -->
         <intent>
             <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

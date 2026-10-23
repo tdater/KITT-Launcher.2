@@ -23,6 +23,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -68,38 +70,52 @@ fun MediaPane(modifier: Modifier = Modifier) {
             now?.let { Text(it.appLabel.uppercase(), style = MaterialTheme.typography.labelMedium, color = DashAmber) }
         }
     ) {
-        val playing = now
-        when {
-            !hasAccess -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)) {
-                HelpText(
-                    "Allow notification access so KITT can show what's playing in Spotify, YouTube Music, radio and other apps. " +
-                        "It's the same access the map uses for turn-by-turn."
-                )
-                KittButton(
-                    label = "Allow notification access",
-                    onClick = {
-                        try {
-                            context.startActivity(NavBridge.accessSettingsIntent(context).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-                        } catch (_: ActivityNotFoundException) {
+        var showLibrary by rememberSaveable { mutableStateOf(false) }
+        LaunchedEffect(Unit) { app.mediaLibrary.played.collect { showLibrary = false } }
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth().height(44.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                KittButton("Now playing", { showLibrary = false }, Modifier.weight(1f).fillMaxHeight(), ScannerRed, active = !showLibrary)
+                KittButton("Library", { showLibrary = true }, Modifier.weight(1f).fillMaxHeight(), ScannerRed, active = showLibrary)
+            }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                if (showLibrary) {
+                    MediaLibraryPane(app, now?.packageName)
+                } else {
+                    val playing = now
+                    when {
+                        !hasAccess -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)) {
+                            HelpText(
+                                "Allow notification access so KITT can show what's playing in Spotify, YouTube Music, radio and other apps. " +
+                                    "It's the same access the map uses for turn-by-turn."
+                            )
+                            KittButton(
+                                label = "Allow notification access",
+                                onClick = {
+                                    try {
+                                        context.startActivity(NavBridge.accessSettingsIntent(context).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                                    } catch (_: ActivityNotFoundException) {
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                color = ScannerRed,
+                                active = true
+                            )
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    color = ScannerRed,
-                    active = true
-                )
+                        playing == null -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
+                            VoiceModulator(active = false, modifier = Modifier.fillMaxWidth().height(80.dp))
+                            Text(
+                                "NOTHING PLAYING",
+                                modifier = Modifier.fillMaxWidth(),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = DashGrey,
+                                textAlign = TextAlign.Center
+                            )
+                            HelpText("Start music in any app, or pick something from the Library tab.", Modifier.fillMaxWidth())
+                        }
+                        else -> NowPlayingBody(app, playing)
+                    }
+                }
             }
-            playing == null -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
-                VoiceModulator(active = false, modifier = Modifier.fillMaxWidth().height(80.dp))
-                Text(
-                    "NOTHING PLAYING",
-                    modifier = Modifier.fillMaxWidth(),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = DashGrey,
-                    textAlign = TextAlign.Center
-                )
-                HelpText("Start music in any app and it appears here.", Modifier.fillMaxWidth())
-            }
-            else -> NowPlayingBody(app, playing)
         }
     }
 }
