@@ -78,6 +78,24 @@ class MediaLibrary(context: Context) {
     /** What the driver played lately, newest first. */
     val recent: StateFlow<List<RecentPlay>> = _recent.asStateFlow()
 
+    private val _tabRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /** Emits when something asks the Media page to show its Library tab. */
+    val tabRequests: SharedFlow<Unit> = _tabRequests.asSharedFlow()
+
+    fun requestLibraryTab() {
+        _tabRequests.tryEmit(Unit)
+    }
+
+    /** Debug demo mode: one pretend music app with canned playlists, for screenshots. */
+    private var demo = false
+
+    fun startDemo() {
+        if (!com.aiconsole.kittlauncher2.BuildConfig.DEBUG) return
+        demo = true
+        _recent.value = DEMO_RECENT
+    }
+
     private var browser: MediaBrowser? = null
     private var controller: MediaController? = null
     private var subscribed: String? = null
@@ -91,6 +109,10 @@ class MediaLibrary(context: Context) {
 
     /** Finds the installed apps that offer a library. [nowPlaying] and the last-used app go first. */
     fun refreshSources(nowPlaying: String?) {
+        if (demo) {
+            _sources.value = listOf(DEMO_SOURCE)
+            return
+        }
         val pm = app.packageManager
         val intent = Intent(SERVICE_INTERFACE)
         val found = try {
@@ -119,6 +141,13 @@ class MediaLibrary(context: Context) {
      */
     fun open(source: MediaSource, thenSearch: String? = null, thenPlayId: String? = null) {
         disconnect()
+        if (demo) {
+            _source.value = source
+            _path.value = BrowsePath().push(Crumb("root", source.label))
+            _items.value = DEMO_ITEMS
+            _status.value = LibraryStatus.Ready
+            return
+        }
         prefs.edit().putString(KEY_LAST, source.packageName).apply()
         _source.value = source
         _status.value = LibraryStatus.Connecting
@@ -189,6 +218,7 @@ class MediaLibrary(context: Context) {
     }
 
     private fun remember(r: RecentPlay) {
+        if (demo) return
         _recent.value = RecentPlays.push(_recent.value, r)
         prefs.edit().putString(KEY_RECENT, RecentPlays.encode(_recent.value)).apply()
     }
@@ -322,6 +352,21 @@ class MediaLibrary(context: Context) {
     }
 
     private companion object {
+        val DEMO_SOURCE = MediaSource("demo.music", "Demo Music", ComponentName("demo.music", "Demo"))
+        val DEMO_ITEMS = listOf(
+            LibraryItem("d1", "Night Drive", "Playlist · 42 songs", browsable = true, playable = true, iconUri = null),
+            LibraryItem("d2", "Road Trip Mix", "Playlist · 87 songs", browsable = true, playable = true, iconUri = null),
+            LibraryItem("d3", "Synthwave Essentials", "Playlist · 60 songs", browsable = true, playable = true, iconUri = null),
+            LibraryItem("d4", "Kavinsky", "Artist", browsable = true, playable = false, iconUri = null),
+            LibraryItem("d5", "Mitch Murder", "Artist", browsable = true, playable = false, iconUri = null),
+            LibraryItem("d6", "Nightcall", "Kavinsky · OutRun", browsable = false, playable = true, iconUri = null)
+        )
+        val DEMO_RECENT = listOf(
+            RecentPlay("demo.music", "Demo Music", "d1", null, "Night Drive", "Playlist", null),
+            RecentPlay("demo.music", "Demo Music", null, "daft punk", "daft punk", "Search", null),
+            RecentPlay("demo.music", "Demo Music", "d6", null, "Nightcall", "Kavinsky", null),
+            RecentPlay("demo.music", "Demo Music", "d2", null, "Road Trip Mix", "Playlist", null)
+        )
         const val TAG = "MediaLibrary"
         const val PREFS = "media_library"
         const val KEY_LAST = "last_source"

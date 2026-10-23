@@ -722,6 +722,11 @@ fun LauncherRoot(
                 LauncherEvent.OpenPursuit -> overlay = LauncherOverlay.Pursuit
                 LauncherEvent.OpenTrips -> overlay = LauncherOverlay.Trips
                 LauncherEvent.OpenConfig -> overlay = LauncherOverlay.Config
+                LauncherEvent.OpenLibrary -> {
+                    overlay = LauncherOverlay.None
+                    pager.animateScrollToPage(HomePage.Media.ordinal)
+                    kittApp?.mediaLibrary?.requestLibraryTab()
+                }
                 LauncherEvent.OpenAssistant -> {
                     autoListen = false
                     overlay = LauncherOverlay.Assistant
