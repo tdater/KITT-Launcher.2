@@ -101,19 +101,25 @@ class ReportShare(private val context: Context, private val scope: CoroutineScop
                 } catch (_: SocketException) {
                     break
                 }
-                client.use { c ->
-                    c.soTimeout = 10_000
-                    val requested = ReportShareRules.requestPath(c.getInputStream().bufferedReader().readLine())
-                    val out = c.getOutputStream()
-                    if (requested == path && file.exists()) {
-                        out.write(ReportShareRules.httpHeader("200 OK", "text/plain; charset=utf-8", file.length(), file.name).toByteArray())
-                        file.inputStream().use { it.copyTo(out) }
-                    } else {
-                        val body = "Not found".toByteArray()
-                        out.write(ReportShareRules.httpHeader("404 Not Found", "text/plain", body.size.toLong(), null).toByteArray())
-                        out.write(body)
+                // Phones open speculative connections that never send a request, and drop
+                // others mid-download: one bad client must not crash the launcher.
+                try {
+                    client.use { c ->
+                        c.soTimeout = 10_000
+                        val requested = ReportShareRules.requestPath(c.getInputStream().bufferedReader().readLine())
+                        val out = c.getOutputStream()
+                        if (requested == path && file.exists()) {
+                            out.write(ReportShareRules.httpHeader("200 OK", "text/plain; charset=utf-8", file.length(), file.name).toByteArray())
+                            file.inputStream().use { it.copyTo(out) }
+                        } else {
+                            val body = "Not found".toByteArray()
+                            out.write(ReportShareRules.httpHeader("404 Not Found", "text/plain", body.size.toLong(), null).toByteArray())
+                            out.write(body)
+                        }
+                        out.flush()
                     }
-                    out.flush()
+                } catch (e: IOException) {
+                    Log.w(TAG, "Report download client failed: ${e.message}")
                 }
             }
         }

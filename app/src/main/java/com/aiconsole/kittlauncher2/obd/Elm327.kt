@@ -7,7 +7,10 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
 
-class ElmException(message: String) : IOException(message)
+open class ElmException(message: String) : IOException(message)
+
+/** No '>' prompt in time. The link has been resynced, so the next command can still be sent. */
+class ElmTimeoutException(command: String) : ElmException("Adapter timed out on $command")
 
 data class ElmInfo(val version: String, val protocolNumber: Int, val protocolName: String) {
     /** ISO 15765-4 CAN (6-9) or user CAN (A-C): enables headers, multi-PID and Mode 0A. */
@@ -69,7 +72,13 @@ class Elm327(private val transport: ObdTransport) {
         for (command in listOf("ATE0", "ATL0", "ATS0", "ATH0", "ATAT1", "ATSP$protocol")) {
             send(command)
         }
-        val probe = send("0100", 15_000) // Triggers the protocol search on first use.
+        // Triggers the protocol search on first use. With the ignition off the search can run
+        // past the timeout (slow K-line inits) instead of ending in UNABLE TO CONNECT.
+        val probe = try {
+            send("0100", 15_000)
+        } catch (_: ElmTimeoutException) {
+            throw ElmException("The car's computer didn't answer the protocol search. Turn the ignition on and try again.")
+        }
         if (ObdResponseParser.errorOf(probe) != null) {
             throw ElmException("The car's computer didn't answer. Turn the ignition on and try again.")
         }
@@ -90,16 +99,46 @@ class Elm327(private val transport: ObdTransport) {
             }
             val remainingMs = (deadline - System.nanoTime()) / 1_000_000
             if (remainingMs <= 0) {
-                buffer.setLength(0)
-                throw ElmException("Adapter timed out on $command")
+                resync()
+                throw ElmTimeoutException(command)
             }
-            val chunk = try {
-                withTimeoutOrNull(remainingMs) { transport.incoming.receive() }
-            } catch (_: ClosedReceiveChannelException) {
-                throw IOException("Adapter connection lost")
-            } ?: continue
+            val chunk = receive(remainingMs) ?: continue
             buffer.append(String(chunk, Charsets.US_ASCII))
         }
+    }
+
+    /**
+     * After a timeout the ELM may still be busy on the bus, and its late reply would be read as
+     * the answer to the next command. Wait briefly for that late prompt; if none comes, interrupt
+     * with a CR (a busy ELM prints "STOPPED" and a prompt). A CR to an idle ELM repeats the last
+     * command, so it's only sent when the adapter still hasn't finished.
+     */
+    private suspend fun resync() {
+        buffer.setLength(0)
+        if (!awaitPrompt(RESYNC_TIMEOUT_MS)) {
+            transport.write("\r".toByteArray(Charsets.US_ASCII))
+            awaitPrompt(RESYNC_TIMEOUT_MS)
+        }
+        buffer.setLength(0)
+    }
+
+    private suspend fun awaitPrompt(timeoutMs: Long): Boolean {
+        val deadline = System.nanoTime() + timeoutMs * 1_000_000
+        while (true) {
+            val remainingMs = (deadline - System.nanoTime()) / 1_000_000
+            if (remainingMs <= 0) return false
+            val chunk = receive(remainingMs) ?: return false
+            if (String(chunk, Charsets.US_ASCII).contains('>')) {
+                buffer.setLength(0)
+                return true
+            }
+        }
+    }
+
+    private suspend fun receive(timeoutMs: Long): ByteArray? = try {
+        withTimeoutOrNull(timeoutMs) { transport.incoming.receive() }
+    } catch (_: ClosedReceiveChannelException) {
+        throw IOException("Adapter connection lost")
     }
 
     private fun clean(raw: String, command: String): String =
@@ -112,5 +151,6 @@ class Elm327(private val transport: ObdTransport) {
     private companion object {
         const val DEFAULT_TIMEOUT_MS = 2_000L
         const val LINK_SETTLE_MS = 300L
+        const val RESYNC_TIMEOUT_MS = 1_000L
     }
 }

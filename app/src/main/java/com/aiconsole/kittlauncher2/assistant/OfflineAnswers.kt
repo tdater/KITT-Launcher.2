@@ -1,5 +1,6 @@
 package com.aiconsole.kittlauncher2.assistant
 
+import com.aiconsole.kittlauncher2.obd.BatteryHealth
 import com.aiconsole.kittlauncher2.obd.PidCatalog
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -130,7 +131,7 @@ object OfflineAnswers {
     private fun charging(f: OfflineFacts): String? {
         val v = volts(f) ?: return null
         return when {
-            running(f) && v < 12.8 -> "the battery isn't charging (%.1f volts with the engine running)".format(Locale.US, v)
+            running(f) && v < BatteryHealth.NOT_CHARGING_V -> "the battery isn't charging (%.1f volts with the engine running)".format(Locale.US, v)
             running(f) && v > 15.2 -> "the system is overcharging (%.1f volts)".format(Locale.US, v)
             !running(f) && v < 11.9 -> "the battery is low (%.1f volts)".format(Locale.US, v)
             else -> null

@@ -676,12 +676,22 @@ class ObdManager(
             }
 
             // 3) Manufacturer and custom PIDs, each on its own ECU header.
+            // A module that never answers (e.g. a body module this model doesn't have) times out
+            // instead of saying NO DATA; that's a miss for this PID, not a lost adapter. A really
+            // dead link still ends the session on the next engine request.
             for (def in due.filter { it.mode01Pid == null && it.source != PidSource.ADAPTER }) {
-                val raw = link.exclusive {
-                    if (def.header != null) useHeader(def.header) else useDefaultHeader()
-                    send(def.command, 1_500)
+                val raw = try {
+                    link.exclusive {
+                        if (def.header != null) useHeader(def.header) else useDefaultHeader()
+                        send(def.command, 1_500)
+                    }
+                } catch (e: ElmTimeoutException) {
+                    Log.w(TAG, "${def.id} on ${def.header ?: "default header"}: ${e.message}")
+                    // Each timeout stalls the whole poll for seconds, so give up on it sooner.
+                    repeat(TIMEOUT_FAILURE_WEIGHT - 1) { fail(def) }
+                    null
                 }
-                val value = decodeData(def, raw)?.let { evaluate(def, it) }
+                val value = raw?.let { decodeData(def, it) }?.let { evaluate(def, it) }
                 if (value != null) {
                     results[def.id] = value
                     failures.remove(def.id)
@@ -766,6 +776,9 @@ class ObdManager(
         const val BROADCAST_HEADER = "7DF"
         private const val SLOW_EVERY = 5L
         private const val MAX_FAILURES = 5
+
+        /** A timed-out request counts as this many misses: two timeouts retire the PID. */
+        private const val TIMEOUT_FAILURE_WEIGHT = 3
         private const val STALE_MS = 5_000L
         const val DISPLAY_INTERVAL_MS = 100L
 

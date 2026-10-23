@@ -35,8 +35,11 @@ class OfflineAnswersTest {
         assertEquals("No fault codes are stored.", OfflineAnswers.answer("any check engine codes?", healthy))
         assertTrue(OfflineAnswers.answer("how's the car doing", healthy)!!.startsWith("Everything looks normal: coolant 90 degrees Celsius"))
         assertTrue("194 degrees Fahrenheit" in OfflineAnswers.answer("engine temp?", healthy.copy(metric = false))!!)
-        val charging = healthy.copy(readings = healthy.readings + (PidCatalog.MODULE_VOLTAGE to 12.1))
+        val charging = healthy.copy(readings = healthy.readings + (PidCatalog.MODULE_VOLTAGE to 11.8))
         assertTrue("isn't charging" in OfflineAnswers.answer("is the alternator charging", charging)!!)
+        // A GM smart alternator idling at 12.7 V with a full battery is fine.
+        val smart = healthy.copy(readings = healthy.readings + (PidCatalog.MODULE_VOLTAGE to 12.7))
+        assertEquals("Battery is 12.7 volts. That's normal; it's charging.", OfflineAnswers.answer("battery voltage?", smart))
     }
 
     @Test

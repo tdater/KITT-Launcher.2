@@ -16,7 +16,7 @@ data class BatteryReport(
         get() = listOfNotNull(
             restingState?.takeIf { restingVolts != null && restingVolts < 12.2 },
             crankingState?.takeIf { crankingMinVolts != null && crankingMinVolts < 9.6 },
-            chargingState?.takeIf { chargingVolts != null && (chargingVolts < 13.2 || chargingVolts > 15.0) }
+            chargingState?.takeIf { chargingVolts != null && (chargingVolts < BatteryHealth.NOT_CHARGING_V || chargingVolts > 15.0) }
         )
 }
 
@@ -24,6 +24,13 @@ data class BatteryReport(
 object BatteryHealth {
 
     private const val RUNNING_RPM = 400.0
+
+    /**
+     * Smart-charging alternators (GM, Ford, most cars since ~2014) idle at 12.2-12.8 V once the
+     * battery is full, so only below a healthy resting battery is the engine running on it.
+     * Same limit as KittAlerts' spoken charging warning.
+     */
+    const val NOT_CHARGING_V = 12.0
 
     fun restingState(v: Double): String = when {
         v >= 12.6 -> "Fully charged"
@@ -43,6 +50,7 @@ object BatteryHealth {
         v > 15.0 -> "Overcharging: check the alternator's regulator"
         v >= 13.7 -> "Charging normally"
         v >= 13.2 -> "Charging on the low side (normal for smart alternators at cruise)"
+        v >= NOT_CHARGING_V -> "Charging lightly (normal for smart alternators with a full battery)"
         else -> "Not charging properly: check the alternator and belt"
     }
 
