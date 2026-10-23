@@ -19,6 +19,8 @@ sealed interface VoiceCommand {
     data object NearestFuel : VoiceCommand
     data object WhereParked : VoiceCommand
     data object Pursuit : VoiceCommand
+    /** "Play Nightcall" / "play Kavinsky on Spotify": a search in a music app's own library. */
+    data class PlayMusic(val query: String, val app: String?) : VoiceCommand
 }
 
 /**
@@ -35,6 +37,9 @@ object VoiceCommands {
         "apps" to "apps", "app drawer" to "apps", "applications" to "apps",
         "ai" to "ai", "a i" to "ai", "chat" to "ai", "games" to "games", "game" to "games", "arcade" to "games"
     )
+
+    /** "play music" and friends mean resume, which the plain Play command handles. */
+    private val GENERIC_PLAY = setOf("music", "song", "audio", "it", "something", "a song", "my music")
 
     private val LEAD = Regex("""^(hey |ok |okay )?(kitt|kit)[, ]+|^(please |can you |could you |would you )+""")
     private val TAIL = Regex("""( please| for me| now)+$""")
@@ -75,6 +80,10 @@ object VoiceCommands {
         }
         Regex("""^(open|play|put on) (.+?) (in|on) the (window|screen)$""").find(t)?.let { m ->
             return VoiceCommand.Stream(m.groupValues[2])
+        }
+        Regex("""^(play|put on) (.+?)( (?:on|in|with|using|from) (?!the )(.+))?$""").find(t)?.let { m ->
+            val query = m.groupValues[2].removePrefix("some ").removePrefix("the song ").removePrefix("the album ").removePrefix("the artist ").trim()
+            if (query.isNotEmpty() && query !in GENERIC_PLAY) return VoiceCommand.PlayMusic(query, m.groupValues[4].ifBlank { null })
         }
         Regex("""^(open|launch|start|run) (the )?(.+?)( app)?$""").find(t)?.let { m ->
             return VoiceCommand.OpenApp(m.groupValues[3])

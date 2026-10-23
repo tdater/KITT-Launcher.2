@@ -51,6 +51,7 @@ class LauncherCommandRunner(private val app: KittApplication) {
             }
         }
         is VoiceCommand.Stream -> stream(command.site)
+        is VoiceCommand.PlayMusic -> playMusic(command)
         VoiceCommand.CloseStream -> {
             LauncherBus.send(LauncherEvent.CloseStream)
             say("Closing the window.", "Window's gone. Eyes on the damn road, genius.", "Closed. Now try watching the road, it's the big shitty thing through the glass.")
@@ -125,6 +126,29 @@ class LauncherCommandRunner(private val app: KittApplication) {
         val site = sites[index]
         LauncherBus.send(LauncherEvent.OpenStream(site.url, site.label))
         return say("Opening ${site.label} in the window.", "${site.label}, coming up. Don't watch it while driving. Or do, what the hell do I know, I'm just the car.", "${site.label} in the window. Because staring at the road is apparently too fucking boring.")
+    }
+
+    /** Finds the music app (named, playing now, or used last) and asks it to play the search. */
+    private fun playMusic(command: VoiceCommand.PlayMusic): String {
+        val library = app.mediaLibrary
+        library.refreshSources(app.media.nowPlaying.value?.packageName)
+        val sources = library.sources.value
+        val source = if (command.app != null) {
+            VoiceCommands.bestMatch(command.app, sources.map { it.label })?.let(sources::get)
+        } else {
+            sources.firstOrNull()
+        }
+        val query = command.query
+        return when {
+            source == null && command.app != null ->
+                say("I can't find ${command.app} on this unit.", "No ${command.app} here, genius. Pick an app that's actually installed.", "${command.app}? Never heard of it, and I've seen everything on this damn head unit.")
+            source == null ->
+                say("No music app shares its library, so I can't search.", "I've got no music app to ask. Install one, for fuck's sake.", "There's nothing to play it with. Install a damn music app.")
+            else -> {
+                library.open(source, thenSearch = query)
+                say("Asking ${source.label} for $query.", "Asking ${source.label} for $query. If it's shit, blame the app.", "Fetching $query from ${source.label}. Your taste in music is a crime, by the way.")
+            }
+        }
     }
 
     private fun media(keyCode: Int, classic: String, vararg rude: String): String {
