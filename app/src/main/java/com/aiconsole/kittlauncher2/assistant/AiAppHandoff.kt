@@ -24,6 +24,20 @@ object AiAppHandoff {
     fun installed(context: Context): List<AiApp> =
         knownApps.filter { context.packageManager.getLaunchIntentForPackage(it.packageName) != null }
 
+    /** The official app for a web AI site (by its label, e.g. "Claude"), if there is one. */
+    fun appFor(siteLabel: String?, apps: List<AiApp> = knownApps): AiApp? =
+        apps.firstOrNull { it.label.equals(siteLabel, ignoreCase = true) }
+
+    /** Just opens the app (no question). */
+    fun open(context: Context, app: AiApp) {
+        val intent = context.packageManager.getLaunchIntentForPackage(app.packageName) ?: return
+        try {
+            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: ActivityNotFoundException) {
+            // Uninstalled in the meantime.
+        }
+    }
+
     /** Shares [text] straight into the app; if it doesn't accept shares, opens it with the text on the clipboard. */
     fun send(context: Context, app: AiApp, text: String) {
         val share = Intent(Intent.ACTION_SEND)

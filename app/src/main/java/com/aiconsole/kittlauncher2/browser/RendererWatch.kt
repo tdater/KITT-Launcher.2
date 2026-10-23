@@ -58,6 +58,9 @@ object RendererWatch {
     @Volatile var status: String = "WebView: not used yet"
         private set
 
+    /** Whether this WebView can shut a frozen page's renderer down. */
+    fun canTerminate(): Boolean = WebViewFeature.isFeatureSupported(WebViewFeature.WEB_VIEW_RENDERER_TERMINATE)
+
     /** Call on the main thread when a WebView is created. */
     fun track(web: WebView) {
         val version = runCatching { WebViewCompat.getCurrentWebViewPackage(web.context)?.versionName }.getOrNull()

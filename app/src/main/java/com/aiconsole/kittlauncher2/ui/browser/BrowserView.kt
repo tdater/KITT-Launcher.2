@@ -47,6 +47,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewCompat
 import com.aiconsole.kittlauncher2.KittApplication
+import com.aiconsole.kittlauncher2.assistant.AiAppHandoff
+import com.aiconsole.kittlauncher2.browser.AiSites
 import com.aiconsole.kittlauncher2.browser.BrowserDownloads
 import com.aiconsole.kittlauncher2.browser.BrowserSession
 import com.aiconsole.kittlauncher2.browser.BrowserTab
@@ -343,8 +345,16 @@ private fun PageStopped(session: BrowserSession, tab: BrowserTab) {
             style = MaterialTheme.typography.bodyMedium,
             color = DashWhite
         )
+        // An AI site that keeps failing here works in the official app, if it's installed.
+        val context = LocalContext.current
+        val officialApp = remember(tab.host) {
+            AiSites.forHost(tab.host)?.let { site -> AiAppHandoff.appFor(site.label, AiAppHandoff.installed(context)) }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             KittButton("Reload", { session.reloadGone(tab) }, Modifier.height(48.dp).width(120.dp), LedGreen, active = true)
+            if (officialApp != null) {
+                KittButton("Open ${officialApp.label} app", { AiAppHandoff.open(context, officialApp) }, Modifier.height(48.dp).width(180.dp), DashAmber)
+            }
             KittButton("Close tab", { session.closeTab(session.tabs.indexOf(tab)) }, Modifier.height(48.dp).width(120.dp), DashGrey)
         }
     }

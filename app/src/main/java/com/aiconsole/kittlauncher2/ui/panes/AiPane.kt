@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.activity.compose.BackHandler
 import androidx.core.content.ContextCompat
 import com.aiconsole.kittlauncher2.KittApplication
+import com.aiconsole.kittlauncher2.assistant.AiAppHandoff
 import com.aiconsole.kittlauncher2.assistant.SpeechState
 import com.aiconsole.kittlauncher2.assistant.SpeechToTextHelper
 import com.aiconsole.kittlauncher2.browser.AiSites
@@ -175,6 +176,16 @@ private fun AiPicker(app: KittApplication, session: BrowserSession) {
                 }
                 session.select(0)
             }, Modifier.fillMaxWidth().height(56.dp), LedGreen, active = true)
+            // The official apps are the fallback when a site is slow or won't sign in on this unit.
+            val context = LocalContext.current
+            val apps = remember { AiAppHandoff.installed(context) }
+            if (apps.isNotEmpty()) {
+                Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    apps.forEach { ai ->
+                        KittButton("${ai.label} app", { AiAppHandoff.open(context, ai) }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
+                    }
+                }
+            }
         }
     )
 }
