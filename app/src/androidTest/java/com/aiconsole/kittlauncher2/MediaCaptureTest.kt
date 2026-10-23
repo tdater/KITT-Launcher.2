@@ -67,6 +67,10 @@ class MediaCaptureTest {
             show(page)
             shot(page.lowercase())
         }
+        LauncherBus.send(LauncherEvent.OpenLibrary)
+        pause(4_000)
+        shot("library")
+        show("Drive")
         LauncherBus.send(LauncherEvent.ShowStream)
         pause(3_000)
         shot("stream")

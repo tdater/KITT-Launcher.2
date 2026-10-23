@@ -106,7 +106,7 @@ fun MediaLibraryPane(app: KittApplication, nowPlayingPackage: String?) {
             if (recent.isNotEmpty()) {
                 LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     item { SectionLabel("Recently played") }
-                    items(recent, key = { it.key }) { r -> RecentRow(library, r, withApp = true) }
+                    item { RecentStrip(library, recent, withApp = true) }
                 }
             }
             return@Column
@@ -146,11 +146,11 @@ fun MediaLibraryPane(app: KittApplication, nowPlayingPackage: String?) {
                     st == LibraryStatus.Loading -> Note("LOADING…", DashGrey)
                     items.isEmpty() -> Note("NOTHING HERE", DashGrey)
                     else -> {
-                        val mine = if (path.canGoUp) emptyList() else RecentPlays.forSource(recent, current.packageName).take(4)
+                        val mine = if (path.canGoUp) emptyList() else RecentPlays.forSource(recent, current.packageName).take(8)
                         LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             if (mine.isNotEmpty()) {
                                 item { SectionLabel("Recently played") }
-                                items(mine, key = { "recent-" + it.key }) { r -> RecentRow(library, r, withApp = false) }
+                                item { RecentStrip(library, mine, withApp = false) }
                                 item { SectionLabel("Library") }
                             }
                             items(items, key = { it.id }) { item -> ItemRow(library, item) }
@@ -182,10 +182,35 @@ private fun SectionLabel(text: String) {
     Text(text.uppercase(), Modifier.fillMaxWidth().padding(top = 4.dp), style = MaterialTheme.typography.labelLarge, color = DashAmber)
 }
 
+/** One row of cover tiles, so the recents take one short row instead of a tall list. */
 @Composable
-private fun RecentRow(library: MediaLibrary, r: RecentPlay, withApp: Boolean) {
-    val item = LibraryItem(r.mediaId ?: r.query.orEmpty(), r.title, listOfNotNull(if (withApp) r.sourceLabel else null, r.subtitle).joinToString(" · ").ifEmpty { null }, false, true, r.iconUri)
-    ItemRow(library, item, onTap = { library.playRecent(r) })
+private fun RecentStrip(library: MediaLibrary, list: List<RecentPlay>, withApp: Boolean) {
+    LazyRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(list, key = { it.key }) { r ->
+            val item = LibraryItem(r.mediaId ?: r.query.orEmpty(), r.title, null, false, true, r.iconUri)
+            val cover by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, r.key) {
+                value = library.cover(item)?.asImageBitmap()
+            }
+            Column(
+                Modifier.width(84.dp).clip(MaterialTheme.shapes.small).clickable { library.playRecent(r) },
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    Modifier.size(64.dp).clip(MaterialTheme.shapes.small).background(KittBezel).border(1.dp, KittBezel, MaterialTheme.shapes.small),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val bitmap = cover
+                    if (bitmap != null) {
+                        Image(bitmap, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    } else {
+                        Text(r.title.take(1).uppercase(), style = MaterialTheme.typography.titleLarge, color = ScannerRed)
+                    }
+                }
+                Text(r.title, style = MaterialTheme.typography.labelSmall, color = DashWhite, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (withApp) Text(r.sourceLabel, style = MaterialTheme.typography.labelSmall, color = DashGrey, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
 }
 
 @Composable

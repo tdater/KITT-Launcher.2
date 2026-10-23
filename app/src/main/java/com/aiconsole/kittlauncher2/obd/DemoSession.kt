@@ -23,6 +23,7 @@ object DemoSession {
     fun startIfRequested(app: KittApplication, requested: Boolean) {
         if (!BuildConfig.DEBUG || !requested) return
         Log.i("DemoSession", "Starting simulated OBD session")
+        app.mediaLibrary.startDemo()
         val start = System.currentTimeMillis()
         app.obd.startDemo(
             ObdSessionInfo(

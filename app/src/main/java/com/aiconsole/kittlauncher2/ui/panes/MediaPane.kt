@@ -72,6 +72,7 @@ fun MediaPane(modifier: Modifier = Modifier) {
     ) {
         var showLibrary by rememberSaveable { mutableStateOf(false) }
         LaunchedEffect(Unit) { app.mediaLibrary.played.collect { showLibrary = false } }
+        LaunchedEffect(Unit) { app.mediaLibrary.tabRequests.collect { showLibrary = true } }
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth().height(44.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 KittButton("Now playing", { showLibrary = false }, Modifier.weight(1f).fillMaxHeight(), ScannerRed, active = !showLibrary)
