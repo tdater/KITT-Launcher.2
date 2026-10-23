@@ -77,6 +77,7 @@ import com.aiconsole.kittlauncher2.assistant.LauncherBus
 import com.aiconsole.kittlauncher2.assistant.LauncherCommandRunner
 import com.aiconsole.kittlauncher2.assistant.LauncherEvent
 import com.aiconsole.kittlauncher2.assistant.MicGuard
+import com.aiconsole.kittlauncher2.data.ReturnHome
 import com.aiconsole.kittlauncher2.assistant.SavageLines
 import com.aiconsole.kittlauncher2.assistant.VoiceCommands
 import com.aiconsole.kittlauncher2.browser.BrowserSession
@@ -331,8 +332,14 @@ open class MainActivity : ComponentActivity() {
         startVehicleSystems()
     }
 
+    override fun onUserLeaveHint() {
+        ReturnHome.userLeaving()
+        super.onUserLeaveHint()
+    }
+
     override fun onStop() {
         MicGuard.launcherHidden(this)
+        ReturnHome.launcherHidden(this, kitt.settings.returnToLauncher.value)
         LauncherVisibility.visible.value = false
         kitt.nightMode.setActive(false)
         kitt.gps.stop()

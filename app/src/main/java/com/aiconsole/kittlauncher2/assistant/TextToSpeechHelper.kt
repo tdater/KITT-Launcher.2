@@ -152,6 +152,7 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
     }
 
     private suspend fun drain() {
+        com.aiconsole.kittlauncher2.data.ReturnHome.noteAudio()
         // Duck music/video for the whole queue so KITT is always heard.
         ducker.duck()
         try {
