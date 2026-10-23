@@ -40,6 +40,7 @@ import androidx.core.net.toUri
 import androidx.webkit.WebViewCompat
 import com.aiconsole.kittlauncher2.KittApplication
 import com.aiconsole.kittlauncher2.assistant.MicGuard
+import com.aiconsole.kittlauncher2.browser.RendererWatch
 import com.aiconsole.kittlauncher2.browser.WebViewVersion
 import com.aiconsole.kittlauncher2.data.HomeScreen
 import com.aiconsole.kittlauncher2.data.SelfUpdate
@@ -157,6 +158,10 @@ fun SelfCheckPanel(app: KittApplication) {
             if (WebViewVersion.isOutdated(webView)) Check("Web browser engine", "Android System WebView $webView is old and slow.", CheckLevel.Warn, "Update") {
                 open(Intent(Intent.ACTION_VIEW, "market://details?id=com.google.android.webview".toUri()))
             } else Check("Web browser engine", "WebView ${webView ?: "unknown"}.", CheckLevel.Ok)
+        )
+        add(
+            if (RendererWatch.canTerminate()) Check("Web page recovery", "A frozen web page is shut down automatically; the launcher keeps running.", CheckLevel.Ok)
+            else Check("Web page recovery", "This WebView can't shut down a frozen page, so a heavy site (Claude, Gemini) can lock the launcher. Update WebView, or use the AI apps.", CheckLevel.Warn)
         )
         add(Check("Performance", "%.1f GB RAM, %d cores, %s mode.".format(ram, Runtime.getRuntime().availableProcessors(), if (lite) "Lite" else "Full"), CheckLevel.Info))
         add(Check("Version", update ?: "Installed $installed. Tap Check for updates.", if (update?.startsWith("Version") == true) CheckLevel.Warn else CheckLevel.Info, "Check") {
