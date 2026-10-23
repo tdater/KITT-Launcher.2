@@ -73,6 +73,11 @@ class MediaLibrary(context: Context) {
     /** Emits when a play or search request was sent, so the page can switch to Now playing. */
     val played: SharedFlow<Unit> = _played.asSharedFlow()
 
+    private val _recent = MutableStateFlow(RecentPlays.decode(prefs.getString(KEY_RECENT, "").orEmpty()))
+
+    /** What the driver played lately, newest first. */
+    val recent: StateFlow<List<RecentPlay>> = _recent.asStateFlow()
+
     private var browser: MediaBrowser? = null
     private var controller: MediaController? = null
     private var subscribed: String? = null
@@ -108,10 +113,11 @@ class MediaLibrary(context: Context) {
     }
 
     /**
-     * Connects to [source] and shows the top of its library. With [thenSearch] (voice command) it
-     * asks the app to play that as soon as it connects, then lets go of the connection.
+     * Connects to [source] and shows the top of its library. With [thenSearch] (voice command) or
+     * [thenPlayId] (a recent item) it asks the app to play that as soon as it connects, then lets
+     * go of the connection.
      */
-    fun open(source: MediaSource, thenSearch: String? = null) {
+    fun open(source: MediaSource, thenSearch: String? = null, thenPlayId: String? = null) {
         disconnect()
         prefs.edit().putString(KEY_LAST, source.packageName).apply()
         _source.value = source
@@ -125,8 +131,8 @@ class MediaLibrary(context: Context) {
                 val root = b.root
                 _path.value = BrowsePath().push(Crumb(root, source.label))
                 load(root)
-                if (thenSearch != null) {
-                    search(thenSearch)
+                if (thenSearch != null || thenPlayId != null) {
+                    if (thenPlayId != null) playId(thenPlayId) else search(thenSearch.orEmpty())
                     main.postDelayed({ if (gen == generation) disconnect() }, HEADLESS_HOLD_MS)
                 }
             }
@@ -166,14 +172,38 @@ class MediaLibrary(context: Context) {
 
     /** Starts [item] in its own app. */
     fun play(item: LibraryItem) {
-        val c = controller ?: return
+        if (playId(item.id)) {
+            val s = _source.value ?: return
+            remember(RecentPlay(s.packageName, s.label, item.id, null, item.title, item.subtitle, item.iconUri))
+        }
+    }
+
+    /** Plays something from the Recent list, connecting to its app first. */
+    fun playRecent(r: RecentPlay) {
+        val source = _sources.value.firstOrNull { it.packageName == r.sourcePackage } ?: run {
+            _status.value = LibraryStatus.Failed("${r.sourceLabel} isn't installed any more.")
+            return
+        }
+        remember(r)
+        if (r.mediaId != null) open(source, thenPlayId = r.mediaId) else open(source, thenSearch = r.query)
+    }
+
+    private fun remember(r: RecentPlay) {
+        _recent.value = RecentPlays.push(_recent.value, r)
+        prefs.edit().putString(KEY_RECENT, RecentPlays.encode(_recent.value)).apply()
+    }
+
+    private fun playId(id: String): Boolean {
+        val c = controller ?: return false
         ReturnHome.noteAudio()
         try {
-            c.transportControls.playFromMediaId(item.id, null)
+            c.transportControls.playFromMediaId(id, null)
             _played.tryEmit(Unit)
+            return true
         } catch (e: RuntimeException) {
-            Log.w(TAG, "Play ${item.id} failed", e)
+            Log.w(TAG, "Play $id failed", e)
             _status.value = LibraryStatus.Failed("${_source.value?.label ?: "The app"} wouldn't start that.")
+            return false
         }
     }
 
@@ -185,6 +215,7 @@ class MediaLibrary(context: Context) {
         try {
             c.transportControls.playFromSearch(q, Bundle().apply { putString(EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/*") })
             _played.tryEmit(Unit)
+            _source.value?.let { remember(RecentPlay(it.packageName, it.label, null, q, q, "Search", null)) }
         } catch (e: RuntimeException) {
             Log.w(TAG, "Search '$q' failed", e)
             _status.value = LibraryStatus.Failed("${_source.value?.label ?: "The app"} couldn't search for that.")
@@ -294,6 +325,7 @@ class MediaLibrary(context: Context) {
         const val TAG = "MediaLibrary"
         const val PREFS = "media_library"
         const val KEY_LAST = "last_source"
+        const val KEY_RECENT = "recent_plays"
         const val SERVICE_INTERFACE = "android.media.browse.MediaBrowserService"
         const val EXTRA_MEDIA_FOCUS = "android.intent.extra.focus"
         const val CONNECT_TIMEOUT_MS = 8_000L

@@ -43,6 +43,8 @@ import com.aiconsole.kittlauncher2.media.LibraryItem
 import com.aiconsole.kittlauncher2.media.LibraryStatus
 import com.aiconsole.kittlauncher2.media.MediaBrowseRules
 import com.aiconsole.kittlauncher2.media.MediaLibrary
+import com.aiconsole.kittlauncher2.media.RecentPlay
+import com.aiconsole.kittlauncher2.media.RecentPlays
 import com.aiconsole.kittlauncher2.media.TapAction
 import com.aiconsole.kittlauncher2.ui.components.HelpText
 import com.aiconsole.kittlauncher2.ui.components.KittButton
@@ -68,6 +70,7 @@ fun MediaLibraryPane(app: KittApplication, nowPlayingPackage: String?) {
     val path by library.path.collectAsState()
     val items by library.items.collectAsState()
     val status by library.status.collectAsState()
+    val recent by library.recent.collectAsState()
 
     LaunchedEffect(nowPlayingPackage) { library.refreshSources(nowPlayingPackage) }
     // Reconnect to the app used last time; let go of it when the tab is left.
@@ -100,6 +103,12 @@ fun MediaLibraryPane(app: KittApplication, nowPlayingPackage: String?) {
         val current = source
         if (current == null) {
             HelpText("Pick a music app above to browse its playlists and artists.", Modifier.fillMaxWidth())
+            if (recent.isNotEmpty()) {
+                LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    item { SectionLabel("Recently played") }
+                    items(recent, key = { it.key }) { r -> RecentRow(library, r, withApp = true) }
+                }
+            }
             return@Column
         }
         SearchRow(library, enabled = status !is LibraryStatus.Connecting && status !is LibraryStatus.Failed)
@@ -136,8 +145,16 @@ fun MediaLibraryPane(app: KittApplication, nowPlayingPackage: String?) {
                 when {
                     st == LibraryStatus.Loading -> Note("LOADING…", DashGrey)
                     items.isEmpty() -> Note("NOTHING HERE", DashGrey)
-                    else -> LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(items, key = { it.id }) { item -> ItemRow(library, item) }
+                    else -> {
+                        val mine = if (path.canGoUp) emptyList() else RecentPlays.forSource(recent, current.packageName).take(4)
+                        LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (mine.isNotEmpty()) {
+                                item { SectionLabel("Recently played") }
+                                items(mine, key = { "recent-" + it.key }) { r -> RecentRow(library, r, withApp = false) }
+                                item { SectionLabel("Library") }
+                            }
+                            items(items, key = { it.id }) { item -> ItemRow(library, item) }
+                        }
                     }
                 }
             }
@@ -161,7 +178,18 @@ private fun Note(text: String, color: androidx.compose.ui.graphics.Color) {
 }
 
 @Composable
-private fun ItemRow(library: MediaLibrary, item: LibraryItem) {
+private fun SectionLabel(text: String) {
+    Text(text.uppercase(), Modifier.fillMaxWidth().padding(top = 4.dp), style = MaterialTheme.typography.labelLarge, color = DashAmber)
+}
+
+@Composable
+private fun RecentRow(library: MediaLibrary, r: RecentPlay, withApp: Boolean) {
+    val item = LibraryItem(r.mediaId ?: r.query.orEmpty(), r.title, listOfNotNull(if (withApp) r.sourceLabel else null, r.subtitle).joinToString(" · ").ifEmpty { null }, false, true, r.iconUri)
+    ItemRow(library, item, onTap = { library.playRecent(r) })
+}
+
+@Composable
+private fun ItemRow(library: MediaLibrary, item: LibraryItem, onTap: (() -> Unit)? = null) {
     val shape = MaterialTheme.shapes.small
     val cover by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, item.id) {
         value = library.cover(item)?.asImageBitmap()
@@ -174,9 +202,10 @@ private fun ItemRow(library: MediaLibrary, item: LibraryItem) {
             .background(KittBlack)
             .border(1.dp, KittBezel, shape)
             .clickable {
-                when (MediaBrowseRules.tapAction(item)) {
-                    TapAction.Open -> library.openItem(item)
-                    TapAction.Play -> library.play(item)
+                when {
+                    onTap != null -> onTap()
+                    MediaBrowseRules.tapAction(item) == TapAction.Open -> library.openItem(item)
+                    else -> library.play(item)
                 }
             }
             .padding(6.dp),
