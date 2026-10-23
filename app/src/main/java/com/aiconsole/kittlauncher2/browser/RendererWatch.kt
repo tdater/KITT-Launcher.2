@@ -3,6 +3,7 @@ package com.aiconsole.kittlauncher2.browser
 import android.os.SystemClock
 import android.util.Log
 import android.webkit.WebView
+import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import androidx.webkit.WebViewRenderProcess
 import androidx.webkit.WebViewRenderProcessClient
@@ -21,6 +22,14 @@ object RendererRules {
 
     fun shouldTerminate(unresponsiveForMs: Long, launcherStalledMs: Long): Boolean =
         unresponsiveForMs >= HUNG_MS || launcherStalledMs >= LAUNCHER_STALL_MS
+
+    /**
+     * The freeze watchdog's own call, independent of WebView's unresponsive callback (which needs
+     * the UI thread to be dispatching input, so it can stay silent exactly when the UI is stuck):
+     * once per stall, as soon as the UI thread has been stuck [LAUNCHER_STALL_MS].
+     */
+    fun shouldKillOnStall(launcherStalledMs: Long, alreadyKilledThisStall: Boolean): Boolean =
+        launcherStalledMs >= LAUNCHER_STALL_MS && !alreadyKilledThisStall
 }
 
 /**
@@ -41,6 +50,35 @@ object RendererWatch {
     val executor: Executor = Executors.newSingleThreadExecutor { r -> Thread(r, "kitt-renderer-watch").apply { isDaemon = true } }
 
     private const val TAG = "RendererWatch"
+
+    /** Renderers of the app's WebViews. Registered on the main thread, terminated from any thread. */
+    private val renderers = WeakHashMap<WebViewRenderProcess, Boolean>()
+
+    /** What this WebView can do, for the freeze report. */
+    @Volatile var status: String = "WebView: not used yet"
+        private set
+
+    /** Call on the main thread when a WebView is created. */
+    fun track(web: WebView) {
+        val version = runCatching { WebViewCompat.getCurrentWebViewPackage(web.context)?.versionName }.getOrNull()
+        val canTerminate = WebViewFeature.isFeatureSupported(WebViewFeature.WEB_VIEW_RENDERER_TERMINATE)
+        val canWatch = WebViewFeature.isFeatureSupported(WebViewFeature.WEB_VIEW_RENDERER_CLIENT_BASIC_USAGE)
+        status = "WebView $version, renderer watch=$canWatch, can terminate=$canTerminate"
+        if (!canTerminate) return
+        val renderer = runCatching { WebViewCompat.getWebViewRenderProcess(web) }.getOrNull() ?: return
+        synchronized(renderers) { renderers[renderer] = true }
+    }
+
+    /**
+     * The UI thread is stuck (called by the freeze watchdog, off the main thread): shut every web
+     * renderer down. The UI thread is waiting on one of them, so it comes back, and each tab shows
+     * its "page stopped" card through onRenderProcessGone.
+     */
+    fun terminateAll() {
+        val all = synchronized(renderers) { renderers.keys.toList() }
+        Log.w(TAG, "Launcher UI stalled: terminating ${all.size} web renderer(s). $status")
+        all.forEach { r -> runCatching { r.terminate() }.onFailure { Log.w(TAG, "Couldn't terminate a renderer", it) } }
+    }
 
     /** When each page first went unresponsive. Only touched on [executor]. */
     private val since = WeakHashMap<WebView, Long>()

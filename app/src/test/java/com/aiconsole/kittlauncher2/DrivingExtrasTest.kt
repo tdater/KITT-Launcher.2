@@ -113,9 +113,22 @@ class DrivingExtrasTest {
     @Test
     fun lowFuel() {
         assertTrue(FuelRules.isLow(10.0, null))
-        assertTrue(FuelRules.isLow(30.0, 40.0))
+        assertTrue(FuelRules.isLow(20.0, 40.0))
+        // A short estimated range on a half-full tank is a wrong tank size or economy, not low fuel.
+        assertFalse(FuelRules.isLow(30.0, 40.0))
         assertFalse(FuelRules.isLow(40.0, 300.0))
         assertFalse(FuelRules.isLow(null, null))
+        assertFalse(FuelRules.isLow(null, 20.0))
+    }
+
+    @Test
+    fun lowFuelMustHoldBeforeItWarns() {
+        assertFalse(FuelRules.confirmed(0L, 100_000L))
+        assertFalse(FuelRules.confirmed(10_000L, 10_000L + FuelRules.HOLD_MS - 1))
+        assertTrue(FuelRules.confirmed(10_000L, 10_000L + FuelRules.HOLD_MS))
+        assertTrue(FuelRules.refilled(35.0))
+        assertFalse(FuelRules.refilled(15.0))
+        assertFalse(FuelRules.refilled(null))
     }
 
     @Test

@@ -55,9 +55,24 @@ object FuelRules {
     const val LOW_PERCENT = 12.0
     const val LOW_RANGE_KM = 60.0
 
-    /** Low when the gauge is under 12 % or the estimated range under about 37 miles. */
+    /** The reading must stay low this long: fuel level jumps around with slosh and on hills. */
+    const val HOLD_MS = 60_000L
+
+    /** Once warned, the gauge must climb past this (a fill-up) before it can warn again. */
+    const val REFILLED_PERCENT = 20.0
+
+    /** The range estimate rests on tank size and average economy, so it only counts on a gauge that's already low-ish. */
+    private const val RANGE_COUNTS_BELOW_PERCENT = 25.0
+
+    /** Low when the gauge is under 12 %, or under 25 % with an estimated range under about 37 miles. */
     fun isLow(levelPct: Double?, rangeKm: Double?): Boolean =
-        (levelPct != null && levelPct > 0 && levelPct < LOW_PERCENT) || (rangeKm != null && rangeKm > 0 && rangeKm < LOW_RANGE_KM)
+        (levelPct != null && levelPct > 0 && levelPct < LOW_PERCENT) ||
+            (levelPct != null && levelPct < RANGE_COUNTS_BELOW_PERCENT && rangeKm != null && rangeKm > 0 && rangeKm < LOW_RANGE_KM)
+
+    /** [lowSince] is when it first read low without a break (0 = not low now). */
+    fun confirmed(lowSince: Long, now: Long): Boolean = lowSince != 0L && now - lowSince >= HOLD_MS
+
+    fun refilled(levelPct: Double?): Boolean = levelPct != null && levelPct >= REFILLED_PERCENT
 }
 
 /** Where the vehicle was left when the ignition went off. */

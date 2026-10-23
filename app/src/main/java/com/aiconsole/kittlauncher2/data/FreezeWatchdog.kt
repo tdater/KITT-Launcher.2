@@ -5,6 +5,8 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import com.aiconsole.kittlauncher2.browser.RendererRules
+import com.aiconsole.kittlauncher2.browser.RendererWatch
 
 /** Pure timing rule for [FreezeWatchdog] (unit-tested). */
 object FreezeRules {
@@ -49,11 +51,20 @@ object FreezeWatchdog {
         main.post(beat)
         Thread({
             var reported = false
+            var killed = false
             while (true) {
                 try {
                     Thread.sleep(BEAT_MS)
                 } catch (_: InterruptedException) {
                     return@Thread
+                }
+                // A web page is the usual cause of a stall: don't wait for WebView to report it.
+                val stalledMs = SystemClock.uptimeMillis() - lastBeat
+                if (RendererRules.shouldKillOnStall(stalledMs, killed)) {
+                    killed = true
+                    RendererWatch.terminateAll()
+                } else if (stalledMs < RendererRules.LAUNCHER_STALL_MS) {
+                    killed = false
                 }
                 val frozen = FreezeRules.frozen(lastBeat, SystemClock.uptimeMillis(), FREEZE_MS)
                 if (FreezeRules.shouldReport(frozen, reported)) {
@@ -61,7 +72,7 @@ object FreezeWatchdog {
                     val stack = Looper.getMainLooper().thread.stackTrace.joinToString("\n") { "\tat $it" }
                     val stuck = (SystemClock.uptimeMillis() - lastBeat) / 1000
                     Log.e("FreezeWatchdog", "Main thread blocked for $stuck s")
-                    ProblemReport.recordFreeze(appContext, "Main thread blocked for $stuck s. $context\n$stack")
+                    ProblemReport.recordFreeze(appContext, "Main thread blocked for $stuck s. $context ${RendererWatch.status}.\n$stack")
                 } else if (!frozen) {
                     reported = false
                 }
