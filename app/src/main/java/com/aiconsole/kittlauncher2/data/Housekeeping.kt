@@ -11,6 +11,17 @@ object ReleaseNotes {
 
     val ALL = listOf(
         ReleaseNote(
+            7,
+            listOf(
+                "Music library: the Media page has a new Library tab. Pick Spotify, YouTube Music or a USB player, search it, " +
+                    "or browse its playlists, artists and albums and tap to play, without opening the app.",
+                "Recently played: your last songs, playlists and searches are one tap away at the top of the Library.",
+                "Say \"Hey KITT, play Nightcall on Spotify\" to search and play by voice.",
+                "If the head unit throws its radio screen over KITT when audio or the mic starts, KITT now brings itself back " +
+                    "(KITT Config → Microphone fix).",
+            )
+        ),
+        ReleaseNote(
             6,
             listOf(
                 "No signal? KITT still answers the common questions from the car itself: engine temperature, battery, " +
