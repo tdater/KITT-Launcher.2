@@ -491,6 +491,7 @@ class BrowserSession(
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_VIEW_RENDERER_CLIENT_BASIC_USAGE)) {
             runCatching { WebViewCompat.setWebViewRenderProcessClient(this, RendererWatch.executor, RendererWatch.client) }
         }
+        RendererWatch.track(this)
         applySiteOptions(tab, this)
         webViewClient = TabClient(tab)
         webChromeClient = TabChrome(tab)

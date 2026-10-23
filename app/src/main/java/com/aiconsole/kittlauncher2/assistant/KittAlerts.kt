@@ -336,7 +336,7 @@ class KittAlerts(
         val limit = if (moduleVolts != null) LOW_CHARGING_V else LOW_CHARGING_ADAPTER_V
         if (rpm != null && volts != null && rpm > 600 && volts < limit) {
             if (lowVoltageSince == 0L) lowVoltageSince = now
-            if (now - lowVoltageSince > 20_000) {
+            if (now - lowVoltageSince > LOW_CHARGING_HOLD_MS) {
                 val reading = "%.1f".format(java.util.Locale.US, volts)
                 raise(
                     "charging",
@@ -416,10 +416,18 @@ class KittAlerts(
 
     private companion object {
         const val OVERHEAT_C = 110.0
-        const val LOW_CHARGING_V = 12.6
+        /**
+         * Below a healthy resting battery (about 12.4-12.7 V): the engine is running on the battery.
+         * Smart-charging trucks (GM) let the alternator sit at 12.2-12.8 V when the battery is full,
+         * so anything higher is normal.
+         */
+        const val LOW_CHARGING_V = 12.0
 
         /** Adapter-measured fallback: ATRV commonly reads 0.3-0.8 V under the battery. */
-        const val LOW_CHARGING_ADAPTER_V = 11.8
+        const val LOW_CHARGING_ADAPTER_V = 11.4
+
+        /** Low charging must persist this long (smart charging dips and recovers). */
+        const val LOW_CHARGING_HOLD_MS = 60_000L
 
         /** Each alert is spoken at most this many times per drive, then shown silently. */
         const val MAX_SPOKEN = 2

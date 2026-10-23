@@ -52,6 +52,7 @@ class DriveAssistant(
     val departedAt = kotlinx.coroutines.flow.MutableStateFlow<Long?>(null)
     private var driveStart = 0L
     private var fuelWarned = false
+    private var fuelLowSince = 0L
     private var overSince = 0L
 
     fun start() {
@@ -65,7 +66,7 @@ class DriveAssistant(
                     connected = true
                     driveStart = now
                     departedAt.value = now
-                    fuelWarned = false
+                    fuelLowSince = 0L
                     monitor.reset()
                     // What KITT noticed last time, once the greeting and link chatter are done.
                     scope.launch(Dispatchers.Main) {
@@ -89,11 +90,24 @@ class DriveAssistant(
                     if (event == DrivingEvent.FullThrottle) SoundFx.turboBoost()
                     if (settings.drivingCommentary.value) alerts.drivingEvent(event)
                 }
-                if (settings.fuelAlerts.value && !fuelWarned) {
+                if (settings.fuelAlerts.value) {
                     val level = fresh(PidCatalog.FUEL_LEVEL)
-                    if (FuelRules.isLow(level, rangeKm())) {
-                        fuelWarned = true
-                        alerts.lowFuel(level)
+                    when {
+                        // A fill-up re-arms the warning; an OBD reconnect mid-drive doesn't.
+                        FuelRules.refilled(level) -> {
+                            fuelWarned = false
+                            fuelLowSince = 0L
+                        }
+                        fuelWarned -> Unit
+                        FuelRules.isLow(level, rangeKm()) -> {
+                            if (fuelLowSince == 0L) fuelLowSince = now
+                            if (FuelRules.confirmed(fuelLowSince, now)) {
+                                fuelWarned = true
+                                alerts.lowFuel(level)
+                            }
+                        }
+                        // A level we have no fresh reading for neither confirms nor breaks the hold.
+                        level != null -> fuelLowSince = 0L
                     }
                 }
             }
