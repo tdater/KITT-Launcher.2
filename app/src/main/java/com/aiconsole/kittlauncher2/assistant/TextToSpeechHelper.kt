@@ -88,7 +88,10 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
                 @Deprecated("Deprecated in Java")
                 override fun onError(utteranceId: String?) = finished(utteranceId)
 
-                override fun onError(utteranceId: String?, errorCode: Int) = finished(utteranceId)
+                override fun onError(utteranceId: String?, errorCode: Int) {
+                    VoiceLog.add("device voice error $errorCode")
+                    finished(utteranceId)
+                }
             })
         }
         localReady.complete(ready)
@@ -170,9 +173,32 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
         val chunks = GeminiSpeechProtocol.chunks(GeminiSpeechProtocol.speakable(utterance.text))
         if (chunks.isEmpty()) return
         // Gemini when chosen and keyed, then the free on-device voice, then the device TTS.
-        var spoken = if (!utterance.deviceOnly && useNeural()) sayNeural(chunks, utterance.urgent) else 0
+        val neural = !utterance.deviceOnly && useNeural()
+        val local = !utterance.deviceOnly && useOnDevice()
+        VoiceLog.add(
+            "line (${chunks.size} chunk${if (chunks.size == 1) "" else "s"}${if (utterance.urgent) ", urgent" else ""}): engine ${settings.voiceEngine.value}, " +
+                when {
+                    neural -> "Gemini"
+                    local -> "offline ${settings.localVoice.value.ifEmpty { "default" }}"
+                    else -> "device voice" + onDeviceSkipReason()?.let { " ($it)" }.orEmpty()
+                }
+        )
+        var spoken = if (neural) sayNeural(chunks, utterance.urgent) else 0
         if (spoken < chunks.size && !utterance.deviceOnly && useOnDevice()) spoken += sayOnDevice(chunks.drop(spoken), utterance.urgent)
-        if (spoken < chunks.size) sayLocal(chunks.drop(spoken))
+        if (spoken < chunks.size) {
+            if (spoken > 0 || neural || local) VoiceLog.add("device voice speaks ${chunks.size - spoken} of ${chunks.size} chunks")
+            sayLocal(chunks.drop(spoken))
+        }
+    }
+
+    /** Why the offline voice isn't speaking, for the voice log. */
+    private fun onDeviceSkipReason(): String? = when {
+        settings.voiceEngine.value == VoiceEngine.Device -> null
+        com.aiconsole.kittlauncher2.data.SafeMode.active -> "safe mode"
+        onDevice.unavailable != null -> "offline voice unavailable: ${onDevice.unavailable}"
+        !onDevice.isInstalled(LocalVoices.byId(settings.localVoice.value)) -> "offline voice ${LocalVoices.byId(settings.localVoice.value).id} not downloaded"
+        onDevice.tooSlow.value == LocalVoices.byId(settings.localVoice.value).id -> "offline voice too slow on this unit"
+        else -> null
     }
 
     // On-device is now the default: a driver with a Gemini key keeps Gemini until a voice is downloaded.
@@ -186,7 +212,7 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
     private fun useOnDevice(): Boolean = settings.voiceEngine.value != VoiceEngine.Device && onDeviceReady()
 
     private fun onDeviceReady(): Boolean = !com.aiconsole.kittlauncher2.data.SafeMode.active &&
-        onDevice.unavailable == null &&onDevice.isInstalled(LocalVoices.byId(settings.localVoice.value))
+        onDevice.unavailable == null && LocalVoices.byId(settings.localVoice.value).let { onDevice.isInstalled(it) && onDevice.tooSlow.value != it.id }
 
     /** Plays chunks through the on-device voice, synthesizing the next while one plays. Returns how many were spoken. */
     private suspend fun sayOnDevice(chunks: List<String>, urgent: Boolean): Int = supervisorScope {
@@ -207,11 +233,13 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
             } catch (e: TimeoutCancellationException) {
                 next.cancel()
                 Log.w(TAG, "On-device voice timed out; using device voice")
+                onDevice.timedOut(voice)
                 null
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "On-device voice failed; using device voice: ${e.message}")
+                VoiceLog.add("${voice.id}: synthesis failed: ${e.message ?: e.javaClass.simpleName}")
                 null
             } ?: return@supervisorScope index
             if (index + 1 < chunks.size) next = fetch(index + 1)
@@ -223,6 +251,7 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
             } catch (e: Exception) {
                 // A unit whose audio stack refuses float PCM must not crash the launcher.
                 Log.w(TAG, "On-device playback failed; using device voice", e)
+                VoiceLog.add("${voice.id}: playback failed: ${e.message ?: e.javaClass.simpleName}")
                 next.cancel()
                 return@supervisorScope index
             }
@@ -268,7 +297,10 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
 
     private suspend fun sayLocal(chunks: List<String>) {
         val ok = withTimeoutOrNull(LOCAL_INIT_TIMEOUT_MS) { localReady.await() } ?: false
-        if (!ok) return // No TTS engine installed; the answer is still shown on screen.
+        if (!ok) {
+            VoiceLog.add("device voice not ready: no TTS engine answered")
+            return // No TTS engine installed; the answer is still shown on screen.
+        }
         // Film characters get their own pitch and pace on the device voice too.
         val film = filmCharacter()
         tts.setPitch(film?.pitch?.times(0.92f) ?: 0.92f)

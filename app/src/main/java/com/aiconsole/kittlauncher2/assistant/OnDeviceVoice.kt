@@ -112,7 +112,10 @@ class OnDeviceVoice(context: Context) {
             engineLock.withLock {
                 idleRelease?.cancel()
                 val tts = load(voice) ?: return@withLock null
+                val started = System.currentTimeMillis()
                 val audio = tts.generate(text, sid = LocalVoices.speaker(voice, speaker), speed = speed)
+                val audioMs = if (audio.sampleRate > 0) audio.samples.size * 1000L / audio.sampleRate else 0L
+                VoiceLog.add("${voice.id}: ${VoiceLog.speed(audioMs, System.currentTimeMillis() - started)}, ${text.length} chars")
                 // The model holds 60-300 MB: let it go after a few quiet minutes (it reloads in a second or two).
                 idleRelease = scope.launch {
                     delay(IDLE_RELEASE_MS)
@@ -157,17 +160,37 @@ class OnDeviceVoice(context: Context) {
         } else {
             OfflineTtsModelConfig(vits = OfflineTtsVitsModelConfig(model = model.path, tokens = tokens, dataDir = data), numThreads = threads)
         }
+        val started = System.currentTimeMillis()
         return try {
             OfflineTts(config = OfflineTtsConfig(model = modelConfig)).also {
                 engine = it
                 engineId = voice.id
+                VoiceLog.add("${voice.id}: model loaded in ${System.currentTimeMillis() - started} ms ($threads threads)")
             }
         } catch (e: Throwable) {
             // UnsatisfiedLinkError (no native library for this CPU) or a broken model.
             Log.w(TAG, "On-device voice unavailable", e)
             unavailable = e.message ?: e.javaClass.simpleName
+            VoiceLog.add("${voice.id}: model failed to load: $unavailable")
             null
         }
+    }
+
+    private val _tooSlow = MutableStateFlow<String?>(null)
+    /** Id of a voice that couldn't keep up on this unit this run; the device voice speaks instead. */
+    val tooSlow: StateFlow<String?> = _tooSlow.asStateFlow()
+    private var timeouts = 0 to ""
+
+    /**
+     * A line timed out waiting for [voice]. The first one may just be the model loading; after
+     * two the voice is benched for this run, so queued alerts don't each wait out a timeout with
+     * the music ducked.
+     */
+    fun timedOut(voice: LocalVoice) {
+        val count = if (timeouts.second == voice.id) timeouts.first + 1 else 1
+        timeouts = count to voice.id
+        VoiceLog.add("${voice.id}: timed out (${count}x)")
+        if (count >= SLOW_STRIKES) _tooSlow.value = voice.id
     }
 
     /**
@@ -210,6 +233,7 @@ class OnDeviceVoice(context: Context) {
                 if (watch.stalled(track.playbackHeadPosition, System.currentTimeMillis())) throw stalled("no audio came out")
                 delay(40)
             }
+            VoiceLog.add("played ${track.playbackHeadPosition}/${pcm.size} frames at ${clip.sampleRate} Hz, routed to ${runCatching { track.routedDevice?.productName }.getOrNull() ?: "?"}")
         } finally {
             runCatching { track.pause() }
             runCatching { track.flush() }
@@ -219,6 +243,7 @@ class OnDeviceVoice(context: Context) {
 
     private fun stalled(why: String): IOException {
         unavailable = "this head unit didn't play the voice's audio: $why"
+        VoiceLog.add("playback stalled: $why")
         return IOException("On-device playback stalled: $why")
     }
 
@@ -229,5 +254,6 @@ class OnDeviceVoice(context: Context) {
         /** Play position frozen this long means the sink isn't taking audio. */
         const val STALL_MS = 1_500L
         const val WRITE_CHUNK = 4_096
+        const val SLOW_STRIKES = 2
     }
 }

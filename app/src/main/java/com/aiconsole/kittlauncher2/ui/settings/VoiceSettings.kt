@@ -55,6 +55,14 @@ fun OnDeviceVoiceSettings(app: KittApplication) {
                 "downloaded. Download one (about 20 MB), tap USE, then TEST. Film characters keep their own pitch and pace."
         )
         engine.unavailable?.let { HelpText("This head unit can't run the on-device voice ($it). KITT uses the device voice.", color = AlertRed) }
+        val tooSlow by engine.tooSlow.collectAsState()
+        if (tooSlow != null && tooSlow == chosen.id) {
+            HelpText(
+                "${chosen.label.substringBefore(" ·")} is too slow on this head unit, so KITT is using the device voice until the app restarts. " +
+                    "Pick a Piper voice (about 20 MB, e.g. Ryan): they're several times faster.",
+                color = AlertRed
+            )
+        }
         LocalVoices.ALL.forEach { voice ->
             val have = voice.id in installed
             val busy = download?.first == voice.id
