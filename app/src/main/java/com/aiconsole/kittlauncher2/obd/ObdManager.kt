@@ -526,6 +526,10 @@ class ObdManager(
         while (base <= 0xC0) {
             val raw = link.send("01%02X".format(Locale.US, base), 3_000)
             val found = ObdResponseParser.supportedPids(ObdResponseParser.messages(raw), base)
+            if (found.isEmpty() && base == 0x00) {
+                // Polling still works without the bitmap (every PID is tried); the reply shows why.
+                logEvent(LinkLayer.Ecu, "Supported-PID list unreadable on ${link.currentHeaderLabel()}: \"${raw.replace('\n', ' ').take(80)}\"", ok = false)
+            }
             all += found
             if (base + 0x20 !in found) break
             base += 0x20

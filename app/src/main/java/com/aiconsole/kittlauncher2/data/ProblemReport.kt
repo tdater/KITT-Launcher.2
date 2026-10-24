@@ -91,6 +91,21 @@ object ProblemReport {
             appendLine("Usage access: ${com.aiconsole.kittlauncher2.assistant.MicGuard.hasUsageAccess(context)}")
             appendLine("Last mic takeover: ${com.aiconsole.kittlauncher2.assistant.MicGuard.lastRecorded(context)?.let { "${stamp.format(Date(it.atMillis))} by ${it.packageName ?: "unknown"}" } ?: "none"}")
         }
+        section("Voice") {
+            val prefs = context.getSharedPreferences("kitt_settings", Context.MODE_PRIVATE)
+            appendLine("Engine: ${prefs.getString("voice_engine", null) ?: "default"}, offline voice: ${prefs.getString("local_voice", "").orEmpty().ifEmpty { "default" }}")
+            val app = context.applicationContext as? com.aiconsole.kittlauncher2.KittApplication
+            app?.kittVoice?.onDevice?.let { v ->
+                appendLine("Offline voices downloaded: ${v.installed.value.sorted().joinToString().ifEmpty { "none" }}")
+                v.unavailable?.let { appendLine("Offline voice unavailable: $it") }
+                v.tooSlow.value?.let { appendLine("Too slow this run: $it") }
+            }
+            val audio = context.getSystemService(android.media.AudioManager::class.java)
+            audio?.let { appendLine("Volume: media ${it.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)}/${it.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)}") }
+            val log = com.aiconsole.kittlauncher2.assistant.VoiceLog.snapshot()
+            if (log.isEmpty()) appendLine("Nothing spoken since the app started.")
+            log.forEach { appendLine("${stamp.format(Date(it.timestamp))} ${it.message}") }
+        }
         section("OBD") {
             appendLine("State: ${obd.state.value}")
             obd.linkEvents.value.takeLast(80).forEach { e ->

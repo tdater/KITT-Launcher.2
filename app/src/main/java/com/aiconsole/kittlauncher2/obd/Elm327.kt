@@ -49,6 +49,9 @@ class Elm327(private val transport: ObdTransport) {
         fun setDefaultHeader(header: String) {
             defaultHeader = header
         }
+
+        /** The header in use, for logs ("auto" before any ATSH). */
+        fun currentHeaderLabel(): String = currentHeader ?: "auto"
     }
 
     private val link = Link()
