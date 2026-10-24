@@ -10,6 +10,11 @@ on:
 permissions:
   contents: write
 
+# A newer push to the same branch or PR cancels the older run. Tag runs (releases) are never
+# cancelled, so a release in flight always finishes publishing.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 # One codebase, two editions (product flavors): kitt2 = KITT Launcher.2, kitt = KITT Launcher.
 # A tag (v1.8) releases both, each to its own downloads repo for its in-app updater.
 jobs:
