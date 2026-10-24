@@ -170,36 +170,64 @@ class OnDeviceVoice(context: Context) {
         }
     }
 
-    /** Plays [clip] to the end (cancellable), [pitch] 1 = natural. */
+    /**
+     * Plays [clip] to the end (cancellable), [pitch] 1 = natural. Streams 16-bit PCM: some head
+     * units (an Android 12 alps build, 2026-10) accepted a static float track, pulled a few
+     * milliseconds of it and stalled, so KITT ducked the music and said nothing. A track whose
+     * play position stops moving throws, and the device voice takes over.
+     */
     suspend fun play(clip: VoiceClip, attributes: AudioAttributes, pitch: Float) = withContext(Dispatchers.IO) {
+        val pcm = VoicePcm.toPcm16(clip.samples)
+        val minBuffer = AudioTrack.getMinBufferSize(clip.sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
         val track = AudioTrack.Builder()
             .setAudioAttributes(attributes)
             .setAudioFormat(
                 AudioFormat.Builder()
-                    .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
                     .setSampleRate(clip.sampleRate)
                     .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                     .build()
             )
-            .setTransferMode(AudioTrack.MODE_STATIC)
-            .setBufferSizeInBytes(clip.samples.size * 4)
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .setBufferSizeInBytes(maxOf(minBuffer, clip.sampleRate / 2 * 2)) // About half a second.
             .build()
         try {
-            track.write(clip.samples, 0, clip.samples.size, AudioTrack.WRITE_BLOCKING)
+            if (track.state != AudioTrack.STATE_INITIALIZED) throw stalled("the audio track didn't open")
             if (pitch != 1f) runCatching { track.playbackParams = PlaybackParams().setPitch(pitch).setSpeed(1f) }
             track.play()
-            val frames = clip.samples.size
-            val limit = System.currentTimeMillis() + frames * 1000L / clip.sampleRate * 3 + 2_000
-            while (isActive && track.playbackHeadPosition < frames && System.currentTimeMillis() < limit) delay(40)
+            val watch = VoicePcm.StallWatch(STALL_MS)
+            var written = 0
+            while (written < pcm.size && isActive) {
+                // Non-blocking, so a stalled sink can't hang this thread in write().
+                val n = track.write(pcm, written, minOf(pcm.size - written, WRITE_CHUNK), AudioTrack.WRITE_NON_BLOCKING)
+                if (n < 0) throw stalled("write error $n")
+                written += n
+                if (watch.stalled(track.playbackHeadPosition, System.currentTimeMillis())) throw stalled("no audio came out")
+                if (n == 0) delay(20)
+            }
+            val limit = System.currentTimeMillis() + pcm.size * 1000L / clip.sampleRate + 2_000
+            while (isActive && track.playbackHeadPosition < pcm.size && System.currentTimeMillis() < limit) {
+                if (watch.stalled(track.playbackHeadPosition, System.currentTimeMillis())) throw stalled("no audio came out")
+                delay(40)
+            }
         } finally {
-            runCatching { track.stop() }
+            runCatching { track.pause() }
+            runCatching { track.flush() }
             track.release()
         }
+    }
+
+    private fun stalled(why: String): IOException {
+        unavailable = "this head unit didn't play the voice's audio: $why"
+        return IOException("On-device playback stalled: $why")
     }
 
     private companion object {
         const val IDLE_RELEASE_MS = 5 * 60_000L
         const val TAG = "OnDeviceVoice"
         const val READY = ".ready"
+        /** Play position frozen this long means the sink isn't taking audio. */
+        const val STALL_MS = 1_500L
+        const val WRITE_CHUNK = 4_096
     }
 }
