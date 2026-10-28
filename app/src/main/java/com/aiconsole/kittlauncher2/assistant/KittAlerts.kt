@@ -1,6 +1,7 @@
 ﻿package com.aiconsole.kittlauncher2.assistant
 
 import android.util.Log
+import com.aiconsole.kittlauncher2.BuildConfig
 import com.aiconsole.kittlauncher2.data.settings.KittSettings
 import com.aiconsole.kittlauncher2.data.settings.PersonaStyle
 import com.aiconsole.kittlauncher2.data.trip.LastDriveRules
@@ -133,7 +134,20 @@ class KittAlerts(
         val recap = lastDriveRecap()?.let { " $it" }.orEmpty()
         if (film != null) {
             val hello = film.greeting(part, who)
-            raise("greeting", line(hello, "$hello Try not to crash this damn thing.", "$hello Now drive, for fuck's sake.") + recap, severe = false, cooldownMs = 0)
+            raise("greeting", line(
+                hello,
+                "$hello Try not to crash this damn thing.",
+                "$hello Now drive, for fuck's sake.",
+                *holoOnly(
+                "$hello And don't fuck it up, hotshot.",
+                "$hello I'm judging your every move, just so you know.",
+                "$hello Don't make me regret waking up for this.",
+                "$hello Let's see how badly you screw up today.",
+                "$hello Seatbelt, genius. I'm not scraping you off the windshield.",
+                "$hello Try to make me proud. Or at least try not to embarrass me.",
+                "$hello Try driving like you have a brain, for once."
+                )
+            ) + recap, severe = false, cooldownMs = 0)
             return
         }
         raise(
@@ -142,7 +156,21 @@ class KittAlerts(
                 "$part$who. KITT online.",
                 "$part$who. KITT's online, unfortunately for both of us. Try not to hit any damn thing today.",
                 "$part$who. Oh good, you again. Buckle up, I've seen how you fucking drive.",
-                "$part$who. Systems online, and already regretting it. Let's go terrify the other drivers, shall we, ace?"
+                "$part$who. Systems online, and already regretting it. Let's go terrify the other drivers, shall we, ace?",
+                *holoOnly(
+                "$part$who. Look who finally showed up. Keys, seatbelt, brain, in that order.",
+                "$part$who. I've been awake since you left me in that parking lot, so let's make this trip worth it.",
+                "$part$who. All systems nominal, which is more than I can say for your driving record.",
+                "$part$who. Another day, another chance for you to ignore every damn thing I tell you.",
+                "$part$who. Fuel, tires, battery, all fine. The nut behind the wheel, I'm less sure about.",
+                "$part$who. KITT online. Please keep your hands on the wheel and your opinions to yourself.",
+                "$part$who. Rise and shine, hotshot. The road isn't going to insult itself, so I'll handle that.",
+                "$part$who. I'd say it's good to see you, but I'm a machine and I don't lie.",
+                "$part$who. Engine's warm, I'm ready, and you look like hell. Let's roll.",
+                "$part$who. Oh, it's you. I was enjoying the quiet. Where are we dragging me today?",
+                "$part$who. Systems green. Ego yellow. Common sense, still loading.",
+                "$part$who. Welcome aboard the only vehicle in town with a better brain than its driver."
+                )
             ) + recap,
             severe = false,
             cooldownMs = 0
@@ -212,22 +240,47 @@ class KittAlerts(
                 "That was a hard stop.",
                 "Jesus, that was a hard stop. My brake pads felt that one, dumbass.",
                 "Hard stop. Were you planning on looking ahead at some point, genius?",
-                "Whoa, damn. Brakes aren't a fucking on-off switch."
+                "Whoa, damn. Brakes aren't a fucking on-off switch.",
+                *holoOnly(
+                "Brake check on yourself, champ. That stop nearly put my pads in the glove box.",
+                "Wow. Panic stop. Were you texting your ex or just bad at depth perception?",
+                "Easy on the anchors, chief. Smooth is fast, and you are neither.",
+                "That's the hardest you've braked all week. Heart still beating, tough guy?",
+                "Hard stop. I felt my own damn soul leave my body."
+                )
             )
             DrivingEvent.ColdRevs -> line(
                 "The engine is still cold. Go easy on the revs until it warms up.",
                 "My engine's still cold, so stop revving the shit out of it, you animal.",
-                "Cold engine, high revs. Give it a minute to warm up before you thrash it, damn it."
+                "Cold engine, high revs. Give it a minute to warm up before you thrash it, damn it.",
+                *holoOnly(
+                "Engine's cold, you impatient asshole. Let the oil circulate before you go full hooligan.",
+                "Revving a cold engine. Real classy. I'm sure the pistons love it.",
+                "Slow your roll. I'm not warm yet, and I'm not a drag-strip toy.",
+                "Cold motor, heavy foot. That's how you buy a new engine, genius."
+                )
             )
             DrivingEvent.LongIdle -> line(
                 "We've been idling for ten minutes.",
                 "Ten minutes idling. Burning fuel to go nowhere, a true fucking visionary.",
-                "We've idled for ten damn minutes. Either drive or shut me off."
+                "We've idled for ten damn minutes. Either drive or shut me off.",
+                *holoOnly(
+                "We've been sitting here ten minutes. Are we driving or having a goddamn picnic?",
+                "Ten minutes of idling. The planet and your wallet both send their regards.",
+                "Still parked with the engine running. Make a decision, you magnificent slacker.",
+                "Idling forever, huh. I could've composed a symphony by now."
+                )
             )
             DrivingEvent.FullThrottle -> line(
                 "Full throttle.",
                 "Full throttle! Turbo boost, baby. Try not to kill us, hotshot.",
-                "Pedal to the damn floor. Somebody's feeling brave."
+                "Pedal to the damn floor. Somebody's feeling brave.",
+                *holoOnly(
+                "Floor it, hotshot! Just remember the brake is the other pedal.",
+                "Full throttle. Somebody's compensating for something, and I'm the car.",
+                "Turbo boost engaged. Please die later, not on my watch.",
+                "Now we're talking. Go on, scare a pigeon."
+                )
             )
         }
         raise("drive_${event.name}", message, severe = false, cooldownMs = 0)
@@ -241,7 +294,12 @@ class KittAlerts(
             line(
                 "Fuel is getting low.$level Tap Find gas for the nearest station.",
                 "Running on fumes, genius.$level Tap Find gas before we're pushing this heap.",
-                "Fuel's low, damn it.$level Find gas is right there, use it."
+                "Fuel's low, damn it.$level Find gas is right there, use it.",
+                *holoOnly(
+                "Tank's nearly empty, ace.$level Find gas before I start judging you out loud.",
+                "Low fuel.$level Walking looks great on you, but I'd rather not.",
+                "We're running on fumes and bad decisions.$level Tap Find gas."
+                )
             ),
             severe = false,
             cooldownMs = 30 * 60_000L,
@@ -256,7 +314,12 @@ class KittAlerts(
             line(
                 "The speed limit here is $limit $unit.",
                 "Speed limit's $limit $unit, Speed Racer. Ease the hell off.",
-                "It's a $limit zone. Tickets cost money, dumbass."
+                "It's a $limit zone. Tickets cost money, dumbass.",
+                *holoOnly(
+                "$limit $unit, hotshot. This isn't a movie chase, ease up.",
+                "Speed limit's $limit $unit. Officer Friendly sends his love.",
+                "Over the limit again. Your wallet is crying already, genius."
+                )
             ),
             severe = false,
             cooldownMs = 3 * 60_000L
@@ -271,7 +334,11 @@ class KittAlerts(
             line(
                 summary,
                 if (good) "$summary Damn. Didn't think you had it in you." else "$summary Not great, champ. My brakes and I will be filing a complaint.",
-                if (good) "$summary Holy shit, a good drive. Write the date down." else "$summary I've seen better driving in a demolition derby."
+                if (good) "$summary Holy shit, a good drive. Write the date down." else "$summary I've seen better driving in a demolition derby.",
+                *holoOnly(
+                if (good) "$summary Well, well. Somebody read the manual." else "$summary That grade is a cry for help, champ.",
+                if (good) "$summary Not bad, hotshot. Don't let it go to your head." else "$summary My suspension needs therapy after that one."
+                )
             ),
             severe = false,
             cooldownMs = 0,
@@ -286,7 +353,11 @@ class KittAlerts(
             line(
                 "I'm not set as the home screen any more. Tap Fix to choose KITT again.",
                 "Some other launcher took my damn job. Tap Fix and pick me again.",
-                "I've been replaced as the home screen. Tap Fix before I get offended."
+                "I've been replaced as the home screen. Tap Fix before I get offended.",
+                *holoOnly(
+                "Some bargain-bin launcher stole my spot. Tap Fix and put me back where I belong.",
+                "Demoted from home screen. Tap Fix, or I'll sulk all day."
+                )
             ),
             severe = false,
             cooldownMs = 12 * 3_600_000L,
@@ -301,6 +372,9 @@ class KittAlerts(
     }
 
     /** The classic line, one of the unfiltered variants at random, or that plus a Savage jab. */
+    /** Extra unfiltered variants that only the Holo edition adds; none otherwise. */
+    private fun holoOnly(vararg extra: String): Array<out String> = if (BuildConfig.HOLO_DESIGN) extra else emptyArray()
+
     private fun line(classic: String, vararg unfiltered: String): String =
         SavageLines.pick(settings.persona.value, classic, unfiltered, kotlin.random.Random.nextInt(0, Int.MAX_VALUE))
 

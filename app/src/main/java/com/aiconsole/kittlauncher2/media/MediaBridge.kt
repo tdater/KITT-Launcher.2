@@ -30,7 +30,11 @@ data class NowPlaying(
     /** Position at [positionAtElapsed] (SystemClock.elapsedRealtime), advancing at [speed] while playing. */
     val positionMs: Long,
     val positionAtElapsed: Long,
-    val speed: Float
+    val speed: Float,
+    /** Titles from the app's own play queue, if it publishes one. */
+    val queue: List<String> = emptyList(),
+    /** The playing app's custom actions as lowercase "id name" text, e.g. shuffle or repeat toggles. */
+    val actions: List<String> = emptyList()
 ) {
     fun positionNow(nowElapsed: Long = SystemClock.elapsedRealtime()): Long {
         val pos = if (playing) positionMs + ((nowElapsed - positionAtElapsed) * speed).toLong() else positionMs
@@ -104,6 +108,14 @@ class MediaBridge(context: Context) {
 
     fun seekTo(positionMs: Long) = current?.transportControls?.seekTo(positionMs)
 
+    /** Fires the playing app's custom action whose id or name contains [keyword] (shuffle, repeat); false if it has none. */
+    fun fireAction(keyword: String): Boolean {
+        val c = current ?: return false
+        val action = c.playbackState?.customActions.orEmpty().firstOrNull { "${it.action} ${it.name}".lowercase().contains(keyword) } ?: return false
+        c.transportControls.sendCustomAction(action, null)
+        return true
+    }
+
     /** Opens the app that owns the session. */
     fun openApp() {
         val pkg = current?.packageName ?: return
@@ -157,7 +169,9 @@ class MediaBridge(context: Context) {
             durationMs = meta?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.coerceAtLeast(0) ?: 0,
             positionMs = state?.position ?: 0,
             positionAtElapsed = state?.lastPositionUpdateTime?.takeIf { it > 0 } ?: SystemClock.elapsedRealtime(),
-            speed = state?.playbackSpeed?.takeIf { it > 0f } ?: 1f
+            speed = state?.playbackSpeed?.takeIf { it > 0f } ?: 1f,
+            queue = c.queue.orEmpty().take(12).mapNotNull { it.description.title?.toString() },
+            actions = state?.customActions.orEmpty().map { "${it.action} ${it.name}".lowercase() }
         )
     }
 

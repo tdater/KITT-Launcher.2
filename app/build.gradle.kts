@@ -39,6 +39,8 @@ android {
             "GEMINI_API_KEY",
             "\"${localProperties.getProperty("GEMINI_API_KEY", "")}\""
         )
+        // KITT Holo's redesigned cockpit (hologram car, film Drive pages, icon keys); off for the classic editions.
+        buildConfigField("boolean", "HOLO_DESIGN", "false")
     }
 
     // Two editions from one codebase. Each keeps its own app ID (they install side by side), name
@@ -65,6 +67,41 @@ android {
             buildConfigField("String", "UPDATE_REPO", "\"tdater/KITT-Launcher-releases\"")
             manifestPlaceholders["mainActivity"] = "com.aiconsole.knightriderlauncher.MainActivity"
             manifestPlaceholders["notificationListener"] = "com.aiconsole.knightriderlauncher.nav.NavNotificationListener"
+        }
+        // KITT Holo: the same launcher with the redesigned cockpit (BuildConfig.HOLO_DESIGN), one build
+        // per screen shape. They reuse KITT.2's and KITT Launcher's activity classes, and take the
+        // hologram car art from src/holo so the classic editions don't carry it.
+        create("holoLandscape") {
+            dimension = "edition"
+            applicationId = "com.aiconsole.kittdual.landscape"
+            resValue("string", "app_name", "KITT Holo Landscape")
+            buildConfigField("String", "EDITION_NAME", "\"KITT Holo Landscape\"")
+            buildConfigField("String", "UPDATE_REPO", "\"tdater/KITT-Holo-Landscape-releases\"")
+            buildConfigField("boolean", "HOLO_DESIGN", "true")
+            manifestPlaceholders["mainActivity"] = "com.aiconsole.kittlauncher2.MainActivity"
+            manifestPlaceholders["notificationListener"] = "com.aiconsole.kittlauncher2.nav.NavNotificationListener"
+        }
+        create("holoPortrait") {
+            dimension = "edition"
+            applicationId = "com.aiconsole.kittdual.portrait"
+            resValue("string", "app_name", "KITT Holo Portrait")
+            buildConfigField("String", "EDITION_NAME", "\"KITT Holo Portrait\"")
+            buildConfigField("String", "UPDATE_REPO", "\"tdater/KITT-Holo-Portrait-releases\"")
+            buildConfigField("boolean", "HOLO_DESIGN", "true")
+            manifestPlaceholders["mainActivity"] = "com.aiconsole.knightriderlauncher.MainActivity"
+            manifestPlaceholders["notificationListener"] = "com.aiconsole.knightriderlauncher.nav.NavNotificationListener"
+        }
+    }
+    sourceSets {
+        getByName("holoLandscape") {
+            java.directories += "src/kitt2/java"
+            kotlin.directories += "src/kitt2/java"
+            res.directories += "src/holo/res"
+        }
+        getByName("holoPortrait") {
+            java.directories += "src/kitt/java"
+            kotlin.directories += "src/kitt/java"
+            res.directories += "src/holo/res"
         }
     }
 

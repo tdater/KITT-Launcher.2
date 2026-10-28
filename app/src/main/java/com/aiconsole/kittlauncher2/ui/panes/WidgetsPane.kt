@@ -1,5 +1,7 @@
 package com.aiconsole.kittlauncher2.ui.panes
 
+import com.aiconsole.kittlauncher2.ui.components.skinFrame
+import com.aiconsole.kittlauncher2.BuildConfig
 import android.app.Activity
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
@@ -124,6 +126,16 @@ fun WidgetsPane(modifier: Modifier = Modifier) {
             KittButton(if (picking) "Cancel" else "+ Add widget", { picking = !picking }, Modifier.height(32.dp), LedGreen, active = !picking)
         }
     ) {
+        if (BuildConfig.HOLO_DESIGN) {
+            com.aiconsole.kittlauncher2.ui.components.AnnunciatorRow(
+                listOf(
+                    com.aiconsole.kittlauncher2.ui.components.Annunciator("WIDGETS ${ids.size}", ids.isNotEmpty(), LedGreen),
+                    com.aiconsole.kittlauncher2.ui.components.Annunciator("ADD MODE", picking, DashAmber),
+                    com.aiconsole.kittlauncher2.ui.components.Annunciator("FAULT", message != null, AlertRed)
+                ),
+                Modifier.fillMaxWidth().padding(bottom = 6.dp)
+            )
+        }
         message?.let { HelpText(it, color = AlertRed) }
         if (picking) {
             val providers = remember { manager.installedProviders.sortedBy { it.loadLabel(context.packageManager).lowercase() } }
@@ -161,7 +173,7 @@ fun WidgetsPane(modifier: Modifier = Modifier) {
                 val minHeight = with(LocalDensity.current) { info.minHeight.toDp() }.coerceAtLeast(110.dp)
                 Column(
                     Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).background(KittBlack)
-                        .border(1.dp, KittBezel, MaterialTheme.shapes.small).padding(4.dp)
+                        .then(if (BuildConfig.HOLO_DESIGN) Modifier.skinFrame(MaterialTheme.shapes.small, KittBezel) else Modifier.border(1.dp, KittBezel, MaterialTheme.shapes.small)).padding(4.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(

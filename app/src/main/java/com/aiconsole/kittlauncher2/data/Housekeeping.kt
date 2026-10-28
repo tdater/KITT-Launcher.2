@@ -11,6 +11,26 @@ object ReleaseNotes {
 
     val ALL = listOf(
         ReleaseNote(
+            9,
+            listOf(
+                "KITT Holo: the new cockpit edition, with a rotating hologram car, film-themed Drive screens and the new gauge faces.",
+                "Bigger, easier dock buttons: solid colour keys with an icon and bold label, so Diag, Trips, Config, System and the " +
+                    "media keys can be read at a glance while driving.",
+                "More live readings on the hologram car: speed, load, throttle, fuel, intake air and fuel burn. Tap one for a " +
+                    "bigger card with its low, high and average since start and what the number means.",
+            )
+        ),
+        ReleaseNote(
+            8,
+            listOf(
+                "Seven new gauge faces: Needle, Nixie tubes, Skyline bars, HUD tape, Scope, Halo, and a Film HUD that " +
+                    "follows the theme. Diagnostics → Gauges → Edit layout → Style shows them all live.",
+                "Restyle one gauge or all of them from the style gallery; Needle and Halo mark the highest value this drive.",
+                "Gauges page: the Cluster button draws the first gauge large, like an instrument cluster.",
+                "With stored fault codes, the Codes tab can route you to the nearest repair shop.",
+            )
+        ),
+        ReleaseNote(
             7,
             listOf(
                 "Music library: the Media page has a new Library tab. Pick Spotify, YouTube Music or a USB player, search it, " +

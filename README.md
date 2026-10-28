@@ -30,16 +30,36 @@ See [FEATURES.md](FEATURES.md) for everything it does.
   with the same accuracy and safety rules. Unfiltered and Classic are still there.
 - Installs alongside the original (`com.aiconsole.kittlauncher2`).
 
+## Editions
+
+One codebase builds four apps (product flavors), each installing side by side:
+
+| Edition | Flavor | App ID | For |
+|---|---|---|---|
+| KITT Launcher.2 | `kitt2` | `com.aiconsole.kittlauncher2` | 7"–10" landscape |
+| KITT Launcher | `kitt` | `com.aiconsole.knightriderlauncher` | 12.1" portrait (the original) |
+| KITT Holo Landscape | `holoLandscape` | `com.aiconsole.kittdual.landscape` | landscape, redesigned cockpit |
+| KITT Holo Portrait | `holoPortrait` | `com.aiconsole.kittdual.portrait` | portrait, redesigned cockpit |
+
+**KITT Holo** is the same launcher with a redesigned cockpit: a spinning hologram of the car
+with live data on it, film-themed Drive pages, a trip-computer dock, icon keys and a CRT-style
+KITT panel. Its redesign is switched on by `BuildConfig.HOLO_DESIGN`, so the classic editions
+look and behave exactly as before; its car art lives in `app/src/holo` so they don't carry it.
+
+All editions share the gauges: eleven faces (Dial, LED bar, Digital, Graph, Needle, Nixie,
+Skyline, HUD tape, Scope, Halo, Film HUD), a live style gallery, peak hold and a Cluster layout.
+
 ## Building
 
 Native Kotlin and Jetpack Compose, single `:app` module. Android 7.0+ (minSdk 24), target SDK 37.
 
 ```powershell
 $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"   # Android Studio's bundled JDK
-.\gradlew.bat testDebugUnitTest assembleDebug
+.\gradlew.bat testKitt2DebugUnitTest assembleKitt2Debug assembleKittDebug
+.\gradlew.bat testHoloLandscapeDebugUnitTest assembleHoloLandscapeDebug assembleHoloPortraitDebug
 ```
 
-The debug APK lands in `app/build/outputs/apk/debug/app-debug.apk`.
+Debug APKs land in `app/build/outputs/apk/<flavor>/debug/`.
 
 - AI keys are entered in the app (KITT Config) and stored encrypted on the device. Optionally put
   `GEMINI_API_KEY=...` in `local.properties` as a development fallback; that file is never committed.

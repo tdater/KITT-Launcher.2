@@ -1,5 +1,17 @@
 package com.aiconsole.kittlauncher2.ui.panes
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import com.aiconsole.kittlauncher2.ui.components.skinFrame
+import com.aiconsole.kittlauncher2.BuildConfig
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -32,6 +44,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aiconsole.kittlauncher2.KittApplication
+import com.aiconsole.kittlauncher2.ui.components.FilledKey
+import com.aiconsole.kittlauncher2.ui.components.KeyGlyph
 import com.aiconsole.kittlauncher2.ui.components.KittButton
 import com.aiconsole.kittlauncher2.ui.components.VoiceModulator
 import com.aiconsole.kittlauncher2.ui.gauges.SegmentDisplay
@@ -59,6 +73,10 @@ fun ControlDock(
     onTrip: () -> Unit = {},
     metric: Boolean = false
 ) {
+    if (BuildConfig.HOLO_DESIGN) {
+        ControlDockHolo(onAssistant, onDiagnostics, onConfig, modifier, kittSpeaking, onTrip, metric)
+        return
+    }
     val context = LocalContext.current
     val shape = MaterialTheme.shapes.medium
     Column(
@@ -87,6 +105,141 @@ fun ControlDock(
                 onConfig = onConfig
             )
             AssistantSection(onAssistant, kittSpeaking, Modifier.weight(0.5f).fillMaxHeight())
+        }
+    }
+}
+
+/**
+ * Holo-edition portrait bottom dock, laid out like the design: the trip computer over now-playing over the
+ * vehicle shortcuts on the left, the voice modulator over the big KITT button on the right.
+ * SELF-TEST opens KITT Config, whose first section is the system check.
+ */
+@Composable
+private fun ControlDockHolo(
+    onAssistant: () -> Unit,
+    onDiagnostics: () -> Unit,
+    onConfig: () -> Unit,
+    modifier: Modifier = Modifier,
+    kittSpeaking: Boolean = false,
+    onTrip: () -> Unit = {},
+    metric: Boolean = false
+) {
+    val context = LocalContext.current
+    val shape = MaterialTheme.shapes.medium
+    Row(
+        modifier
+            .clip(shape)
+            .background(KittCharcoal)
+            .skinFrame(shape, ScannerRed)
+            .padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Column(Modifier.weight(1.75f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            TripComputer(onTrip, metric, Modifier.weight(0.8f).fillMaxWidth())
+            NowPlayingCard({ sendMediaKey(context, it) }, Modifier.weight(1.2f).fillMaxWidth())
+            Row(Modifier.weight(1.05f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilledKey(KeyGlyph.Diag, "Diag", onDiagnostics, Modifier.weight(1f).fillMaxHeight(), LedGreen)
+                FilledKey(KeyGlyph.Check, "Test", onConfig, Modifier.weight(1f).fillMaxHeight(), ScannerRed)
+                FilledKey(KeyGlyph.Route, "Trips", onTrip, Modifier.weight(1f).fillMaxHeight(), DashAmber)
+                FilledKey(KeyGlyph.Gear, "System", { openSettings(context, Settings.ACTION_SETTINGS) }, Modifier.weight(1f).fillMaxHeight(), Color(0xFF42A5F5))
+            }
+        }
+        Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            val boxShape = MaterialTheme.shapes.small
+            Column(
+                Modifier.weight(1f).fillMaxWidth().clip(boxShape).background(KittBlack).skinFrame(boxShape, ScannerRed).padding(6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("VOICE MODULATOR", style = MaterialTheme.typography.labelSmall, color = DashWhite, maxLines = 1)
+                VoiceModulator(active = kittSpeaking, modifier = Modifier.fillMaxWidth().weight(1f))
+            }
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(0.55f)
+                    .clip(boxShape)
+                    .background(KittBlack)
+                    .skinFrame(boxShape, ScannerRed, selected = true)
+                    .clickable(onClick = onAssistant),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    assistantName().uppercase(),
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        fontStyle = FontStyle.Italic,
+                        fontWeight = FontWeight.ExtraBold,
+                        shadow = Shadow(ScannerRed, Offset.Zero, 18f)
+                    ),
+                    color = ScannerRed,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+/** The trip computer: distance, time and average speed in segment digits, tap for the trip screen. */
+@Composable
+private fun TripComputer(onClick: () -> Unit, metric: Boolean, modifier: Modifier = Modifier) {
+    val app = LocalContext.current.applicationContext as KittApplication
+    val latest = rememberRecentTrips(app.tripDatabase.tripMetricDao(), days = 1)?.firstOrNull()
+    val shape = MaterialTheme.shapes.small
+    Row(
+        modifier.clip(shape).background(KittBlack).skinFrame(shape, DashAmber).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        val hours = latest?.let { it.durationMs / 3_600_000.0 }?.takeIf { it > 0.0 }
+        val avg = latest?.let { t -> hours?.let { h -> (if (metric) t.distanceKm else t.distanceKm * 0.621371) / h } }
+        TripColumn("TRIP DIST", latest?.let { "%.1f".format(Locale.US, if (metric) it.distanceKm else it.distanceKm * 0.621371) } ?: "--", if (metric) "KM" else "MI", Modifier.weight(1f))
+        TripColumn("TRIP TIME", latest?.let { (it.durationMs / 60_000).toString() } ?: "--", "MIN", Modifier.weight(1f))
+        TripColumn("AVG SPEED", avg?.let { "%.0f".format(Locale.US, it) } ?: "--", if (metric) "KM/H" else "MPH", Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun TripColumn(label: String, value: String, unit: String, modifier: Modifier) {
+    Column(modifier.fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceEvenly) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = DashWhite, maxLines = 1)
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            SegmentDisplay(value, Modifier.weight(1f).fillMaxHeight(), DashAmber, cells = 4)
+            Text(unit, style = MaterialTheme.typography.labelSmall, color = DashGrey, maxLines = 1)
+        }
+    }
+}
+
+/** Album art, the track and PLAY / PAUSE / FWD / REV, falling back to plain media keys with no session. */
+@Composable
+private fun NowPlayingCard(onMediaKey: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val app = LocalContext.current.applicationContext as KittApplication
+    val now by app.media.nowPlaying.collectAsState()
+    val current = now
+    val shape = MaterialTheme.shapes.small
+    Row(
+        modifier.clip(shape).background(KittBlack).skinFrame(shape, ScannerRed).padding(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            Modifier.fillMaxHeight().aspectRatio(1f).clip(shape).background(KittCharcoal).border(1.dp, KittGrid, shape),
+            contentAlignment = Alignment.Center
+        ) {
+            val art = current?.art
+            if (art != null) Image(art.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            else Text("♪", style = MaterialTheme.typography.titleLarge, color = DashGrey)
+        }
+        Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                current?.title?.uppercase() ?: "NOW-PLAYING",
+                style = MaterialTheme.typography.labelMedium,
+                color = DashAmber,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                FilledKey(KeyGlyph.Play, "Play", { if (current != null) { if (!current.playing) app.media.playPause() } else onMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY) }, Modifier.weight(1f).fillMaxHeight(), ScannerRed, active = current?.playing == true)
+                FilledKey(KeyGlyph.Pause, "Pause", { if (current != null) { if (current.playing) app.media.playPause() } else onMediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE) }, Modifier.weight(1f).fillMaxHeight(), ScannerRed)
+                FilledKey(KeyGlyph.Next, "Fwd", { if (current != null) app.media.next() else onMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT) }, Modifier.weight(1f).fillMaxHeight(), ScannerRed)
+                FilledKey(KeyGlyph.Prev, "Rev", { if (current != null) app.media.previous() else onMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS) }, Modifier.weight(1f).fillMaxHeight(), ScannerRed)
+            }
         }
     }
 }
@@ -177,6 +330,16 @@ fun DockBar(
                     )
                 }
             }
+            if (BuildConfig.HOLO_DESIGN) {
+                FilledKey(KeyGlyph.Prev, "Prev", { if (current != null) app.media.previous() else sendMediaKey(context, KeyEvent.KEYCODE_MEDIA_PREVIOUS) }, Modifier.width(68.dp).fillMaxHeight(), ScannerRed)
+                FilledKey(
+                    if (current?.playing == true) KeyGlyph.Pause else KeyGlyph.Play,
+                    if (current?.playing == true) "Pause" else "Play",
+                    { if (current != null) app.media.playPause() else sendMediaKey(context, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) },
+                    Modifier.width(72.dp).fillMaxHeight(), ScannerRed, active = current?.playing == true
+                )
+                FilledKey(KeyGlyph.Next, "Next", { if (current != null) app.media.next() else sendMediaKey(context, KeyEvent.KEYCODE_MEDIA_NEXT) }, Modifier.width(68.dp).fillMaxHeight(), ScannerRed)
+            } else {
             KittButton(
                 "◀◀",
                 { if (current != null) app.media.previous() else sendMediaKey(context, KeyEvent.KEYCODE_MEDIA_PREVIOUS) },
@@ -196,11 +359,19 @@ fun DockBar(
                 Modifier.width(52.dp).fillMaxHeight(),
                 ScannerRed
             )
+            }
         }
-        KittButton("Diag", onDiagnostics, Modifier.weight(0.6f).fillMaxHeight(), LedGreen, active = true)
-        KittButton("Trips", onTrip, Modifier.weight(0.6f).fillMaxHeight(), ScannerRed, active = true)
-        KittButton("Config", onConfig, Modifier.weight(0.6f).fillMaxHeight(), DashAmber)
-        KittButton("System", { openSettings(context, Settings.ACTION_SETTINGS) }, Modifier.weight(0.6f).fillMaxHeight(), DashAmber)
+        if (BuildConfig.HOLO_DESIGN) {
+            FilledKey(KeyGlyph.Diag, "Diag", onDiagnostics, Modifier.weight(0.7f).fillMaxHeight(), LedGreen)
+            FilledKey(KeyGlyph.Route, "Trips", onTrip, Modifier.weight(0.7f).fillMaxHeight(), DashAmber)
+            FilledKey(KeyGlyph.Sliders, "Config", onConfig, Modifier.weight(0.7f).fillMaxHeight(), ScannerRed)
+            FilledKey(KeyGlyph.Gear, "System", { openSettings(context, Settings.ACTION_SETTINGS) }, Modifier.weight(0.7f).fillMaxHeight(), Color(0xFF42A5F5))
+        } else {
+            KittButton("Diag", onDiagnostics, Modifier.weight(0.6f).fillMaxHeight(), LedGreen, active = true)
+            KittButton("Trips", onTrip, Modifier.weight(0.6f).fillMaxHeight(), ScannerRed, active = true)
+            KittButton("Config", onConfig, Modifier.weight(0.6f).fillMaxHeight(), DashAmber)
+            KittButton("System", { openSettings(context, Settings.ACTION_SETTINGS) }, Modifier.weight(0.6f).fillMaxHeight(), DashAmber)
+        }
     }
 }
 

@@ -1,5 +1,6 @@
 package com.aiconsole.kittlauncher2.assistant
 
+import com.aiconsole.kittlauncher2.BuildConfig
 import com.aiconsole.kittlauncher2.ui.theme.ThemeState
 
 import android.content.Context
@@ -66,7 +67,11 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
     private val _speaking = MutableStateFlow(false)
     val speaking: StateFlow<Boolean> = _speaking.asStateFlow()
 
-    private data class Utterance(val text: String, val urgent: Boolean, val deviceOnly: Boolean)
+    /** The character a preview is speaking as right now, or null. */
+    private val _speakingAs = MutableStateFlow<FilmCharacter?>(null)
+    val speakingAs: StateFlow<FilmCharacter?> = _speakingAs.asStateFlow()
+
+    private data class Utterance(val text: String, val urgent: Boolean, val deviceOnly: Boolean, val character: FilmCharacter? = null)
 
     init {
         tts = TextToSpeech(context.applicationContext) { status -> onInit(status) }
@@ -126,11 +131,11 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
      * (safety alerts) get a firmer delivery and fall back to the device voice much sooner.
      * [deviceOnly] skips Gemini, e.g. to preview the fallback voice.
      */
-    fun speak(text: String, interrupt: Boolean = true, urgent: Boolean = false, deviceOnly: Boolean = false) {
+    fun speak(text: String, interrupt: Boolean = true, urgent: Boolean = false, deviceOnly: Boolean = false, character: FilmCharacter? = null) {
         if (text.isBlank()) return
         main.launch {
             if (interrupt) haltPlayback()
-            queue.addLast(Utterance(text, urgent, deviceOnly))
+            queue.addLast(Utterance(text, urgent, deviceOnly, character))
             if (worker?.isActive != true) worker = main.launch { drain() }
         }
     }
@@ -147,6 +152,7 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
     }
 
     private fun haltPlayback() {
+        _speakingAs.value = null
         queue.clear()
         worker?.cancel()
         worker = null
@@ -165,11 +171,17 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
             }
         } finally {
             _speaking.value = false
+            _speakingAs.value = null
             ducker.release()
         }
     }
 
+    /** The character a preview speaks as, overriding the theme's for that one line. */
+    private var asCharacter: FilmCharacter? = null
+
     private suspend fun say(utterance: Utterance) {
+        asCharacter = utterance.character
+        _speakingAs.value = utterance.character
         val chunks = GeminiSpeechProtocol.chunks(GeminiSpeechProtocol.speakable(utterance.text))
         if (chunks.isEmpty()) return
         // Gemini when chosen and keyed, then the free on-device voice, then the device TTS.
@@ -216,15 +228,19 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
 
     /** Plays chunks through the on-device voice, synthesizing the next while one plays. Returns how many were spoken. */
     private suspend fun sayOnDevice(chunks: List<String>, urgent: Boolean): Int = supervisorScope {
-        val voice = LocalVoices.byId(settings.localVoice.value)
-        val speaker = settings.localVoiceSpeaker.value
         val film = filmCharacter()
+        // The character's own voice if it's already downloaded and keeping up, else the driver's choice.
+        val preferred = if (!BuildConfig.HOLO_DESIGN) null else film?.let { LocalVoices.byId(it.localVoiceHint) }
+            ?.takeIf { onDevice.isInstalled(it) && onDevice.tooSlow.value != it.id }
+        val voice = preferred ?: LocalVoices.byId(settings.localVoice.value)
+        val speaker = if (preferred != null) 0 else settings.localVoiceSpeaker.value
+        val lines = if (BuildConfig.HOLO_DESIGN) chunks.map { film?.accentText(it) ?: it } else chunks
         val speed = (film?.rate ?: 1f) * (if (urgent) 1.06f else 1f)
         // The characters' pitches are tuned for the device voice; a neural voice needs less.
         val pitch = film?.let { 1f + (it.pitch - 1f) * 0.7f } ?: 1f
         // Urgent lines (overheating, a new code) mustn't wait on a slow model load: device voice after 3 s.
         val timeout = if (urgent) URGENT_TIMEOUT_MS else ON_DEVICE_TIMEOUT_MS
-        fun fetch(index: Int) = async(Dispatchers.IO) { onDevice.synthesize(voice, chunks[index], speaker, speed) }
+        fun fetch(index: Int) = async(Dispatchers.IO) { onDevice.synthesize(voice, lines[index], speaker, speed) }
 
         var next = fetch(0)
         for (index in chunks.indices) {
@@ -311,7 +327,7 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
             localDone[id] = done
             try {
                 _speaking.value = true
-                if (tts.speak(chunk, TextToSpeech.QUEUE_ADD, null, id) != TextToSpeech.SUCCESS) return
+                if (tts.speak(if (BuildConfig.HOLO_DESIGN) film?.accentText(chunk) ?: chunk else chunk, TextToSpeech.QUEUE_ADD, null, id) != TextToSpeech.SUCCESS) return
                 done.await()
             } finally {
                 localDone.remove(id)
@@ -351,7 +367,7 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
     }
 
     private fun filmCharacter(): FilmCharacter? =
-        if (settings.filmCharacters.value) ThemeState.filmCharacter else null
+        asCharacter ?: if (settings.filmCharacters.value) ThemeState.filmCharacter else null
 
     private companion object {
         const val TAG = "KittVoice"

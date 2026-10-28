@@ -351,8 +351,14 @@ class BrowserSession(
         !SiteSettings.forcesMobile(tab.host) &&
             (siteConfig(tab)?.desktop ?: (!SiteSettings.prefersMobile(tab.host) && settings.streamDesktop.value))
     fun isDark(tab: BrowserTab): Boolean = siteConfig(tab)?.dark ?: settings.darkPages.value
-    fun blocksAds(tab: BrowserTab): Boolean =
-        SiteSettings.blockAllowed(tab.host) && (siteConfig(tab)?.blockAds ?: settings.blockAds.value)
+    /**
+     * Ad blocking per site. Sites whose own players break when ad hosts are blocked (YouTube)
+     * start with it off, but the driver can turn it on from the toolbar like on any other site.
+     */
+    fun blocksAds(tab: BrowserTab): Boolean {
+        val explicit = siteConfig(tab)?.blockAds
+        return if (SiteSettings.blockAllowed(tab.host)) explicit ?: settings.blockAds.value else explicit == true
+    }
     fun textZoom(tab: BrowserTab): Int = siteConfig(tab)?.textZoom ?: 100
     fun dataSaver(tab: BrowserTab): Boolean = siteConfig(tab)?.dataSaver ?: false
 

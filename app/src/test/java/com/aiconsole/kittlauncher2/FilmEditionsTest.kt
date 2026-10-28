@@ -36,8 +36,12 @@ class FilmEditionsTest {
     @Test
     fun everyCharacterIsOriginal() {
         FilmCharacter.entries.forEach { c ->
-            assertTrue(c.name, c.style.contains("Do not imitate any real actor"))
-            assertTrue(c.name, c.personality.contains("ever recite"))
+            if (BuildConfig.HOLO_DESIGN) {
+                assertTrue(c.name, c.personality.contains("quoted freely"))
+            } else {
+                assertTrue(c.name, c.style.contains("Do not imitate any real actor"))
+                assertTrue(c.name, c.personality.contains("ever recite"))
+            }
             assertTrue(c.name, c.greeting("Good evening", ", Travis").startsWith("Good evening, Travis"))
             assertTrue(c.pitch in 0.5f..1.5f && c.rate in 0.5f..1.5f)
         }

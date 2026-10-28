@@ -75,7 +75,17 @@ object DemoSession {
             PidCatalog.MODULE_VOLTAGE to 14.2,
             PidCatalog.ADAPTER_VOLTAGE to 14.0,
             PidCatalog.MAF to 13.0 + 2.0 * sin(t / 5.0),
-            PidCatalog.FUEL_RATE to 4.3 + 0.6 * sin(t / 5.0)
+            PidCatalog.FUEL_RATE to 4.3 + 0.6 * sin(t / 5.0),
+            "01_0E" to 18.0 + 3.0 * sin(t / 6.0),
+            "01_44" to 1.0 + 0.02 * sin(t / 4.0),
+            "01_0B" to 130.0 + 12.0 * sin(t / 5.0),
+            "01_33" to 101.0,
+            "01_5C" to 99.0 + 1.0 * sin(t / 9.0),
+            // Simulated tire pressures (kPa, about 32 PSI) so the vehicle HUD has something to show.
+            "gm_tpms_lf" to 221.0 + 1.5 * sin(t / 11.0),
+            "gm_tpms_rf" to 220.0 + 1.5 * sin(t / 13.0),
+            "gm_tpms_lr" to 214.0 + 1.5 * sin(t / 17.0),
+            "gm_tpms_rr" to 216.0 + 1.5 * sin(t / 19.0)
         )
     }
 

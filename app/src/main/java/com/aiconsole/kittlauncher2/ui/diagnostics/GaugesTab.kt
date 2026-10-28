@@ -62,10 +62,22 @@ fun GaugesTab(app: KittApplication, onGraph: (String) -> Unit = {}) {
     var editing by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf(false) }
     var limitsFor by remember { mutableStateOf<GaugeConfig?>(null) }
+    var styleFor by remember { mutableStateOf<GaugeConfig?>(null) }
 
     val editingLimits = limitsFor
+    val restyling = styleFor
     when {
         adding -> GaugePicker(app, metric, onDone = { adding = false })
+        restyling != null -> StyleGallery(
+            config = restyling,
+            gauge = { style -> GaugeUi(restyling.copy(style = style), defs[restyling.pidId], readings[restyling.pidId]) },
+            metric = metric,
+            onPick = { style, everyGauge ->
+                if (everyGauge) app.gauges.restyleAll(style) else app.gauges.update(restyling.copy(style = style))
+                styleFor = null
+            },
+            onCancel = { styleFor = null }
+        )
         editingLimits != null -> LimitEditor(
             config = editingLimits,
             def = defs[editingLimits.pidId],
@@ -108,10 +120,7 @@ fun GaugesTab(app: KittApplication, onGraph: (String) -> Unit = {}) {
                                 KittButton(">", { app.gauges.move(config.id, 1) }, Modifier.weight(1f).fillMaxHeight())
                                 KittButton(
                                     label = "Style",
-                                    onClick = {
-                                        val next = GaugeStyle.entries[(config.style.ordinal + 1) % GaugeStyle.entries.size]
-                                        app.gauges.update(config.copy(style = next))
-                                    },
+                                    onClick = { styleFor = config },
                                     modifier = Modifier.weight(1.4f).fillMaxHeight(),
                                     color = LedGreen
                                 )
@@ -120,6 +129,59 @@ fun GaugesTab(app: KittApplication, onGraph: (String) -> Unit = {}) {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/** Every gauge face drawn live with this gauge's own reading; tap one to use it. */
+@Composable
+private fun StyleGallery(
+    config: GaugeConfig,
+    gauge: (GaugeStyle) -> GaugeUi,
+    metric: Boolean,
+    onPick: (GaugeStyle, Boolean) -> Unit,
+    onCancel: () -> Unit
+) {
+    var everyGauge by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            SectionHeader("Gauge style · ${gauge(config.style).def?.name ?: config.pidId}", Modifier.weight(1f), color = DashAmber)
+            KittButton(
+                label = if (everyGauge) "All gauges" else "This gauge",
+                onClick = { everyGauge = !everyGauge },
+                modifier = Modifier.height(44.dp),
+                color = LedGreen,
+                active = everyGauge
+            )
+            KittButton("Cancel", onCancel, Modifier.height(44.dp), DashGrey)
+        }
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(200.dp),
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(GaugeStyle.entries, key = { it.name }) { style ->
+                val current = style == config.style
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    GaugeTile(
+                        gauge = gauge(style),
+                        metric = metric,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(150.dp)
+                            .then(if (current) Modifier.border(2.dp, LedGreen, MaterialTheme.shapes.small) else Modifier),
+                        onClick = { onPick(style, everyGauge) }
+                    )
+                    Text(
+                        text = (if (current) "● " else "") + style.label.uppercase(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (current) LedGreen else DashWhite,
+                        maxLines = 1
+                    )
+                    Text(style.blurb, style = MaterialTheme.typography.labelSmall, color = DashGrey, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }

@@ -10,11 +10,19 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.util.UUID
 
-enum class GaugeStyle(val label: String) {
-    DIAL("Dial"),
-    BAR("LED bar"),
-    DIGITAL("Digital"),
-    GRAPH("Graph")
+/** Gauge faces. Stored by name, so append new ones and never rename existing entries. */
+enum class GaugeStyle(val label: String, val blurb: String) {
+    DIAL("Dial", "KITT's LED tick arc"),
+    BAR("LED bar", "Segment readout over an LED bar"),
+    DIGITAL("Digital", "Big seven-segment readout"),
+    GRAPH("Graph", "Sparkline of the last minute or so"),
+    NEEDLE("Needle", "Retro analog instrument with a red zone"),
+    NIXIE("Nixie", "Glowing cold-cathode tubes"),
+    SKYLINE("Skyline", "Eighties digital-dash stair-step bars"),
+    TAPE("HUD tape", "Fighter-jet scrolling tape"),
+    SCOPE("Scope", "CRT oscilloscope trace"),
+    HALO("Halo", "Neon segmented ring"),
+    FILM("Film HUD", "Matches the film theme: targeting, visor, code or time circuits")
 }
 
 /** One gauge on the dashboard. Warning limits are in the PID's metric base unit. */
@@ -42,6 +50,19 @@ class GaugeStore(context: Context) {
     fun update(config: GaugeConfig) = save(_gauges.value.map { if (it.id == config.id) config else it })
 
     fun remove(id: String) = save(_gauges.value.filterNot { it.id == id })
+
+    /** One face on every gauge. */
+    fun restyleAll(style: GaugeStyle) = save(_gauges.value.map { it.copy(style = style) })
+
+    private val _cluster = MutableStateFlow(prefs.getBoolean(KEY_CLUSTER, false))
+
+    /** Gauges page layout: the first gauge large like an instrument cluster, the rest around it. */
+    val cluster: StateFlow<Boolean> = _cluster.asStateFlow()
+
+    fun setCluster(on: Boolean) {
+        _cluster.value = on
+        prefs.edit().putBoolean(KEY_CLUSTER, on).apply()
+    }
 
     fun move(id: String, delta: Int) {
         val list = _gauges.value.toMutableList()
@@ -89,6 +110,7 @@ class GaugeStore(context: Context) {
 
     private companion object {
         const val KEY = "gauges"
+        const val KEY_CLUSTER = "cluster"
         val DEFAULTS = listOf(
             GaugeConfig("d_speed", PidCatalog.SPEED, GaugeStyle.DIGITAL),
             GaugeConfig("d_rpm", PidCatalog.RPM, GaugeStyle.DIAL, warnAbove = 6000.0),

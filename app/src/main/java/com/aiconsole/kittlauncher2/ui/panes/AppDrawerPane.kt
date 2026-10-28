@@ -1,5 +1,9 @@
 package com.aiconsole.kittlauncher2.ui.panes
 
+import com.aiconsole.kittlauncher2.ui.components.Annunciator
+import com.aiconsole.kittlauncher2.ui.components.AnnunciatorRow
+import com.aiconsole.kittlauncher2.ui.components.skinFrame
+import com.aiconsole.kittlauncher2.BuildConfig
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.provider.Settings
@@ -100,6 +104,17 @@ fun AppDrawerPane(
         trailing = { Text("${shown.size} OF ${apps.size}", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
     ) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (BuildConfig.HOLO_DESIGN) {
+                AnnunciatorRow(
+                    listOf(
+                        Annunciator("ALL ${apps.size}", filter == ALL, LedGreen),
+                        Annunciator("PINNED ${pinned.size}", pinned.isNotEmpty(), DashAmber),
+                        Annunciator("HIDDEN ${hidden.size}", showHidden, DashAmber),
+                        Annunciator("SEARCH", query.isNotBlank(), ScannerRed)
+                    ),
+                    Modifier.fillMaxWidth()
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 KittTextField(query, { query = it }, "Search apps…", Modifier.weight(1f))
                 KittButton(
@@ -111,7 +126,15 @@ fun AppDrawerPane(
                     enabled = hidden.isNotEmpty() || showHidden
                 )
             }
-            ChoiceRow(filters, filter, { it }, { filter = it }, color = DashAmber)
+            if (BuildConfig.HOLO_DESIGN) {
+                androidx.compose.foundation.lazy.LazyRow(Modifier.fillMaxWidth().height(40.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    items(filters.size) { i ->
+                        com.aiconsole.kittlauncher2.ui.components.SkinTab(filters[i], filters[i] == filter, { filter = filters[i] }, Modifier.height(40.dp))
+                    }
+                }
+            } else {
+                ChoiceRow(filters, filter, { it }, { filter = it }, color = DashAmber)
+            }
             selected?.let { app ->
                 AppActions(
                     app = app,
@@ -225,7 +248,7 @@ private fun DrawerTile(app: LauncherApp, pinned: Boolean, hidden: Boolean, onCli
             .height(104.dp)
             .clip(shape)
             .background(KittBlack)
-            .border(1.dp, if (pinned) ScannerRed else KittBezel, shape)
+            .then(if (BuildConfig.HOLO_DESIGN) Modifier.skinFrame(shape, if (pinned) ScannerRed else KittBezel) else Modifier.border(1.dp, if (pinned) ScannerRed else KittBezel, shape))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .alpha(if (hidden) 0.4f else 1f)
     ) {

@@ -8,6 +8,7 @@ import android.media.AudioManager
 import android.os.Build
 import android.util.Log
 import android.view.ViewGroup
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
@@ -168,6 +169,11 @@ object WebMedia {
         if (toMini && miniPlayer != null) {
             (web.parent as? ViewGroup)?.removeView(web)
             miniPlayer.addView(web, 0, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            // The border follows the active theme (green Matrix, red KITT, ...), read when shown.
+            (miniPlayer.background as? android.graphics.drawable.GradientDrawable)?.setStroke(
+                (2 * miniPlayer.resources.displayMetrics.density).toInt(),
+                com.aiconsole.kittlauncher2.ui.theme.ScannerRed.toArgb()
+            )
             miniPlayer.visibility = android.view.View.VISIBLE
             miniTab = tab
             return

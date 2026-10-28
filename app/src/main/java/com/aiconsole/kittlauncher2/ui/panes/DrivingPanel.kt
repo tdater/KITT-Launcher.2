@@ -1,5 +1,12 @@
 package com.aiconsole.kittlauncher2.ui.panes
 
+import com.aiconsole.kittlauncher2.obd.PidReading
+import com.aiconsole.kittlauncher2.ui.components.IconKey
+import com.aiconsole.kittlauncher2.ui.components.KeyGlyph
+import com.aiconsole.kittlauncher2.ui.components.AppKeyFrame
+import com.aiconsole.kittlauncher2.ui.components.VehicleStatusHud
+import com.aiconsole.kittlauncher2.ui.components.chamfer
+import com.aiconsole.kittlauncher2.BuildConfig
 import android.media.AudioManager
 import android.view.KeyEvent
 import androidx.compose.foundation.background
@@ -47,7 +54,10 @@ fun DrivingPanel(
     onAppClick: (LauncherApp) -> Unit,
     onKitt: () -> Unit,
     kittSpeaking: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    reading: (String) -> PidReading? = { null },
+    metric: Boolean = false,
+    rpmFraction: () -> Float = { 0f }
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as KittApplication
@@ -70,6 +80,51 @@ fun DrivingPanel(
             ?.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI)
     }
 
+    if (BuildConfig.HOLO_DESIGN) {
+        KittPanel(title = "Driving", modifier = modifier, accent = ScannerRed, trailing = {
+            now?.title?.let { Text(it.uppercase(), style = MaterialTheme.typography.labelMedium, color = DashWhite, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        }) {
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // The live hologram vehicle stays on screen while driving.
+                VehicleStatusHud(reading, metric, rpmFraction, Modifier.weight(2.4f).fillMaxWidth())
+                // Media and volume as big icon keys, with KITT's voice box between them.
+                Row(Modifier.fillMaxWidth().weight(0.9f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    IconKey(KeyGlyph.Prev, "Prev", { key(KeyEvent.KEYCODE_MEDIA_PREVIOUS) }, Modifier.weight(1f).fillMaxHeight(), ScannerRed)
+                    IconKey(
+                        if (now?.playing == true) KeyGlyph.Pause else KeyGlyph.Play,
+                        if (now?.playing == true) "Pause" else "Play",
+                        { key(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) },
+                        Modifier.weight(1.2f).fillMaxHeight(),
+                        ScannerRed,
+                        active = now?.playing == true
+                    )
+                    IconKey(KeyGlyph.Next, "Next", { key(KeyEvent.KEYCODE_MEDIA_NEXT) }, Modifier.weight(1f).fillMaxHeight(), ScannerRed)
+                    IconKey(KeyGlyph.VolDown, "Vol", { volume(AudioManager.ADJUST_LOWER) }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
+                    Box(
+                        Modifier.weight(1.3f).fillMaxHeight().clip(chamfer(18f)).background(KittBlack)
+                            .border(1.5.dp, ScannerRed, chamfer(18f)).clickable(onClick = onKitt).padding(6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        VoiceModulator(active = kittSpeaking, modifier = Modifier.fillMaxSize().padding(bottom = 14.dp))
+                        Text("KITT", style = MaterialTheme.typography.labelSmall, color = ScannerRed, modifier = Modifier.align(Alignment.BottomCenter))
+                    }
+                    IconKey(KeyGlyph.VolUp, "Vol", { volume(AudioManager.ADJUST_RAISE) }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
+                }
+                // Three favourites as chamfered neon tiles.
+                Row(Modifier.fillMaxWidth().weight(0.5f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    favorites.distinctBy { it.label }.take(3).forEach { fav ->
+                        AppKeyFrame(Modifier.weight(1f).fillMaxHeight(), DashAmber, { onAppClick(fav) }) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                AppIcon(fav, Modifier.size(28.dp))
+                                Text(fav.label, style = MaterialTheme.typography.labelLarge, color = DashWhite, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return
+    }
     KittPanel(title = "Driving",modifier = modifier, accent = ScannerRed, trailing = {
         now?.title?.let { Text(it.uppercase(), style = MaterialTheme.typography.labelMedium, color = DashWhite, maxLines = 1, overflow = TextOverflow.Ellipsis) }
     }) {

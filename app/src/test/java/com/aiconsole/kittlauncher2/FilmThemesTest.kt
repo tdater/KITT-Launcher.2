@@ -22,8 +22,12 @@ class FilmThemesTest {
         assertEquals(HudStyle.Future, UiTheme.BackToTheFuture.hud)
         HudStyle.entries.forEach { style ->
             val c = FilmCharacter.forStyle(style)!!
-            assertTrue(c.style.contains("Do not imitate any real actor"))
-            assertTrue(c.personality.contains("Never recite"))
+            if (BuildConfig.HOLO_DESIGN) {
+                assertTrue(c.personality.contains("quoted freely"))
+            } else {
+                assertTrue(c.style.contains("Do not imitate any real actor"))
+                assertTrue(c.personality.contains("Never recite"))
+            }
             assertTrue(FilmHudText.intro(style).isNotEmpty())
             assertTrue(FilmHudText.lines(style).isNotEmpty())
             assertTrue(c.greeting("Good morning", ", Travis").startsWith("Good morning, Travis"))

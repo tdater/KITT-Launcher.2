@@ -8,6 +8,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import com.aiconsole.kittlauncher2.BuildConfig
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -241,23 +246,67 @@ fun AssistantOverlay(
             if (maxWidth > maxHeight * 1.3f) {
                 // Landscape head unit: KITT's face and the big controls on the left, the
                 // conversation and keyboard input on the right, so answers get the full height.
-                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Column(Modifier.weight(0.36f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        modulator(Modifier.fillMaxWidth().weight(1f))
-                        statusText()
-                        Row(Modifier.fillMaxWidth().height(60.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            speakButton(Modifier.weight(1.4f).fillMaxHeight())
-                            voiceButton(Modifier.weight(1f).fillMaxHeight())
+                if (BuildConfig.HOLO_DESIGN) {
+                    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(0.42f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            com.aiconsole.kittlauncher2.ui.components.CrtTerminal(
+                                status,
+                                listening != null || thinking || speaking,
+                                listening?.level,
+                                Modifier.fillMaxWidth().weight(1f)
+                            )
+                            Row(Modifier.fillMaxWidth().height(52.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                speakButton(Modifier.weight(1f).fillMaxHeight())
+                                KittButton("Diagnose ECU", { viewModel.ask("Run a diagnosis on the engine and tell me what you see in the live data.", diagnostic = true) }, Modifier.weight(1f).fillMaxHeight(), DashAmber, enabled = !thinking)
+                            }
+                            Row(Modifier.fillMaxWidth().height(52.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                KittButton("Read codes", { viewModel.ask("Read my stored fault codes and explain what each one means.", diagnostic = true) }, Modifier.weight(1f).fillMaxHeight(), DashAmber, enabled = !thinking)
+                                KittButton("Range report", { viewModel.ask("Give me a range report: fuel level, how far I can go, and the nearest gas.", diagnostic = true) }, Modifier.weight(1f).fillMaxHeight(), DashAmber, enabled = !thinking)
+                            }
+                            Row(Modifier.fillMaxWidth().height(40.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                voiceButton(Modifier.weight(1f).fillMaxHeight())
+                                KittButton("Reset", viewModel::clearConversation, Modifier.weight(1f).fillMaxHeight(), DashAmber)
+                                KittButton("Close", onDismiss, Modifier.weight(1f).fillMaxHeight(), DashGrey)
+                            }
                         }
-                        Row(Modifier.fillMaxWidth().height(52.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            KittButton("Reset", viewModel::clearConversation, Modifier.weight(1f).fillMaxHeight(), DashAmber)
-                            KittButton("Close", onDismiss, Modifier.weight(1f).fillMaxHeight(), DashGrey)
+                        Column(Modifier.weight(0.58f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            com.aiconsole.kittlauncher2.ui.components.EcuCards(Modifier.fillMaxWidth().height(64.dp))
+                            conversation(Modifier.fillMaxWidth().weight(1f))
+                            // The design's action chips under a diagnosis. Clearing a code stays a manual action:
+                            // the chip only opens Diagnostics, where it asks for confirmation.
+                            val kitt = context.applicationContext as com.aiconsole.kittlauncher2.KittApplication
+                            val codes by kitt.obd.dtcs.collectAsState()
+                            if (codes?.all?.isNotEmpty() == true) {
+                                val scope = rememberCoroutineScope()
+                                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    com.aiconsole.kittlauncher2.ui.components.ActionChip("View Freeze Frame", { com.aiconsole.kittlauncher2.assistant.LauncherBus.send(com.aiconsole.kittlauncher2.assistant.LauncherEvent.OpenDiagnostics) })
+                                    com.aiconsole.kittlauncher2.ui.components.ActionChip("Nearest Repair Shop", { scope.launch { notice = kitt.navigator.navigateToNearestRepair() } })
+                                    com.aiconsole.kittlauncher2.ui.components.ActionChip("Clear Warning (Manual)", { com.aiconsole.kittlauncher2.assistant.LauncherBus.send(com.aiconsole.kittlauncher2.assistant.LauncherEvent.OpenDiagnostics) })
+                                }
+                            }
+                            handoff()
+                            promptRow()
                         }
                     }
-                    Column(Modifier.weight(0.64f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        conversation(Modifier.fillMaxWidth().weight(1f))
-                        handoff()
-                        promptRow()
+                } else {
+                    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(0.36f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            modulator(Modifier.fillMaxWidth().weight(1f))
+                            statusText()
+                            Row(Modifier.fillMaxWidth().height(60.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                speakButton(Modifier.weight(1.4f).fillMaxHeight())
+                                voiceButton(Modifier.weight(1f).fillMaxHeight())
+                            }
+                            Row(Modifier.fillMaxWidth().height(52.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                KittButton("Reset", viewModel::clearConversation, Modifier.weight(1f).fillMaxHeight(), DashAmber)
+                                KittButton("Close", onDismiss, Modifier.weight(1f).fillMaxHeight(), DashGrey)
+                            }
+                        }
+                        Column(Modifier.weight(0.64f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            conversation(Modifier.fillMaxWidth().weight(1f))
+                            handoff()
+                            promptRow()
+                        }
                     }
                 }
             } else {

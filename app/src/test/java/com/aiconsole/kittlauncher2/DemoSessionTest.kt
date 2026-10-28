@@ -16,6 +16,9 @@ class DemoSessionTest {
             assertTrue(f.getValue(PidCatalog.COOLANT) in 85.0..100.0)
             assertTrue(f.getValue(PidCatalog.MODULE_VOLTAGE) in 13.5..14.7)
             assertTrue(f.getValue(PidCatalog.THROTTLE) in 0.0..100.0)
+            listOf("gm_tpms_lf", "gm_tpms_rf", "gm_tpms_lr", "gm_tpms_rr").forEach { id ->
+                assertTrue(f.getValue(id) in 205.0..230.0)
+            }
         }
     }
 }

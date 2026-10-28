@@ -123,8 +123,10 @@ class FilmHudTextTest {
 
     @Test
     fun robocopKeepsTheFourthDirectiveClassified() {
-        val lines = t.lines(com.aiconsole.kittlauncher2.ui.theme.HudStyle.RoboCop)
+        // The edition's own directive readouts; the Holo edition appends famous lines to the rotating strip on top of these.
+        val lines = com.aiconsole.kittlauncher2.ui.theme.FilmEdition.default(com.aiconsole.kittlauncher2.ui.theme.HudStyle.RoboCop).lines
         assertEquals(4, lines.size)
         assertTrue(lines.last().contains("CLASSIFIED"))
+        assertTrue(t.lines(com.aiconsole.kittlauncher2.ui.theme.HudStyle.RoboCop).containsAll(lines))
     }
 }

@@ -221,7 +221,7 @@ private fun LinkIndicator(hud: () -> HudState) {
                 .clip(CircleShape)
                 .background(if (state.linked) LedGreen else DashGrey)
         )
-        Text(state.linkLabel, style = MaterialTheme.typography.labelMedium, color = if (state.linked) LedGreen else DashGrey)
+        Text(state.linkLabel, style = MaterialTheme.typography.labelMedium, color = if (state.linked) LedGreen else DashGrey, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
     }
 }
 

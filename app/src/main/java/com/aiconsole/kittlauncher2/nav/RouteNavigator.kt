@@ -120,18 +120,23 @@ class RouteNavigator(
      * Routes to the nearest gas station (OpenStreetMap amenity=fuel) and starts guidance.
      * Returns what KITT says.
      */
-    suspend fun navigateToNearestFuel(): String {
-        val here = position() ?: return "I need a GPS position to find a gas station."
+    suspend fun navigateToNearestFuel(): String = navigateToNearest("gas station", "amenity:fuel", "a gas station")
+
+    /** Routes to the nearest car repair shop (OpenStreetMap shop=car_repair) and starts guidance. */
+    suspend fun navigateToNearestRepair(): String = navigateToNearest("car repair", "shop:car_repair", "a repair shop")
+
+    private suspend fun navigateToNearest(query: String, osmTag: String, noun: String): String {
+        val here = position() ?: return "I need a GPS position to find $noun."
         val place = try {
-            services.search("gas station", here, osmTag = "amenity:fuel")
+            services.search(query, here, osmTag = osmTag)
                 .minByOrNull { RouteRules.distanceM(here, it.location) }
         } catch (e: CancellationException) {
             throw e
         } catch (_: IOException) {
-            return "I can't search for gas stations without a data connection."
+            return "I can't search for $noun without a data connection."
         } catch (_: JSONException) {
             return "The map search sent back something unreadable. Try again in a moment."
-        } ?: return "I couldn't find a gas station nearby."
+        } ?: return "I couldn't find $noun nearby."
         routing?.cancel()
         computeRoute(place)
         if (_state.value.status != NavStatus.Preview) return _state.value.message ?: "I couldn't find a route to ${place.name}."

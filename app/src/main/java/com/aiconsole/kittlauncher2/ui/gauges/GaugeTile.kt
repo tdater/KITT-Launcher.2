@@ -60,7 +60,7 @@ import kotlin.math.sin
 /** Everything one gauge needs to draw itself. */
 data class GaugeUi(val config: GaugeConfig, val def: PidDefinition?, val reading: PidReading?)
 
-/** A live gauge in one of four KITT styles. Flashes red when outside the user's limits. */
+/** A live gauge in any [GaugeStyle]. Flashes red when outside the user's limits. */
 @Composable
 fun GaugeTile(
     gauge: GaugeUi,
@@ -119,11 +119,31 @@ fun GaugeTile(
             Text(def?.unit(metric).orEmpty(), style = MaterialTheme.typography.labelSmall, color = if (console) DashBlue else DashGrey)
             header?.invoke(this)
         }
-        when (gauge.config.style) {
+        val style = gauge.config.style
+        val history = if (style == GaugeStyle.GRAPH || style == GaugeStyle.SCOPE) {
+            remember(gauge.config.id) { GaugeHistory() }.also { h -> gauge.reading?.let { h.add(it) } }
+        } else {
+            null
+        }
+        val reading = gauge.reading
+        val peak = if (def != null && reading != null && (style == GaugeStyle.NEEDLE || style == GaugeStyle.HALO)) {
+            GaugeScale.fraction(PeakHold.shared.update(gauge.config.id, reading.value, reading.timestamp), def.min, def.max)
+        } else {
+            null
+        }
+        val face = GaugeFace(gauge.config, def, metric, display, text, fraction, accent, warning, peak)
+        when (style) {
             GaugeStyle.DIGITAL -> SegmentDisplay(text, Modifier.fillMaxWidth().weight(1f), accent, cells = 4)
             GaugeStyle.BAR -> BarBody(text, fraction, accent)
             GaugeStyle.DIAL -> DialBody(text, fraction, accent)
-            GaugeStyle.GRAPH -> GraphBody(text, gauge, accent)
+            GaugeStyle.GRAPH -> GraphBody(text, gauge, accent, history ?: GaugeHistory())
+            GaugeStyle.NEEDLE -> NeedleBody(face)
+            GaugeStyle.NIXIE -> NixieBody(face)
+            GaugeStyle.SKYLINE -> SkylineBody(face)
+            GaugeStyle.TAPE -> TapeBody(face)
+            GaugeStyle.SCOPE -> ScopeBody(face, history ?: GaugeHistory())
+            GaugeStyle.HALO -> HaloBody(face)
+            GaugeStyle.FILM -> FilmBody(face)
         }
     }
 }
@@ -171,9 +191,7 @@ private fun ColumnScope.DialBody(text: String, fraction: Float, accent: Color) {
 
 /** Sparkline of the last ~90 samples with the current value. */
 @Composable
-private fun ColumnScope.GraphBody(text: String, gauge: GaugeUi, accent: Color) {
-    val history = remember(gauge.config.id) { GaugeHistory() }
-    gauge.reading?.let { history.add(it) }
+private fun ColumnScope.GraphBody(text: String, gauge: GaugeUi, accent: Color, history: GaugeHistory) {
     val def = gauge.def
     Row(Modifier.fillMaxWidth().weight(1f), verticalAlignment = Alignment.CenterVertically) {
         Canvas(Modifier.weight(1f).fillMaxHeight()) {
@@ -199,7 +217,7 @@ private fun ColumnScope.GraphBody(text: String, gauge: GaugeUi, accent: Color) {
 }
 
 /** Ring buffer of recent readings, de-duplicated by timestamp. */
-private class GaugeHistory {
+internal class GaugeHistory {
     private val buffer = ArrayDeque<Double>()
     private var lastTimestamp = 0L
 

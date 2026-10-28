@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -23,13 +24,15 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
+import com.aiconsole.kittlauncher2.BuildConfig
 import com.aiconsole.kittlauncher2.browser.WebMedia
 import kotlin.random.Random
 
 /** Text the film HUD themes show in the status strip, panels, screensaver and intros (see [FilmEdition]). */
 object FilmHudText {
 
-    fun lines(edition: FilmEdition): List<String> = edition.lines
+    fun lines(edition: FilmEdition): List<String> =
+        if (BuildConfig.HOLO_DESIGN) edition.lines + FilmQuotes.forFilm(edition.film) else edition.lines
 
     /** The film's original edition's readouts. */
     fun lines(style: HudStyle): List<String> = lines(FilmEdition.default(style))
@@ -40,7 +43,7 @@ object FilmHudText {
     /** What the alert banner calls KITT's messages. */
     fun alertTitle(edition: FilmEdition?): String? = edition?.alertTitle
 
-    /** The boot sequence each edition shows when it comes on: original lines, not dialogue. */
+    /** The boot sequence each edition shows when it comes on: original lines, not dialogue (the Holo edition's strip also carries film lines). */
     fun intro(edition: FilmEdition): List<String> = edition.intro
 
     fun intro(style: HudStyle): List<String> = intro(FilmEdition.default(style))
@@ -109,7 +112,7 @@ fun FilmHudOverlay(edition: FilmEdition, modifier: Modifier = Modifier) {
         when (edition) {
             FilmEdition.T800 -> {
                 vignette(Color(0x55FF1A0A))
-                machineCode(paint, now)
+                if (!FilmHudState.driveShowsCode) machineCode(paint, now)
             }
             FilmEdition.T1000 -> {
                 vignette(Color(0x40A8C0D8), 0.8f)
@@ -208,15 +211,28 @@ private fun DrawScope.hazardBand() {
     }
 }
 
+/** Set by a Drive page that already shows the machine code in its own panel, so the margin copy steps aside. */
+object FilmHudState {
+    var driveShowsCode by mutableStateOf(false)
+}
+
 /** The T-800's column of scrolling code down the right edge. */
 private fun DrawScope.machineCode(paint: Paint, now: Long) {
     val lines = FilmHudText.MACHINE_CODE
-    paint.textSize = 9.dp.toPx()
-    paint.color = Color(0xFFFF4A3A).copy(alpha = 0.55f).toArgb()
+    if (BuildConfig.HOLO_DESIGN) {
+        // Dim, small and flush to the right edge so it reads as a margin readout and never fights
+        // with the text of the page underneath.
+        paint.textSize = 8.dp.toPx()
+        paint.color = Color(0xFFFF4A3A).copy(alpha = 0.28f).toArgb()
+        paint.textAlign = Paint.Align.RIGHT
+    } else {
+        paint.textSize = 9.dp.toPx()
+        paint.color = Color(0xFFFF4A3A).copy(alpha = 0.55f).toArgb()
+    }
     val lineHeight = paint.textSize * 1.35f
     val shown = (size.height * 0.5f / lineHeight).toInt().coerceAtLeast(1)
     val offset = ((now / 160_000_000L) % lines.size).toInt()
-    val x = size.width - paint.textSize * 11
+    val x = if (BuildConfig.HOLO_DESIGN) size.width - 4.dp.toPx() else size.width - paint.textSize * 11
     val top = size.height * 0.25f
     drawIntoCanvas { canvas ->
         for (i in 0 until shown) {
@@ -278,5 +294,27 @@ fun Modifier.hudFrame(style: HudStyle?, accent: Color): Modifier = when (style) 
         corner(r, t, -1f, 1f)
         corner(l, b, 1f, -1f)
         corner(r, b, -1f, -1f)
+    }
+}
+
+/** Holo edition only: famous lines from each film, shown in its status strip and screensaver among the system readouts. */
+object FilmQuotes {
+    fun forFilm(film: HudStyle): List<String> = when (film) {
+        HudStyle.Terminator -> listOf(
+            "I'LL BE BACK", "COME WITH ME IF YOU WANT TO LIVE", "HASTA LA VISTA, BABY", "NO PROBLEMO",
+            "THE FUTURE'S NOT SET", "THERE'S NO FATE BUT WHAT WE MAKE FOR OURSELVES", "AFFIRMATIVE"
+        )
+        HudStyle.Matrix -> listOf(
+            "WAKE UP, NEO...", "FOLLOW THE WHITE RABBIT", "THERE IS NO SPOON", "FREE YOUR MIND",
+            "I KNOW KUNG FU", "WELCOME TO THE REAL WORLD", "WHAT IS THE MATRIX?", "NEVER SEND A HUMAN TO DO A MACHINE'S JOB"
+        )
+        HudStyle.Future -> listOf(
+            "GREAT SCOTT!", "ROADS? WHERE WE'RE GOING, WE DON'T NEED ROADS", "1.21 GIGAWATTS!", "THIS IS HEAVY",
+            "YOUR FUTURE HASN'T BEEN WRITTEN YET", "IF YOU PUT YOUR MIND TO IT, YOU CAN ACCOMPLISH ANYTHING", "88 MILES PER HOUR"
+        )
+        HudStyle.RoboCop -> listOf(
+            "DEAD OR ALIVE, YOU'RE COMING WITH ME", "YOUR MOVE, CREEP", "I'D BUY THAT FOR A DOLLAR!",
+            "THANK YOU FOR YOUR COOPERATION", "YOU HAVE 20 SECONDS TO COMPLY", "SERVE THE PUBLIC TRUST", "PROTECT THE INNOCENT", "UPHOLD THE LAW"
+        )
     }
 }

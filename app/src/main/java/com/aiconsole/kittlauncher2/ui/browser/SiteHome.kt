@@ -1,6 +1,8 @@
 package com.aiconsole.kittlauncher2.ui.browser
 
 import android.net.Uri
+import com.aiconsole.kittlauncher2.BuildConfig
+import androidx.compose.ui.draw.drawBehind
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -239,9 +241,15 @@ fun SiteHome(
     }
 }
 
-/** One site: its colour washing down into the panel black, name, description and a favourite star. */
+/** One site tile: the Holo edition draws its own cockpit-style tile, the classic editions the original. */
 @Composable
 private fun SiteTile(site: HomeSite, favorite: Boolean, onOpen: () -> Unit, onStar: () -> Unit) {
+    if (BuildConfig.HOLO_DESIGN) HoloSiteTile(site, favorite, onOpen, onStar) else ClassicSiteTile(site, favorite, onOpen, onStar)
+}
+
+/** One site: its colour washing down into the panel black, name, description and a favourite star. */
+@Composable
+private fun ClassicSiteTile(site: HomeSite, favorite: Boolean, onOpen: () -> Unit, onStar: () -> Unit) {
     val color = Color(site.color.toInt())
     val shape = MaterialTheme.shapes.medium
     Box(
@@ -258,6 +266,78 @@ private fun SiteTile(site: HomeSite, favorite: Boolean, onOpen: () -> Unit, onSt
             Text(site.description, style = MaterialTheme.typography.bodySmall, color = DashWhite.copy(alpha = 0.85f), maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (site.tags.isNotEmpty()) {
                 Text(site.tags.joinToString(" · ").uppercase(), style = MaterialTheme.typography.labelSmall, color = DashGrey, maxLines = 1)
+            }
+        }
+        Box(
+            Modifier
+                .align(Alignment.TopEnd)
+                .size(40.dp)
+                .clickable(onClick = onStar),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(if (favorite) "★" else "☆", style = MaterialTheme.typography.titleLarge, color = if (favorite) DashYellow else DashWhite.copy(alpha = 0.7f))
+        }
+    }
+}
+
+/** Holo edition: one site: its colour washing down into the panel black, name, description and a favourite star. */
+@Composable
+private fun HoloSiteTile(site: HomeSite, favorite: Boolean, onOpen: () -> Unit, onStar: () -> Unit) {
+    val color = Color(site.color.toInt())
+    val shape = MaterialTheme.shapes.medium
+    val skin = com.aiconsole.kittlauncher2.ui.components.CockpitSkin.current()
+    // KITT: a neon outline in the site's own color. Films frame the tile their own way: the
+    // Matrix and Terminator use the theme's phosphor / targeting color, Back to the Future steel
+    // with rivets, RoboCop a hazard-striped base.
+    val neon = when (skin) {
+        com.aiconsole.kittlauncher2.ui.components.CockpitSkin.Kitt -> color
+        com.aiconsole.kittlauncher2.ui.components.CockpitSkin.Future -> Color(0xFFB0B0B0)
+        else -> com.aiconsole.kittlauncher2.ui.theme.ScannerRed
+    }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(116.dp)
+            .clip(shape)
+            .background(Brush.verticalGradient(listOf(color.copy(alpha = 0.75f), KittBlack)))
+            .border(2.dp, if (favorite) DashYellow else neon.copy(alpha = 0.85f), shape)
+            .clickable(onClick = onOpen)
+            .drawBehind {
+                when (skin) {
+                    com.aiconsole.kittlauncher2.ui.components.CockpitSkin.Future -> for (p in listOf(
+                        androidx.compose.ui.geometry.Offset(8.dp.toPx(), 8.dp.toPx()),
+                        androidx.compose.ui.geometry.Offset(size.width - 8.dp.toPx(), 8.dp.toPx()),
+                        androidx.compose.ui.geometry.Offset(8.dp.toPx(), size.height - 8.dp.toPx()),
+                        androidx.compose.ui.geometry.Offset(size.width - 8.dp.toPx(), size.height - 8.dp.toPx())
+                    )) drawCircle(Color(0xFFB0B0B0), 2.5.dp.toPx(), p)
+                    com.aiconsole.kittlauncher2.ui.components.CockpitSkin.RoboCop -> {
+                        var x = 0f
+                        while (x < size.width) {
+                            drawLine(DashYellow, androidx.compose.ui.geometry.Offset(x, size.height), androidx.compose.ui.geometry.Offset(x + 6.dp.toPx(), size.height - 6.dp.toPx()), 2.dp.toPx())
+                            x += 10.dp.toPx()
+                        }
+                    }
+                    com.aiconsole.kittlauncher2.ui.components.CockpitSkin.Terminator -> {
+                        val b = 12.dp.toPx()
+                        drawLine(neon, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(b, 0f), 3.dp.toPx())
+                        drawLine(neon, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(0f, b), 3.dp.toPx())
+                        drawLine(neon, androidx.compose.ui.geometry.Offset(size.width, size.height), androidx.compose.ui.geometry.Offset(size.width - b, size.height), 3.dp.toPx())
+                        drawLine(neon, androidx.compose.ui.geometry.Offset(size.width, size.height), androidx.compose.ui.geometry.Offset(size.width, size.height - b), 3.dp.toPx())
+                    }
+                    else -> Unit
+                }
+            }
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            // A logo-style monogram over the site's colour, then a dark strip with its name and kind, like the design's tiles.
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                val words = site.name.split(" ", "-", ".").filter { it.isNotBlank() }
+                val mark = (if (words.size > 1) words.take(2).joinToString("") { it.take(1) } else site.name.take(2)).uppercase()
+                Text(mark, style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold), color = Color.White.copy(alpha = 0.92f), maxLines = 1)
+            }
+            Column(Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.72f)).padding(horizontal = 6.dp, vertical = 3.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(site.name.uppercase(), style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (site.tags.isNotEmpty()) Text(site.tags.first().uppercase(), style = MaterialTheme.typography.labelSmall, color = DashGrey, maxLines = 1)
             }
         }
         Box(

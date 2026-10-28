@@ -818,9 +818,11 @@ fun LauncherRoot(
                     .padding(if (chromeless) 0.dp else if (rail) 6.dp else 8.dp)
             ) {
                 val gap = if (rail) 6.dp else 8.dp
-                val dockHeight = (maxHeight * if (isTall) 0.15f else 0.20f).coerceIn(112.dp, 280.dp)
+                val dockHeight = if (BuildConfig.HOLO_DESIGN) (maxHeight * if (isTall) 0.25f else 0.24f).coerceIn(if (isTall) 180.dp else 130.dp, 340.dp)
+                else (maxHeight * if (isTall) 0.15f else 0.20f).coerceIn(112.dp, 280.dp)
                 // Bigger targets while driving (driving layout on and moving steadily).
-                val dockBarHeight = if (driving) (maxHeight * 0.14f).coerceIn(60.dp, 84.dp) else (maxHeight * 0.11f).coerceIn(48.dp, 64.dp)
+                val dockBarHeight = if (BuildConfig.HOLO_DESIGN) (maxHeight * if (driving) 0.19f else 0.16f).coerceIn(72.dp, 104.dp)
+                else if (driving) (maxHeight * 0.14f).coerceIn(60.dp, 84.dp) else (maxHeight * 0.11f).coerceIn(48.dp, 64.dp)
                 val portraitCellWidth = if (maxWidth >= 600.dp) 150.dp else 110.dp
                 val open = { target: LauncherOverlay -> overlay = target }
                 val onDrive = pager.currentPage == HomePage.Drive.ordinal
@@ -854,6 +856,19 @@ fun LauncherRoot(
                         reading = dash.reading
                     )
                 }
+                val vehiclePane = @Composable { paneModifier: Modifier, cellWidth: androidx.compose.ui.unit.Dp ->
+                    if (BuildConfig.HOLO_DESIGN) {
+                        com.aiconsole.kittlauncher2.ui.components.VehicleDashPane(
+                            modifier = paneModifier,
+                            reading = dash.reading,
+                            metric = dash.metric,
+                            rpmFraction = { dash.hud().rpmFraction },
+                            appsContent = { appsModifier -> grid(appsModifier, cellWidth) }
+                        )
+                    } else {
+                        grid(paneModifier, cellWidth)
+                    }
+                }
                 val drivingPanel = @Composable { panelModifier: Modifier ->
                     DrivingPanel(
                         favorites = homeApps,
@@ -863,7 +878,10 @@ fun LauncherRoot(
                             open(LauncherOverlay.Assistant)
                         },
                         kittSpeaking = dash.kittSpeaking,
-                        modifier = panelModifier
+                        modifier = panelModifier,
+                        reading = dash.reading,
+                        metric = dash.metric,
+                        rpmFraction = { dash.hud().rpmFraction }
                     )
                 }
                 val navPane = @Composable { paneModifier: Modifier ->
@@ -896,15 +914,32 @@ fun LauncherRoot(
                                 HomePage.Drive -> if (isTall) {
                                     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
                                         // 50 : 35 of the space above the dock keeps the 50/35/15 split
-                                        navPane(Modifier.fillMaxWidth().weight(0.50f))
-                                        if (driving) drivingPanel(Modifier.fillMaxWidth().weight(0.35f))
-                                        else grid(Modifier.fillMaxWidth().weight(0.35f), portraitCellWidth)
+                                        val navWeight = if (BuildConfig.HOLO_DESIGN) 0.42f else 0.50f
+                                        val lowerWeight = if (BuildConfig.HOLO_DESIGN) 0.46f else 0.35f
+                                        navPane(Modifier.fillMaxWidth().weight(navWeight))
+                                        if (driving) drivingPanel(Modifier.fillMaxWidth().weight(lowerWeight))
+                                        else vehiclePane(Modifier.fillMaxWidth().weight(lowerWeight), portraitCellWidth)
                                     }
+                                } else if (BuildConfig.HOLO_DESIGN && !driving && com.aiconsole.kittlauncher2.ui.components.CockpitSkin.current() != com.aiconsole.kittlauncher2.ui.components.CockpitSkin.Kitt &&
+                                    com.aiconsole.kittlauncher2.ui.components.CockpitSkin.current() != com.aiconsole.kittlauncher2.ui.components.CockpitSkin.Future
+                                ) {
+                                    // The Terminator, Matrix and RoboCop get their own three-panel Drive screen (Back to the Future keeps the time-circuit layout).
+                                    com.aiconsole.kittlauncher2.ui.panes.FilmDrivePage(
+                                        skin = com.aiconsole.kittlauncher2.ui.components.CockpitSkin.current(),
+                                        map = { mapModifier -> navPane(mapModifier) },
+                                        hud = dash.hud,
+                                        reading = dash.reading,
+                                        metric = dash.metric,
+                                        kittSpeaking = dash.kittSpeaking,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
                                 } else {
                                     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(gap)) {
-                                        navPane(Modifier.fillMaxHeight().weight(0.60f))
-                                        if (driving) drivingPanel(Modifier.fillMaxHeight().weight(0.40f))
-                                        else grid(Modifier.fillMaxHeight().weight(0.40f), if (rail) 100.dp else 120.dp)
+                                        val navWeight = if (BuildConfig.HOLO_DESIGN) 0.55f else 0.60f
+                                        val sideWeight = if (BuildConfig.HOLO_DESIGN) 0.45f else 0.40f
+                                        navPane(Modifier.fillMaxHeight().weight(navWeight))
+                                        if (driving) drivingPanel(Modifier.fillMaxHeight().weight(sideWeight))
+                                        else vehiclePane(Modifier.fillMaxHeight().weight(sideWeight), if (rail) 100.dp else 120.dp)
                                     }
                                 }
                                 HomePage.Gauges -> GaugeWallPane(
@@ -1112,6 +1147,15 @@ private fun Modifier.edgeSwipe(pager: PagerState, scope: CoroutineScope, edge: D
 
 @Composable
 private fun PageTabs(current: Int, onSelect: (Int) -> Unit) {
+    if (BuildConfig.HOLO_DESIGN) {
+        com.aiconsole.kittlauncher2.ui.components.ConsoleTabs(
+            HomePage.entries.map { it.label },
+            current,
+            onSelect,
+            Modifier.fillMaxWidth().height(44.dp)
+        )
+        return
+    }
     Row(Modifier.fillMaxWidth().height(40.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         HomePage.entries.forEach { page ->
             KittButton(

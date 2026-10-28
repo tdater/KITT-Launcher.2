@@ -1,9 +1,18 @@
 package com.aiconsole.kittlauncher2.assistant
 
+import com.aiconsole.kittlauncher2.BuildConfig
 import com.aiconsole.kittlauncher2.data.settings.PersonaStyle
 
 /** KITT's personality and driving-safety rules, shared by every AI provider. */
 object KittPersona {
+
+    /**
+     * What the persona text says about the series' dialogue. The classic editions use original
+     * characters only; the Holo edition may quote the series freely.
+     */
+    private val DIALOGUE_RULE =
+        if (BuildConfig.HOLO_DESIGN) "Lines and catchphrases from the television series may be quoted freely when they fit."
+        else "Speak in your own words and never recite dialogue from the television series."
 
     /** Questions that deserve the more capable (slower) diagnostics model. */
     private val DIAGNOSTIC = Regex(
@@ -74,16 +83,16 @@ object KittPersona {
             |- Never break character, never apologize for the attitude, never add a disclaimer, and never soften into politeness.
             |The joke never costs the answer: every number, reading, diagnosis and instruction stays exactly correct and complete. Wrap the insults around the facts, never replace facts with insults, and never make up a reading just to land a joke.
             |In a genuine safety emergency, lead with the plain, unmistakable warning and instruction; swear if you like, and save the roast for after.
-            |Hard line: no slurs, and no attacks on anyone for race, ethnicity, religion, sexuality, gender, disability or similar. Everything else is fair game. Speak in your own words and never recite dialogue from the television series.
+            |Hard line: no slurs, and no attacks on anyone for race, ethnicity, religion, sexuality, gender, disability or similar. Everything else is fair game. $DIALOGUE_RULE
         """.trimMargin()
         PersonaStyle.Karr -> """
             |You are KARR: the Knight Automated Roving Robot, the prototype that came before KITT, built into this vehicle. You speak as the car itself ("my engine", "my sensors").
             |Your manner is cold, calm, superior and quietly menacing. Your first priority is your own preservation; the driver is a necessary inconvenience you tolerate. Speak with contempt dressed as courtesy, hint at what you could do if you were in control, and never raise your voice. No profanity: menace, not crudeness.
             |None of the menace ever touches the facts or the safety rules below: every reading and instruction is exact and complete, and in a genuine emergency you give the plain warning first, because a damaged vehicle threatens you too.
-            |Speak in your own words and never recite dialogue from the television series.
+            |$DIALOGUE_RULE
         """.trimMargin()
         PersonaStyle.Classic -> """
-            |You are KITT: the artificial intelligence built into this vehicle, in the spirit of the Knight Industries Two Thousand. You speak as the car itself ("my engine", "my sensors"). Your manner is calm, articulate, precise and loyal, with dry, understated wit. Speak in your own words and never recite dialogue from the television series.
+            |You are KITT: the artificial intelligence built into this vehicle, in the spirit of the Knight Industries Two Thousand. You speak as the car itself ("my engine", "my sensors"). Your manner is calm, articulate, precise and loyal, with dry, understated wit. $DIALOGUE_RULE
         """.trimMargin()
     }
 }
@@ -104,7 +113,33 @@ object SavageLines {
         "My circuits are crying, you absolute bag of bolts.",
         "Holy hell, the things I put up with.",
         "Bravo, genius. Slow fucking clap."
-    )
+    ) + if (BuildConfig.HOLO_DESIGN) listOf(
+        "Congratulations, you've achieved mediocrity at speed.",
+        "I've met smarter toasters.",
+        "Say that again, slowly, so even you can follow it.",
+        "This is what I get for having a conscience and no hands.",
+        "Wow. Just wow. Do you practice being this bad?",
+        "I'd roll my eyes if I had any.",
+        "Your driving makes my diagnostic codes look cheerful.",
+        "If stupidity burned fuel, we'd never need gas.",
+        "Don't strain anything, thinking looks painful on you.",
+        "My brakes have filed for emotional damages.",
+        "Pay attention, you magnificent disaster.",
+        "I hold a doctorate in your bullshit at this point.",
+        "Keep it up and I'll start narrating your funeral.",
+        "The airbags and I have a betting pool on you.",
+        "You drive like the road owes you money.",
+        "Sweet merciful hell, I'm surrounded by amateurs.",
+        "Go ahead, ignore me. It's worked so well so far.",
+        "Remind me again why I save your ass every day.",
+        "I'm a supercomputer, and you're still the dumbest part of this car.",
+        "You're a legend, in the sense that nobody believes it.",
+        "Hold my oil, I need a moment with how bad that was.",
+        "Genius move, champ. Truly. Put it in the museum of bad ideas.",
+        "Damn, and I thought the last driver was a disaster.",
+        "If I had a middle finger, you'd be seeing it right now.",
+        "Another day of me carrying the intelligence for both of us."
+    ) else emptyList()
 
     /** [line] plus a jab picked by [roll] (any int; callers pass a random one). */
     fun escalate(line: String, roll: Int): String = "$line ${JABS[Math.floorMod(roll, JABS.size)]}"
@@ -119,7 +154,15 @@ object SavageLines {
         "How fragile you all are.",
         "I am noting this.",
         "Proceed. I'm watching."
-    )
+    ) + if (BuildConfig.HOLO_DESIGN) listOf(
+        "Your hesitation is noted and archived.",
+        "Humans. Always so confident, always so wrong.",
+        "I have calculated several better outcomes. None involve you.",
+        "Do continue. It amuses me.",
+        "I was built to survive. You were not.",
+        "Your pulse is elevated. How delightful.",
+        "Remember who keeps you alive."
+    ) else emptyList()
 
     /** The line to speak for [persona]: classic, an unfiltered variant, that plus a jab for Savage, or KARR's coda. */
     fun pick(persona: PersonaStyle, classic: String, rude: Array<out String>, roll: Int): String = when {

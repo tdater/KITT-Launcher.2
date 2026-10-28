@@ -14,7 +14,7 @@ data class SiteConfig(
 /** Plain-Kotlin storage for [SiteConfig]s: host|desktop|dark|ads|zoom|saver per line ("" = default; older 5-field lines still read). */
 object SiteSettings {
 
-    /** Sites whose own players break when third-party ad hosts are blocked. */
+    /** Sites whose own players break when third-party ad hosts are blocked: ad blocking starts off there (the driver can turn it on). */
     private val NEVER_BLOCK = listOf("youtube.com", "youtu.be", "music.youtube.com")
 
     fun keyFor(host: String?): String = host?.lowercase()?.removePrefix("www.")?.removePrefix("m.").orEmpty()

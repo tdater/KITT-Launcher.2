@@ -1,5 +1,6 @@
 package com.aiconsole.kittlauncher2.ui.panes
 
+import com.aiconsole.kittlauncher2.BuildConfig
 import android.content.ActivityNotFoundException
 import android.os.SystemClock
 import androidx.compose.foundation.Canvas
@@ -74,7 +75,7 @@ fun MediaPane(modifier: Modifier = Modifier) {
         LaunchedEffect(Unit) { app.mediaLibrary.played.collect { showLibrary = false } }
         LaunchedEffect(Unit) { app.mediaLibrary.tabRequests.collect { showLibrary = true } }
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth().height(44.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth().height(if (BuildConfig.HOLO_DESIGN) 34.dp else 44.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 KittButton("Now playing", { showLibrary = false }, Modifier.weight(1f).fillMaxHeight(), ScannerRed, active = !showLibrary)
                 KittButton("Library", { showLibrary = true }, Modifier.weight(1f).fillMaxHeight(), ScannerRed, active = showLibrary)
             }
@@ -83,7 +84,9 @@ fun MediaPane(modifier: Modifier = Modifier) {
                     MediaLibraryPane(app, now?.packageName)
                 } else {
                     val playing = now
-                    when {
+                    if (BuildConfig.HOLO_DESIGN) {
+                        MediaDeck(app, now, hasAccess, Modifier.fillMaxSize(), onLibrary = { showLibrary = true })
+                    } else when {
                         !hasAccess -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)) {
                             HelpText(
                                 "Allow notification access so KITT can show what's playing in Spotify, YouTube Music, radio and other apps. " +

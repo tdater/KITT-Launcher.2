@@ -94,6 +94,15 @@ fun CodesTab(app: KittApplication, onAskKitt: (String) -> Unit) {
 
         if (!connected) HelpText("Connect the OBD adapter on the LINK tab to read codes.", color = DashAmber)
         message?.let { HelpText(it) }
+        if (report?.all?.isNotEmpty() == true) {
+            // Routing only: sends nothing to the car.
+            KittButton(
+                label = "Nearest repair shop",
+                onClick = { scope.launch { message = app.navigator.navigateToNearestRepair() } },
+                modifier = Modifier.fillMaxWidth().height(44.dp),
+                color = DashAmber
+            )
+        }
 
         if (confirmClear) {
             Column(

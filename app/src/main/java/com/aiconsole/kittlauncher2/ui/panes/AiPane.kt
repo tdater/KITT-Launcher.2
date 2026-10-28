@@ -1,5 +1,9 @@
 package com.aiconsole.kittlauncher2.ui.panes
 
+import com.aiconsole.kittlauncher2.assistant.AssistantPrompt
+import com.aiconsole.kittlauncher2.assistant.LauncherBus
+import com.aiconsole.kittlauncher2.assistant.LauncherEvent
+import com.aiconsole.kittlauncher2.BuildConfig
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -102,6 +106,21 @@ fun AiPane(session: BrowserSession, modifier: Modifier = Modifier) {
 
     KittPanel(title = "AI", modifier = modifier, accent = ScannerRed) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (BuildConfig.HOLO_DESIGN) {
+                com.aiconsole.kittlauncher2.ui.components.SkinTerminal(Modifier.fillMaxWidth().height(96.dp))
+                com.aiconsole.kittlauncher2.ui.components.EcuCards(Modifier.fillMaxWidth().height(64.dp))
+                // KITT co-pilot shortcuts. All are read-only questions; clearing codes stays a manual
+                // action on the Diagnostics screen.
+                Row(Modifier.fillMaxWidth().height(40.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    fun askKitt(text: String) {
+                        app.assistantInbox.value = AssistantPrompt(text, diagnostic = true)
+                        LauncherBus.send(LauncherEvent.OpenAssistant)
+                    }
+                    KittButton("Diagnose ECU", { askKitt("Run a diagnosis on the engine and tell me what you see in the live data.") }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
+                    KittButton("Read codes", { askKitt("Read my stored fault codes and explain what each one means.") }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
+                    KittButton("Range report", { askKitt("Give me a range report: fuel level, how far I can go, and the nearest gas.") }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
+                }
+            }
             Row(Modifier.fillMaxWidth().height(52.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 val listening = speechState is SpeechState.Listening
                 KittButton(if (listening) "Stop" else "🎤 Speak", ::mic, Modifier.width(110.dp).fillMaxHeight(), ScannerRed, active = true)

@@ -31,9 +31,13 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.aiconsole.kittlauncher2.BuildConfig
 import com.aiconsole.kittlauncher2.browser.BrowserSession
 import com.aiconsole.kittlauncher2.browser.Gamepad
 import com.aiconsole.kittlauncher2.ui.theme.DashWhite
+import com.aiconsole.kittlauncher2.ui.theme.HudStyle
+import com.aiconsole.kittlauncher2.ui.theme.ThemeState
+import com.aiconsole.kittlauncher2.ui.theme.hud
 import com.aiconsole.kittlauncher2.ui.theme.ScannerRed
 
 /**
@@ -87,13 +91,33 @@ private fun PadButton(
     shape: Shape = RoundedCornerShape(12.dp)
 ) {
     var held by remember { mutableStateOf(false) }
+    // Holo edition: themed to the active film. Matrix is green phosphor (the palette's accent), KITT and
+    // Terminator red neon, Back to the Future a retro grey pad with red face buttons.
+    val retro = BuildConfig.HOLO_DESIGN && ThemeState.theme.hud == HudStyle.Future
+    val faceButton = shape == CircleShape
+    val accent = when {
+        !BuildConfig.HOLO_DESIGN -> ScannerRed
+        retro && faceButton -> Color(0xFFD32F2F)
+        retro -> Color(0xFFB0B0B0)
+        else -> ScannerRed
+    }
     Box(
         Modifier
             .size(width, height)
             .padding(2.dp)
             .clip(shape)
-            .background(if (held) ScannerRed.copy(alpha = 0.55f) else Color.Black.copy(alpha = 0.35f))
-            .border(1.5.dp, ScannerRed.copy(alpha = if (held) 1f else 0.6f), shape)
+            .background(
+                if (!BuildConfig.HOLO_DESIGN) {
+                    if (held) ScannerRed.copy(alpha = 0.55f) else Color.Black.copy(alpha = 0.35f)
+                } else {
+                    if (held) accent.copy(alpha = 0.45f) else if (retro) Color(0xFF3A3A3A).copy(alpha = 0.7f) else accent.copy(alpha = 0.10f)
+                }
+            )
+            .border(
+                if (BuildConfig.HOLO_DESIGN) 2.dp else 1.5.dp,
+                accent.copy(alpha = if (held) 1f else if (BuildConfig.HOLO_DESIGN) 0.9f else 0.6f),
+                shape
+            )
             .pointerInput(keyCode) {
                 awaitEachGesture {
                     awaitFirstDown().consume()
@@ -106,6 +130,6 @@ private fun PadButton(
             },
         contentAlignment = Alignment.Center
     ) {
-        Text(label, style = MaterialTheme.typography.labelLarge, color = DashWhite.copy(alpha = 0.9f))
+        Text(label, style = MaterialTheme.typography.labelLarge, color = if (BuildConfig.HOLO_DESIGN && !retro) accent else DashWhite.copy(alpha = 0.9f))
     }
 }

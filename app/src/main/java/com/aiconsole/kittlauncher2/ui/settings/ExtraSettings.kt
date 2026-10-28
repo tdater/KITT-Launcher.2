@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.webkit.WebViewCompat
+import com.aiconsole.kittlauncher2.BuildConfig
 import com.aiconsole.kittlauncher2.KittApplication
 import com.aiconsole.kittlauncher2.assistant.MicGuard
 import com.aiconsole.kittlauncher2.browser.RendererWatch
@@ -356,14 +357,21 @@ fun FilmThemeSettings(app: KittApplication) {
             color = ScannerRed,
             enabled = { characters }
         )
+        if (BuildConfig.HOLO_DESIGN) CharacterPreviewRow(app, FilmCharacter.forFilm(film))
         KittToggle(
             "Film character",
             characters,
             { app.settings.filmCharacters.set(it) },
             description = "KITT becomes the ${character.label.lowercase()} (${character.shortName}): its own voice and way of talking. " +
-                "An original character in the spirit of the film, not an imitation of the actor. Your personality setting " +
-                "still decides how crude it is; the voice needs the Gemini voice engine (the device voice only changes pitch and pace)."
+                if (BuildConfig.HOLO_DESIGN) {
+                    "A character from the film. Your personality setting " +
+                        "still decides how crude it is. Gemini follows the full accent direction; offline voices use the character's own voice below, and the phone's voice changes pitch and pace."
+                } else {
+                    "An original character in the spirit of the film, not an imitation of the actor. Your personality setting " +
+                        "still decides how crude it is; the voice needs the Gemini voice engine (the device voice only changes pitch and pace)."
+                }
         )
+        if (BuildConfig.HOLO_DESIGN) CharacterVoiceRow(app, character)
         KittToggle("Film intro", intros, { app.settings.filmIntros.set(it) }, description = "The theme's boot sequence when it comes on. Tap it to skip.")
     }
 }

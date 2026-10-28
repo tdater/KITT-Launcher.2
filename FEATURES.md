@@ -9,6 +9,13 @@ A Knight Rider–themed home screen for Android car head units. It replaces the 
 - **Lighter browser:** hidden pages that aren't playing sound pause; the least recently used hidden tabs are freed and reload when opened; when Android runs low on memory every hidden page is freed. Pages only pre-render off screen on capable units.
 - **Savage KITT** personality (the new default): see Personality below.
 
+**New: retro and futuristic gauges** (all editions): seven new gauge faces (Needle, Nixie, Skyline, HUD tape, Scope, Halo and a Film HUD that follows the theme), a live style gallery with "restyle all", peak hold, and a Cluster layout for the Gauges page. With stored fault codes, Diagnostics also offers **Nearest repair shop** (routing only, nothing is sent to the car).
+
+**New edition: KITT Holo** (separate app, landscape and portrait builds, installs alongside the others): the same launcher with a redesigned cockpit.
+- A spinning **hologram of the car** on the Drive page (rendered in Blender, 72 views per body, blended for a smooth turn) with live data painted on it: engine heat, fuel, battery, exhaust, speed streaks and tire pressures on the wheels.
+- **Film Drive pages** for the Terminator, Matrix and RoboCop themes, a trip-computer dock with now playing, icon media keys, cockpit-style site tiles, a CRT terminal and ECU cards in the KITT panel with one-tap Diagnose ECU / Read codes / Range report.
+- Film characters in KITT Holo may quote the films and speak with the characters' accents (the classic editions keep original characters only).
+
 **New in this release:**
 - **System check** at the top of KITT Config: every permission and setting KITT needs, each with a fix button. KITT also warns if another launcher has taken over the home screen.
 - **Report a problem → your phone:** scan a QR code (phone on the same Wi-Fi or hotspot) or use the share sheet.
@@ -59,7 +66,7 @@ Swipe left and right between pages or tap the page buttons. A swipe that starts 
   - **Search and directions:** tap **Search** on the map, type an address or place (results nearest first, plus your recent destinations), and the route is drawn on the map with its distance, time and arrival time. Tap **Start** for turn-by-turn guidance: the next turn shows at the top of the map with an arrow and distance, KITT speaks each turn twice (early, then at the turn; earlier on faster roads), recalculates if you leave the route, and announces arrival. **Other app** hands the destination to Google Maps, Waze or any navigation app instead. Uses free OpenStreetMap services (Photon search, OSRM routing), no account; needs a data connection and location. Guidance runs while the launcher is on screen. Spoken directions can be turned off in KITT Config.
   - The map area can switch to the **Stream window** (see Browser).
   - Swiping between pages is paused while you're dragging the map or a video.
-- **Gauges:** a full wall of your OBD gauges.
+- **Gauges:** a full wall of your OBD gauges. **Cluster** (the button on the page) draws the first gauge large like the main dial of an instrument cluster, with the rest beside it in landscape or below it in portrait; **Grid** keeps them all the same size.
 - **Media:** shows whatever is playing in any app (title, artist, artwork, play/pause/skip). It needs notification access (it reads the active Android `MediaSession`).
 - **AI:** your Gemini, Claude and Perplexity websites in browser tabs, signed in with your own accounts.
 - **Games:** browser games from your bookmarked sites (Internet Arcade, MS-DOS Games, Poki, CrazyGames and others), playable with a game controller.
@@ -129,7 +136,9 @@ Plug in an ELM327-compatible OBD-II adapter (a Bluetooth or Wi-Fi diagnostic don
 - **Connection settings:** the protocol can be auto-detected or picked manually, and fast polling can be turned on or off.
 - **Seven diagnostics tabs:**
   - **Gauges:**
-    - build your own dashboard in four styles (Dial, LED bar, Digital, Graph);
+    - build your own dashboard in eleven styles: Dial, LED bar, Digital and Graph, plus the retro/futuristic faces **Needle** (an analog instrument with a red zone from your limit), **Nixie** (glowing tubes), **Skyline** (80s digital-dash stair-step bars), **HUD tape** (a fighter-jet scrolling scale), **Scope** (a CRT oscilloscope trace), **Halo** (a neon segmented ring) and **Film HUD** (follows the theme: KITT's voice box, a Terminator targeting reticle, RoboCop's visor, Matrix code or Back to the Future time circuits);
+    - **Style gallery:** in Edit layout, Style shows the gauge live in every face; tap one for that gauge, or switch to "All gauges" to restyle the whole dashboard;
+    - **peak hold** on Needle and Halo: a marker at the highest value this drive (it resets after the ignition has been off for two minutes);
     - set high and low warning limits on any gauge.
   - **Data:**
     - live graphs of any sensor;

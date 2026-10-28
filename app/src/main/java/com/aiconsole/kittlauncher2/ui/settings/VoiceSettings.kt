@@ -1,8 +1,10 @@
 package com.aiconsole.kittlauncher2.ui.settings
 
+import com.aiconsole.kittlauncher2.assistant.FilmCharacter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
@@ -116,5 +118,92 @@ fun OnDeviceVoiceSettings(app: KittApplication) {
         }
         if (chosen.heavy) HelpText("Kokoro sounds the most natural but takes longer to start each sentence on slower head units.", color = DashAmber)
         message?.let { HelpText(it, color = DashAmber) }
+    }
+}
+
+
+/**
+ * The on-device voice that suits the film [character] best (see FilmCharacter.localVoiceHint),
+ * with a button to download it. Once downloaded it speaks for that character automatically; until
+ * then the voice picked above is used.
+ */
+@Composable
+fun CharacterVoiceRow(app: KittApplication, character: FilmCharacter) {
+    val scope = rememberCoroutineScope()
+    val engine = app.kittVoice.onDevice
+    val installed by engine.installed.collectAsState()
+    val download by engine.download.collectAsState()
+    var message by remember { mutableStateOf<String?>(null) }
+    val speakingAs by app.kittVoice.speakingAs.collectAsState()
+    val voice = LocalVoices.byId(character.localVoiceHint)
+    val have = voice.id in installed
+    val busy = download?.first == voice.id
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (speakingAs == character) Text("SPEAKING AS ${character.shortName}…", style = MaterialTheme.typography.labelMedium, color = LedGreen)
+        Row(Modifier.fillMaxWidth().height(44.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Offline voice for ${character.shortName}: ${voice.label.substringBefore(" ·")} · ${voice.sizeMb} MB" + if (have) "  · READY" else "",
+                Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (have) LedGreen else DashWhite,
+                maxLines = 2
+            )
+            KittButton("Preview", { app.kittVoice.speak(character.greeting("Hello", ""), character = character) }, Modifier.height(40.dp).width(104.dp), LedGreen)
+            when {
+                busy -> Text("${download?.second ?: 0}%", style = MaterialTheme.typography.labelLarge, color = DashAmber)
+                !have -> KittButton("Download", {
+                    message = null
+                    scope.launch {
+                        message = try {
+                            engine.install(voice)
+                            "${voice.label.substringBefore(" ·")} is ready and will speak for ${character.shortName}."
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: IOException) {
+                            "Download failed: ${e.message}. Check the internet connection and try again."
+                        }
+                    }
+                }, Modifier.height(40.dp).width(112.dp), DashAmber, enabled = download == null)
+            }
+        }
+        val missing = FilmCharacter.entries.map { LocalVoices.byId(it.localVoiceHint) }.distinctBy { it.id }.filter { it.id !in installed }
+        if (missing.isNotEmpty()) {
+            KittButton(
+                "Download all character voices (${missing.size} voices, ${missing.sumOf { it.sizeMb }} MB)",
+                {
+                    message = null
+                    scope.launch {
+                        message = try {
+                            missing.forEach { engine.install(it) }
+                            "All character voices are ready."
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: IOException) {
+                            "Download failed: ${e.message}. Check the internet connection and try again."
+                        }
+                    }
+                },
+                Modifier.fillMaxWidth().height(40.dp), DashAmber, enabled = download == null
+            )
+        }
+        message?.let { HelpText(it) }
+    }
+}
+
+
+/** One preview button per character of a film, so each can be heard before it is picked. */
+@Composable
+fun CharacterPreviewRow(app: KittApplication, characters: List<FilmCharacter>) {
+    val speakingAs by app.kittVoice.speakingAs.collectAsState()
+    Row(Modifier.fillMaxWidth().height(40.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        characters.forEach { c ->
+            KittButton(
+                "▶ ${c.shortName}",
+                { app.kittVoice.speak(c.greeting("Hello", ""), character = c) },
+                Modifier.weight(1f).fillMaxHeight(),
+                LedGreen,
+                active = speakingAs == c
+            )
+        }
     }
 }
