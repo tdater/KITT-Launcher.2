@@ -230,8 +230,8 @@ class KittApplication : Application() {
         super.onCreate()
         ProblemReport.installCrashHandler(this)
         SafeMode.init(this)
-        if (SafeMode.active) Log.w("KittApplication", "Starting in safe mode after repeated start-up crashes")
-        else android.os.Handler(mainLooper).postDelayed({ SafeMode.markStable(this) }, SafeModeRules.STARTUP_WINDOW_MS)
+        if (SafeMode.active) Log.w("KittApplication", "Starting in safe mode after repeated failed starts")
+        android.os.Handler(mainLooper).postDelayed({ SafeMode.markStable(this) }, SafeModeRules.STARTUP_WINDOW_MS)
         FreezeWatchdog.start(this)
         // The home pager pre-composes neighbouring pages in pieces across frames. With a WebView
         // (AndroidView) on those pages that crashed the launcher on the head unit ("LayoutNode

@@ -196,7 +196,8 @@ fun VehicleStatusHud(
         }
     }
     val milOn = dtcs?.all?.isNotEmpty() == true
-    val vehicle by (LocalContext.current.applicationContext as KittApplication).settings.holoVehicle.state.collectAsState()
+    val kittSettings = (LocalContext.current.applicationContext as KittApplication).settings
+    val vehicle by kittSettings.holoVehicle.state.collectAsState()
     val kind = kindOf(skin, VehicleChoice.decode(vehicle))
     val book = remember(kind) { readFlipbook(context, kind) }
     // Decode every frame off the UI thread before the turntable reaches it (lite mode keeps one view).
@@ -238,6 +239,7 @@ fun VehicleStatusHud(
             val frame = if (mix > 0f) book.frames[blend.from].mixWith(book.frames[blend.to], mix) else book.frames[blend.from]
             drawHologram(skin, book, image, second, mix, frame, ScannerRed, tireColor(TireIds[0]), tireColor(TireIds[1]), tireColor(TireIds[2]), tireColor(TireIds[3]), rpmFraction(), live, scanPhase.floatValue)
         }
+        VehicleSwitch(VehicleChoice.decode(vehicle), { kittSettings.holoVehicle.set(it.key) }, Modifier.align(Alignment.TopCenter))
         selected?.let { key ->
             CarReadouts.byKey(key)?.let { spec ->
                 ReadoutCard(spec, fresh(spec.pid), stats.getValue(key), metric, { selected = null }, Modifier.align(Alignment.Center))
@@ -271,6 +273,29 @@ private fun Readout(label: String, value: String, color: Color, alignEnd: Boolea
     Column(horizontalAlignment = if (alignEnd) Alignment.End else Alignment.Start) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = DashGrey, maxLines = 1, softWrap = false)
         Text(value, style = MaterialTheme.typography.titleSmall, color = if (value == "--") DashGrey else color, maxLines = 1, softWrap = false)
+    }
+}
+
+/** Car / Truck pills over the hologram, so the vehicle can be switched right on the home screen. */
+@Composable
+internal fun VehicleSwitch(current: VehicleChoice, onPick: (VehicleChoice) -> Unit, modifier: Modifier = Modifier) {
+    val shape = MaterialTheme.shapes.small
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        for (v in VehicleChoice.entries) {
+            val on = v == current
+            Box(
+                Modifier
+                    .height(32.dp)
+                    .clip(shape)
+                    .background(if (on) ScannerRed else ScannerRed.copy(alpha = 0.18f))
+                    .skinFrame(shape, ScannerRed, selected = on)
+                    .clickable { onPick(v) }
+                    .padding(horizontal = 14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(v.label.uppercase(), style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold), color = if (on) KittBlack else DashWhite, maxLines = 1)
+            }
+        }
     }
 }
 

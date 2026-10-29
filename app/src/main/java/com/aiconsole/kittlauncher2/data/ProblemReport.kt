@@ -43,6 +43,21 @@ object ProblemReport {
         }
     }
 
+    private fun exitReason(code: Int): String = when (code) {
+        android.app.ApplicationExitInfo.REASON_CRASH -> "CRASH"
+        android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "NATIVE CRASH"
+        android.app.ApplicationExitInfo.REASON_ANR -> "ANR (not responding)"
+        android.app.ApplicationExitInfo.REASON_LOW_MEMORY -> "KILLED FOR MEMORY"
+        android.app.ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "EXCESSIVE RESOURCE USE"
+        android.app.ApplicationExitInfo.REASON_USER_REQUESTED -> "user stopped it"
+        android.app.ApplicationExitInfo.REASON_SIGNALED -> "SIGNALED"
+        android.app.ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> "INIT FAILURE"
+        android.app.ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "dependency died"
+        android.app.ApplicationExitInfo.REASON_EXIT_SELF -> "exited by itself"
+        android.app.ApplicationExitInfo.REASON_OTHER -> "other"
+        else -> "reason $code"
+    }
+
     /** Saves a main-thread freeze (see FreezeWatchdog) next to the crashes. */
     fun recordFreeze(context: Context, details: String) {
         try {
@@ -120,6 +135,16 @@ object ProblemReport {
             readings.toSortedMap().forEach { (id, r) ->
                 val raw = obd.rawDataOf(id)?.let { " raw [$it]" }.orEmpty()
                 appendLine("$id ${defs[id]?.name ?: ""} = ${"%.2f".format(Locale.US, r.value)} (${(now - r.timestamp) / 1000}s ago)$raw")
+            }
+        }
+        section("How the system ended this app (Android 11+)") {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                appendLine("(not available before Android 11)")
+            } else {
+                val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+                val exits = am.getHistoricalProcessExitReasons(context.packageName, 0, 8)
+                if (exits.isEmpty()) appendLine("(none recorded)")
+                for (e in exits) appendLine("${stamp.format(Date(e.timestamp))}  ${exitReason(e.reason)}  ${e.description.orEmpty()}")
             }
         }
         section("Recent crashes") {
