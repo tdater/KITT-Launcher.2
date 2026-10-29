@@ -11,6 +11,15 @@ object ReleaseNotes {
 
     val ALL = listOf(
         ReleaseNote(
+            12,
+            listOf(
+                "KITT Holo: live readings are now callouts around the vehicle, like a scanner display. Engine, speed, battery and " +
+                    "fuel sit above it and the four tyres below, each with a leader line to its part. Tap one for the low, high and " +
+                    "average since start and what the number means.",
+                "KITT Holo: a perspective grid stage under the hologram, and a redrawn pickup truck (Car or Truck buttons on the Drive screen).",
+            )
+        ),
+        ReleaseNote(
             11,
             listOf(
                 "KITT Holo: Car and Truck buttons now sit over the hologram on the Drive screen, so you can switch vehicles without opening KITT Config.",
