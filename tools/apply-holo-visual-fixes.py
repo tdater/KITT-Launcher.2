@@ -46,3 +46,16 @@ replace(old, '''            if (VehicleChoice.decode(vehicle) == VehicleChoice.T
 ''' + old + '''
             }''')
 p.write_text(s)
+
+p = Path('app/src/main/java/com/aiconsole/kittlauncher2/ui/components/HoloWireframeRenderer.kt')
+s = p.read_text()
+replace('val mesh = if(truck)HoloWireMeshes.truck else HoloWireMeshes.coupe', 'val mesh = if(truck)ReferenceHoloMeshes.truck else ReferenceHoloMeshes.coupe')
+replace('size.width*0.21f,boxes.bandHeight*0.40f', 'size.width*0.18f,boxes.bandHeight*0.34f')
+replace('val wire = if(skin==CockpitSkin.Future || skin==CockpitSkin.RoboCop)secondary else accent', 'val wire = if(skin==CockpitSkin.Future || skin==CockpitSkin.RoboCop || (skin==CockpitSkin.Kitt && accent.red>0.7f && accent.green<0.4f))secondary else accent')
+replace('val glow = if(skin==CockpitSkin.Future)Color(0xFFFF007F) else wire', 'val glow = if(skin==CockpitSkin.Future || (!truck && skin==CockpitSkin.Kitt && accent.red>0.7f && accent.green<0.4f))Color(0xFFFF007F) else wire')
+replace('val floor = if(truck)-0.80f else -0.60f', 'val floor = if(truck)-0.83f else -0.66f')
+replace('floor-(v.y-floor)*0.55f', 'floor-(v.y-floor)*0.75f')
+replace('glow.copy(alpha=0.12f)', 'glow.copy(alpha=if(truck)0.12f else 0.18f)')
+replace('else -> if(edge.part=="lights")Color.White else if(edge.part in listOf("interior","chassis"))secondary else wire', 'else -> if(edge.part=="lights")Color.White else if(!truck && edge.part.startsWith("w"))glow else if(edge.part in listOf("interior","chassis"))secondary else wire')
+replace('base.copy(alpha=0.90f*strength)', 'base.copy(alpha=(0.82f*edge.weight).coerceIn(0.14f,0.95f)*strength)')
+p.write_text(s)
