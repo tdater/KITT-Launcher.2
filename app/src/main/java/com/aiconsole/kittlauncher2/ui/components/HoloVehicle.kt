@@ -2,7 +2,7 @@ package com.aiconsole.kittlauncher2.ui.components
 
 /** Which vehicle the hologram turntable shows on the KITT Holo Drive screen. */
 enum class VehicleChoice(val key: String, val label: String, val blurb: String) {
-    Car("car", "Car", "The sports car; its body follows the theme (coupe, cruiser, or the wedge for Back to the Future)."),
+    Car("car", "Car", "The sports car; for RoboCop it becomes the cruiser and for Back to the Future the wedge."),
     Truck("truck", "Truck", "A crew-cab pickup with an open bed, on the same turntable with the same live readings.");
 
     companion object {

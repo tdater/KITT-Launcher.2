@@ -34,7 +34,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -68,6 +67,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -139,7 +140,7 @@ fun VehicleStatusHud(
     val skin = CockpitSkin.current()
     val obd = (LocalContext.current.applicationContext as KittApplication).obd
     DisposableEffect(Unit) {
-        obd.watch("vehicle_hud", TireIds.toSet() + PidCatalog.COOLANT + PidCatalog.MODULE_VOLTAGE + PidCatalog.SPEED + PidCatalog.THROTTLE + PidCatalog.ENGINE_LOAD + PidCatalog.FUEL_LEVEL + CarReadouts.PIDS)
+        obd.watch("vehicle_hud", TireIds.toSet() + PidCatalog.COOLANT + PidCatalog.MODULE_VOLTAGE + PidCatalog.SPEED + PidCatalog.THROTTLE + PidCatalog.ENGINE_LOAD + PidCatalog.FUEL_LEVEL + PidCatalog.RPM + CarReadouts.PIDS)
         onDispose { obd.unwatch("vehicle_hud") }
     }
     fun fresh(id: String) = reading(id)?.takeIf { System.currentTimeMillis() - it.timestamp < 15_000 }?.value
@@ -158,13 +159,14 @@ fun VehicleStatusHud(
     val context = LocalContext.current
     val dtcs by obd.dtcs.collectAsState()
     var selected by remember { mutableStateOf<String?>(null) }
-    val stats = remember { CarReadouts.ALL.associate { it.key to ReadoutStats() } }
+    val statPids = remember { CarReadouts.PIDS + TireIds + PidCatalog.COOLANT + PidCatalog.MODULE_VOLTAGE + PidCatalog.RPM }
+    val stats = remember { statPids.associateWith { ReadoutStats() } }
     val readingNow = rememberUpdatedState(reading)
     LaunchedEffect(Unit) {
         while (true) {
             delay(1000)
-            for (r in CarReadouts.ALL) {
-                readingNow.value(r.pid)?.takeIf { System.currentTimeMillis() - it.timestamp < 15_000 }?.let { stats.getValue(r.key).add(it.value) }
+            for (pid in statPids) {
+                readingNow.value(pid)?.takeIf { System.currentTimeMillis() - it.timestamp < 15_000 }?.let { stats.getValue(pid).add(it.value) }
             }
         }
     }
@@ -211,16 +213,110 @@ fun VehicleStatusHud(
             ready.intValue++
         }
     }
-    BoxWithConstraints(modifier.fillMaxWidth()) {
-    // A short panel drops the tach bar so the car keeps its height and the tags stay apart.
-    val compact = maxHeight < 170.dp
+    // Live values as callouts around the vehicle: engine, speed, battery and fuel above; the four tyres below.
+    val speedV = fresh(PidCatalog.SPEED)
+    val coolantV = fresh(PidCatalog.COOLANT)
+    val voltsV = fresh(PidCatalog.MODULE_VOLTAGE)
+    val fuelV = fresh(PidCatalog.FUEL_LEVEL)
+    val rpmV = fresh(PidCatalog.RPM)
+    fun tireLevel(id: String): ReadoutLevel {
+        val kpa = fresh(id) ?: return ReadoutLevel.Unknown
+        return if (kpa * KPA_TO_PSI in 26.0..40.0) ReadoutLevel.Ok else ReadoutLevel.Bad
+    }
+    fun tireState(id: String): String? {
+        val psi = (fresh(id) ?: return null) * KPA_TO_PSI
+        return if (psi < 26.0) "LOW" else if (psi > 40.0) "HIGH" else "OK"
+    }
+    val engineLevel = when {
+        coolantV == null -> ReadoutLevel.Unknown
+        coolantV >= 108 -> ReadoutLevel.Bad
+        coolantV >= 100 -> ReadoutLevel.Warn
+        else -> ReadoutLevel.Ok
+    }
+    val voltLevel = when {
+        voltsV == null -> ReadoutLevel.Unknown
+        voltsV < 11.8 || voltsV > 15.2 -> ReadoutLevel.Bad
+        voltsV < 12.4 -> ReadoutLevel.Warn
+        else -> ReadoutLevel.Ok
+    }
+    val rpmText = rpmV?.let { "RPM %,d".format(it.roundToInt()) }
+    val burnV = fresh(PidCatalog.FUEL_RATE)
+    val callouts = listOf(
+        Callout("engine", skin.coolantLabel, coolant, if (milOn) "CHECK ENGINE" else rpmText, if (milOn) ReadoutLevel.Warn else engineLevel, 0, "engine"),
+        Callout("speed", "SPEED", CarReadouts.text("speed", speedV, metric), null, CarReadouts.level("speed", speedV), 1, "roof"),
+        Callout("battery", skin.batteryLabel, volts, null, voltLevel, 2, "battery"),
+        Callout("fuel", "FUEL", CarReadouts.text("fuel", fuelV, metric), if (burnV != null) CarReadouts.text("flow", burnV, metric) else null, CarReadouts.level("fuel", fuelV), 3, "fuel"),
+    ) + TireIds.mapIndexed { i, id ->
+        val name = listOf("FL", "FR", "RL", "RR")[i]
+        Callout("tire$i", "${skin.tireLabel} $name", tire(id), tireState(id), tireLevel(id), 4 + i, "w$i")
+    }
+    val calloutsNow = rememberUpdatedState(callouts)
+
+    fun lowHighAvg(pid: String, fmt: (Double) -> String): List<Pair<String, String>> {
+        val st = stats[pid]?.takeIf { it.count > 0 } ?: return emptyList()
+        return listOf("LOW SINCE START" to fmt(st.min), "HIGH SINCE START" to fmt(st.max), "AVERAGE" to fmt(st.average))
+    }
+    fun temp(c: Double) = if (metric) "${c.roundToInt()}°C" else "${(c * 9 / 5 + 32).roundToInt()}°F"
+    fun detailFor(key: String): CalloutDetail? {
+        val c = callouts.firstOrNull { it.key == key } ?: return null
+        return when {
+            key == "engine" -> CalloutDetail(
+                skin.coolantLabel, c.value, c.level,
+                listOfNotNull(
+                    rpmV?.let { "ENGINE SPEED" to "%,d rpm".format(it.roundToInt()) },
+                    "LOAD" to CarReadouts.text("load", fresh(PidCatalog.ENGINE_LOAD), metric),
+                    "THROTTLE" to CarReadouts.text("throttle", fresh(PidCatalog.THROTTLE), metric),
+                    "INTAKE AIR" to CarReadouts.text("intake", fresh(PidCatalog.INTAKE_TEMP), metric),
+                    "FUEL BURN" to CarReadouts.text("flow", burnV, metric),
+                ) + lowHighAvg(PidCatalog.COOLANT, ::temp),
+                (if (milOn) "The engine computer has stored a fault code: open Diagnostics to read it. " else "") +
+                    "Engine coolant temperature. Normal is about 195-220°F (90-105°C). Climbing towards 230°F (110°C) means overheating: ease off, and stop somewhere safe if it keeps rising."
+            )
+            key == "speed" -> CalloutDetail("SPEED", c.value, c.level, lowHighAvg(PidCatalog.SPEED) { CarReadouts.text("speed", it, metric) }, CarReadouts.byKey("speed")?.about.orEmpty())
+            key == "battery" -> CalloutDetail(
+                skin.batteryLabel, c.value, c.level, lowHighAvg(PidCatalog.MODULE_VOLTAGE) { "%.1f V".format(it) },
+                "Voltage at the car's computer. About 12.4-12.8 V with the engine off and 13.5-14.8 V while the alternator charges. Under 12 V when parked points to a weak battery."
+            )
+            key == "fuel" -> CalloutDetail(
+                "FUEL", c.value, c.level,
+                listOf("FUEL BURN" to CarReadouts.text("flow", burnV, metric)) + lowHighAvg(PidCatalog.FUEL_LEVEL) { CarReadouts.text("fuel", it, metric) },
+                CarReadouts.byKey("fuel")?.about.orEmpty()
+            )
+            key.startsWith("tire") -> {
+                val i = key.removePrefix("tire").toIntOrNull() ?: return null
+                val id = TireIds.getOrNull(i) ?: return null
+                val kpa = fresh(id)
+                CalloutDetail(
+                    c.title, c.value, c.level,
+                    listOfNotNull(
+                        kpa?.let { "PRESSURE" to "${it.roundToInt()} kPa / ${(it * KPA_TO_PSI).roundToInt()} PSI" },
+                        tireState(id)?.let { "STATUS" to it },
+                    ) + lowHighAvg(id) { if (metric) "${it.roundToInt()} kPa" else "${(it * KPA_TO_PSI).roundToInt()} PSI" },
+                    "Tyre pressure from the car's sensors. Match the placard on the driver's door jamb, usually 30-36 PSI (210-250 kPa), checked cold. Low pressure wears tyres and costs fuel."
+                )
+            }
+            else -> null
+        }
+    }
+
+    Box(modifier.fillMaxWidth()) {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Readout("${skin.tireLabel} FRONT R", tire(TireIds[1]), tireColor(TireIds[1]))
-            Readout("${skin.tireLabel} REAR R", tire(TireIds[3]), tireColor(TireIds[3]), alignEnd = true)
+        Row(Modifier.fillMaxWidth().height(28.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            VehicleSwitch(VehicleChoice.decode(vehicle), { kittSettings.holoVehicle.set(it.key) })
+            Text(skin.tachLabel, style = MaterialTheme.typography.labelSmall, color = DashGrey, maxLines = 1)
+            LedBarGauge(rpmFraction(), Modifier.weight(1f).height(14.dp), segments = 30, color = DashAmber)
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
-        Canvas(Modifier.fillMaxSize()) {
+        Canvas(
+            Modifier.fillMaxSize().pointerInput(Unit) {
+                detectTapGestures { at ->
+                    val boxes = CalloutLayout.boxes(size.width.toFloat(), size.height.toFloat(), density)
+                    val slot = boxes.hit(at.x, at.y, 6.dp.toPx())
+                    val key = calloutsNow.value.firstOrNull { it.slot == slot }?.key
+                    selected = if (key == null || key == selected) null else key
+                }
+            }
+        ) {
             // The animation clocks are read here, in the draw pass, so only this canvas redraws as they tick.
             val moving = !lite && (speedNow.value > 3.0)
             val live = LiveCar(
@@ -237,42 +333,15 @@ fun VehicleStatusHud(
             // Until both neighbours are decoded (and always in lite mode) show a single frame.
             val mix = if (!lite && first != null && second != null) blend.mix else 0f
             val frame = if (mix > 0f) book.frames[blend.from].mixWith(book.frames[blend.to], mix) else book.frames[blend.from]
-            drawHologram(skin, book, image, second, mix, frame, ScannerRed, tireColor(TireIds[0]), tireColor(TireIds[1]), tireColor(TireIds[2]), tireColor(TireIds[3]), rpmFraction(), live, scanPhase.floatValue)
+            drawHologram(skin, book, image, second, mix, frame, ScannerRed, tireColor(TireIds[0]), tireColor(TireIds[1]), tireColor(TireIds[2]), tireColor(TireIds[3]), rpmFraction(), live, scanPhase.floatValue, callouts, selected)
         }
-        VehicleSwitch(VehicleChoice.decode(vehicle), { kittSettings.holoVehicle.set(it.key) }, Modifier.align(Alignment.TopCenter))
         selected?.let { key ->
-            CarReadouts.byKey(key)?.let { spec ->
-                ReadoutCard(spec, fresh(spec.pid), stats.getValue(key), metric, { selected = null }, Modifier.align(Alignment.Center))
+            detailFor(key)?.let { detail ->
+                CalloutCard(detail, levelColor(detail.level), { selected = null }, Modifier.align(Alignment.Center))
             }
         }
         }
-        Row(Modifier.fillMaxWidth().height(if (compact) 40.dp else 46.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            for (r in CarReadouts.ALL) {
-                ReadoutChip(CarReadouts.chipLabel(r, metric), CarReadouts.chipValue(r.key, fresh(r.pid), metric), CarReadouts.level(r.key, fresh(r.pid)), selected == r.key,
-                    { selected = if (selected == r.key) null else r.key }, Modifier.weight(1f).fillMaxHeight())
-            }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Readout("${skin.tireLabel} FRONT L", tire(TireIds[0]), tireColor(TireIds[0]))
-            Readout(skin.coolantLabel, coolant, if (coolant == "--") DashGrey else LedGreen)
-            Readout(skin.batteryLabel, volts, if (volts == "--") DashGrey else LedGreen)
-            Readout("${skin.tireLabel} REAR L", tire(TireIds[2]), tireColor(TireIds[2]), alignEnd = true)
-        }
-        if (!compact) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(skin.tachLabel, style = MaterialTheme.typography.labelSmall, color = DashGrey, maxLines = 1)
-            LedBarGauge(rpmFraction(), Modifier.weight(1f).height(16.dp), segments = 30, color = DashAmber)
-        }
-        }
     }
-    }
-}
-
-@Composable
-private fun Readout(label: String, value: String, color: Color, alignEnd: Boolean = false) {
-    Column(horizontalAlignment = if (alignEnd) Alignment.End else Alignment.Start) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = DashGrey, maxLines = 1, softWrap = false)
-        Text(value, style = MaterialTheme.typography.titleSmall, color = if (value == "--") DashGrey else color, maxLines = 1, softWrap = false)
     }
 }
 
@@ -285,15 +354,15 @@ internal fun VehicleSwitch(current: VehicleChoice, onPick: (VehicleChoice) -> Un
             val on = v == current
             Box(
                 Modifier
-                    .height(32.dp)
+                    .height(24.dp)
                     .clip(shape)
                     .background(if (on) ScannerRed else ScannerRed.copy(alpha = 0.18f))
                     .skinFrame(shape, ScannerRed, selected = on)
                     .clickable { onPick(v) }
-                    .padding(horizontal = 14.dp),
+                    .padding(horizontal = 12.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(v.label.uppercase(), style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold), color = if (on) KittBlack else DashWhite, maxLines = 1)
+                Text(v.label.uppercase(), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold), color = if (on) KittBlack else DashWhite, maxLines = 1)
             }
         }
     }
@@ -383,14 +452,6 @@ private fun fuelColor(f: Double?): Color = when {
     f > 25 -> LedGreen
     f > 10 -> DashAmber
     else -> AlertRed
-}
-
-/** Canvas anchors of the four tire callouts: LF bottom-left, RF top-left, LR bottom-right, RR top-right. */
-private fun anchorFor(slot: Int, w: Float, h: Float, pad: Float): Offset = when (slot) {
-    0 -> Offset(w * 0.12f, h - pad)
-    1 -> Offset(w * 0.12f, pad)
-    2 -> Offset(w * 0.88f, h - pad)
-    else -> Offset(w * 0.88f, pad)
 }
 
 // ---- Rendered vehicle (Blender) with live data on top --------------------------------------------
@@ -562,11 +623,14 @@ private fun List<Offset>.at(angle: Float): Offset {
 private fun DrawScope.drawHologram(
     skin: CockpitSkin, book: Flipbook, image: androidx.compose.ui.graphics.ImageBitmap,
     next: androidx.compose.ui.graphics.ImageBitmap?, mix: Float, frame: HoloFrame,
-    line: Color, lf: Color, rf: Color, lr: Color, rr: Color, rpm: Float, live: LiveCar, scan: Float
+    line: Color, lf: Color, rf: Color, lr: Color, rr: Color, rpm: Float, live: LiveCar, scan: Float,
+    callouts: List<Callout>, selected: String?
 ) {
-    val s = minOf(size.width / book.w, size.height / book.h) * 0.99f
+    // The vehicle sits in the band between the callout rows above and below it.
+    val boxes = CalloutLayout.boxes(size.width, size.height, 1.dp.toPx())
+    val s = minOf(size.width / book.w, boxes.bandHeight / book.h) * 0.99f
     val tx = (size.width - book.w * s) / 2f
-    val ty = (size.height - book.h * s) / 2f
+    val ty = boxes.bandTop + (boxes.bandHeight - book.h * s) / 2f
     fun p(o: Offset) = Offset(tx + o.x * book.w * s, ty + o.y * book.h * s)
     val perMetre = book.w * s / 5.3f
     val thin = 1.dp.toPx()
@@ -575,11 +639,8 @@ private fun DrawScope.drawHologram(
     val dst = androidx.compose.ui.unit.IntSize((book.w * s).roundToInt(), (book.h * s).roundToInt())
     val off = androidx.compose.ui.unit.IntOffset(tx.roundToInt(), ty.roundToInt())
 
-    // Projector base: glowing rings on the floor under the car.
-    val floor = p(Offset(0.5f, 0.86f))
-    for ((r, a) in listOf(0.46f to 0.30f, 0.36f to 0.18f, 0.26f to 0.10f)) {
-        drawOval(line.copy(alpha = a), Offset(floor.x - book.w * s * r, floor.y - book.h * s * r * 0.20f), Size(book.w * s * r * 2f, book.h * s * r * 0.40f), style = Stroke(thin * 1.4f))
-    }
+    // The stage: a perspective grid on the floor under the vehicle, like the reference.
+    drawFloorGrid(line, p(Offset(0f, 0.905f)).y)
     // A squashed, faded mirror image on the floor, like the reflection under the car in the reference.
     val floorY = p(Offset(0f, 0.905f)).y
     withTransform({ scale(1f, -0.32f, Offset(0f, floorY)) }) {
@@ -652,39 +713,21 @@ private fun DrawScope.drawHologram(
     val by = size.height * (0.18f + 0.62f * scan)
     drawRect(Brush.verticalGradient(listOf(Color.Transparent, line.copy(alpha = 0.16f), Color.Transparent), startY = by - 14.dp.toPx(), endY = by + 14.dp.toPx()), Offset(0f, by - 14.dp.toPx()), Size(size.width, 28.dp.toPx()))
 
-    // Tire callouts: a leader from each hub to its corner.
-    val pad = 2.dp.toPx()
-    for (wh in frame.wheels) {
-        val hub = p(wh.hub)
-        val anchor = anchorFor(wh.slot, size.width, size.height, pad)
-        val elbow = Offset(hub.x, anchor.y)
-        val a = if (wh.slot in nearest) 0.45f else 0.22f
-        drawLine(tires[wh.slot].copy(alpha = a), hub, elbow, thin)
-        drawLine(tires[wh.slot].copy(alpha = a), elbow, anchor, thin)
-        drawCircle(tires[wh.slot].copy(alpha = a + 0.3f), 2.dp.toPx(), hub)
-    }
-
-    // Value tags on the parts they describe.
-    val paint = android.graphics.Paint().apply {
-        isAntiAlias = true
-        textSize = 11.dp.toPx()
-        textAlign = android.graphics.Paint.Align.CENTER
-        typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
-    }
-    drawIntoCanvas { cv ->
-        fun tag(text: String, at: Offset, color: Color) {
-            val half = paint.measureText(text) / 2f + 4.dp.toPx()
-            val bg = android.graphics.Paint().apply { this.color = android.graphics.Color.argb(190, 0, 0, 0) }
-            cv.nativeCanvas.drawRoundRect(at.x - half, at.y - paint.textSize, at.x + half, at.y + 4.dp.toPx(), 4.dp.toPx(), 4.dp.toPx(), bg)
-            paint.color = color.toArgb()
-            cv.nativeCanvas.drawText(text, at.x, at.y, paint)
-        }
-        val coolant = live.coolantC?.let { if (live.metric) "${it.roundToInt()}°C" else "${(it * 9 / 5 + 32).roundToInt()}°F" } ?: "--"
-        tag(coolant, engine + Offset(0f, -24.dp.toPx()), heatColor(live.coolantC))
-        if (live.mil) tag("CHECK ENGINE", engine + Offset(0f, -37.dp.toPx()), DashAmber)
-        tag(live.fuel?.let { "${it.roundToInt()}%" } ?: "--", tank + Offset(0f, 22.dp.toPx()), fuelColor(live.fuel))
-        tag(live.volts?.let { "%.1fV".format(it) } ?: "--", battery + Offset(0f, 22.dp.toPx()), voltColor(live.volts))
-    }
+    // Live-data callouts: boxes with leader lines to the part each one describes.
+    drawCallouts(
+        callouts, boxes,
+        { name ->
+            when {
+                name == "engine" -> engine
+                name == "battery" -> battery
+                name == "fuel" -> tank
+                name == "roof" -> p(Offset(0.5f, 0.30f))
+                name.startsWith("w") -> frame.wheels.firstOrNull { it.slot == name.drop(1).toIntOrNull() }?.let { p(it.hub) } ?: engine
+                else -> engine
+            }
+        },
+        line, selected, ::levelColor
+    )
 
     // Film overlays.
     val c = Offset(size.width / 2f, size.height * 0.5f)
