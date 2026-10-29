@@ -56,6 +56,7 @@ object CarReadouts {
     fun chipLabel(r: CarReadout, metric: Boolean): String = when (r.key) {
         "speed" -> if (metric) "KM/H" else "MPH"
         "flow" -> if (metric) "L/H" else "GPH"
+        "throttle" -> "THRTL"
         else -> r.label
     }
 

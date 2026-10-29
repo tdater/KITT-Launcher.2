@@ -79,6 +79,16 @@ data class HudState(
     val overLimit: Boolean = false
 )
 
+/** The theme's amber, green or a hot cyan, whichever stands out most against the [accent]-tinted map. */
+private fun routeColorFor(accent: androidx.compose.ui.graphics.Color): androidx.compose.ui.graphics.Color {
+    val options = listOf(DashAmber, LedGreen, androidx.compose.ui.graphics.Color(0xFF00E5FF))
+    val i = MapStyle.mostContrasting(
+        Triple(accent.red, accent.green, accent.blue),
+        options.map { Triple(it.red, it.green, it.blue) }
+    )
+    return options[i]
+}
+
 /**
  * Top pane: a themed OpenStreetMap that follows the car (or the 80s vector grid when the map
  * is off or location isn't allowed) with destination search and KITT's own spoken turn-by-turn
@@ -144,7 +154,7 @@ fun NavigationPane(
                     mapController,
                     Modifier.fillMaxSize(),
                     route = route.route.takeIf { route.status == NavStatus.Preview || route.status == NavStatus.Navigating },
-                    routeColor = DashAmber
+                    routeColor = routeColorFor(ScannerRed)
                 )
             } else {
                 NavigationVisualizer(Modifier.fillMaxSize())
