@@ -11,6 +11,17 @@ object ReleaseNotes {
 
     val ALL = listOf(
         ReleaseNote(
+            10,
+            listOf(
+                "Every edition gets the solid colour dock keys with icons and bold labels, and a row of live readings on the Drive " +
+                    "page. Tap one for its low, high and average since start.",
+                "A new hologram navigation map in every edition, in your theme's colours: glowing roads, a neon route, a scan grid " +
+                    "and sonar rings on the car.",
+                "KITT Holo: pick a pickup truck instead of the car for the hologram turntable (KITT Config → Hologram vehicle). " +
+                    "It turns with the same live readings.",
+            )
+        ),
+        ReleaseNote(
             9,
             listOf(
                 "KITT Holo: the new cockpit edition, with a rotating hologram car, film-themed Drive screens and the new gauge faces.",
