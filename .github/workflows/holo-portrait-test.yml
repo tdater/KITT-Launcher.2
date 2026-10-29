@@ -19,9 +19,11 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v5
-      - name: Apply checked speech compatibility patches
-        run: python3 tools/apply-holo-speech-fixes.py
-      - name: Save exact source changes for review
+      - name: Apply checked compatibility patches
+        run: |
+          python3 tools/apply-holo-speech-fixes.py
+          python3 tools/apply-holo-visual-fixes.py
+      - name: Save exact integrated source changes
         run: git diff --check && git diff > speech-fixes.patch
       - name: Test, lint and build Holo Portrait debug APK
         run: |
