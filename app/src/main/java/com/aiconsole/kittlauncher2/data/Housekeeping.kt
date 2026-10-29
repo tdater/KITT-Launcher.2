@@ -11,6 +11,14 @@ object ReleaseNotes {
 
     val ALL = listOf(
         ReleaseNote(
+            11,
+            listOf(
+                "KITT Holo: Car and Truck buttons now sit over the hologram on the Drive screen, so you can switch vehicles without opening KITT Config.",
+                "Start-up safety: if KITT keeps restarting before it settles, even when the system kills it without a crash message, it now starts in safe mode with a Report button instead of looping.",
+                "Problem reports now list how Android recently ended the app (crash, killed for memory, not responding) on Android 11 and later.",
+            )
+        ),
+        ReleaseNote(
             10,
             listOf(
                 "Every edition gets the solid colour dock keys with icons and bold labels, and a row of live readings on the Drive " +
