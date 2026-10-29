@@ -327,6 +327,24 @@ fun ReportToPhoneButton(app: KittApplication) {
     }
 }
 
+/** KITT Holo: which vehicle turns on the hologram turntable. */
+@Composable
+fun HoloVehicleSettings(app: KittApplication) {
+    val saved by app.settings.holoVehicle.state.collectAsState()
+    val choice = com.aiconsole.kittlauncher2.ui.components.VehicleChoice.decode(saved)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("HOLOGRAM VEHICLE", style = MaterialTheme.typography.labelMedium, color = DashGrey)
+        ChoiceRow(
+            com.aiconsole.kittlauncher2.ui.components.VehicleChoice.entries,
+            choice,
+            { it.label },
+            { app.settings.holoVehicle.set(it.key) },
+            color = ScannerRed
+        )
+        HelpText(choice.blurb)
+    }
+}
+
 /** Film themes: the edition, the character's voice and personality, and the boot sequence. */
 @Composable
 fun FilmThemeSettings(app: KittApplication) {

@@ -4,15 +4,26 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
+import android.os.SystemClock
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.aiconsole.kittlauncher2.ui.theme.LocalLiteMode
+import kotlinx.coroutines.delay
 import com.aiconsole.kittlauncher2.nav.LatLon
 import com.aiconsole.kittlauncher2.nav.Route
 import org.osmdroid.config.Configuration
@@ -73,28 +84,37 @@ fun NavMap(
             map.overlays.add(this)
         }
     }
-    val routeLine = remember(map) {
-        Polyline(map).apply {
-            outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
-            outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
-            isEnabled = false
-            // Under the car marker.
-            map.overlays.add(0, this)
-        }
+    // A neon route: a wide soft halo, the colored line, and a white-hot core, all under the car marker.
+    fun routeLayer(): Polyline = Polyline(map).apply {
+        outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+        outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
+        isEnabled = false
+    }
+    val routeLines = remember(map) {
+        listOf(routeLayer(), routeLayer(), routeLayer()).also { layers -> layers.forEachIndexed { i, l -> map.overlays.add(i, l) } }
     }
     controller.map = map
     controller.overlay = location
 
     LaunchedEffect(route, routeColor) {
-        routeLine.outlinePaint.color = routeColor.toArgb()
-        routeLine.outlinePaint.strokeWidth = 9f * context.resources.displayMetrics.density
-        routeLine.setPoints(route?.points.orEmpty().map { GeoPoint(it.lat, it.lon) })
-        routeLine.isEnabled = route != null
+        val width = 9f * context.resources.displayMetrics.density
+        val points = route?.points.orEmpty().map { GeoPoint(it.lat, it.lon) }
+        val (halo, line, core) = routeLines
+        halo.outlinePaint.color = routeColor.copy(alpha = 0.28f).toArgb()
+        halo.outlinePaint.strokeWidth = width * MapStyle.HALO_WIDTH
+        line.outlinePaint.color = routeColor.toArgb()
+        line.outlinePaint.strokeWidth = width
+        core.outlinePaint.color = Color.White.copy(alpha = 0.85f).toArgb()
+        core.outlinePaint.strokeWidth = width * 0.3f
+        for (l in routeLines) {
+            l.setPoints(points)
+            l.isEnabled = route != null
+        }
         map.invalidate()
     }
 
     LaunchedEffect(accent) {
-        map.overlayManager.tilesOverlay.setColorFilter(nightFilter(accent))
+        map.overlayManager.tilesOverlay.setColorFilter(hologramFilter(accent))
         map.invalidate()
     }
     DisposableEffect(active) {
@@ -114,7 +134,73 @@ fun NavMap(
     DisposableEffect(map) {
         onDispose { map.onDetach() }
     }
-    AndroidView(factory = { map }, modifier = modifier)
+    Box(modifier) {
+        AndroidView(factory = { map }, modifier = Modifier.fillMaxSize())
+        val glow = MapStyle.bright(accent.red, accent.green, accent.blue).let { Color(it.first, it.second, it.third) }
+        HologramOverlay(glow, map, location, Modifier.fillMaxSize())
+    }
+}
+
+/**
+ * The hologram dressing over the tiles: a faint grid, scan sweep, corner brackets and pulsing
+ * sonar rings on the car. It never takes touches, and stands still in lite mode.
+ */
+@Composable
+private fun HologramOverlay(accent: Color, map: MapView, location: MyLocationNewOverlay, modifier: Modifier) {
+    val lite = LocalLiteMode.current
+    val phase = remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(lite) {
+        if (lite) return@LaunchedEffect
+        var last = SystemClock.uptimeMillis()
+        while (true) {
+            delay(50)
+            val now = SystemClock.uptimeMillis()
+            phase.floatValue = (phase.floatValue + (now - last).coerceAtMost(250L) / 3200f) % 1f
+            last = now
+        }
+    }
+    Canvas(modifier) {
+        val t = phase.floatValue
+        val grid = MapStyle.GRID_DP.dp.toPx()
+        val line = accent.copy(alpha = 0.18f)
+        var x = grid
+        while (x < size.width) { drawLine(line, Offset(x, 0f), Offset(x, size.height), 1f); x += grid }
+        var y = grid
+        while (y < size.height) { drawLine(line, Offset(0f, y), Offset(size.width, y), 1f); y += grid }
+        // Fine scanlines, like a projected image.
+        val scan = Color.Black.copy(alpha = 0.18f)
+        var sy = 0f
+        while (sy < size.height) { drawLine(scan, Offset(0f, sy), Offset(size.width, sy), 1f); sy += 4.dp.toPx() }
+        if (!lite) {
+            val sweep = size.height * t
+            drawRect(
+                Brush.verticalGradient(listOf(Color.Transparent, accent.copy(alpha = 0.32f), Color.Transparent), sweep - 40.dp.toPx(), sweep + 40.dp.toPx()),
+                Offset(0f, sweep - 40.dp.toPx()), androidx.compose.ui.geometry.Size(size.width, 80.dp.toPx())
+            )
+            val here = location.myLocation
+            if (here != null) {
+                val p = map.projection.toPixels(here, null)
+                val center = Offset(p.x.toFloat(), p.y.toFloat())
+                for (k in 0 until 3) {
+                    val f = (t * 3f + k) % 3f / 3f
+                    drawCircle(accent.copy(alpha = (1f - f) * 0.7f), radius = 10.dp.toPx() + f * 46.dp.toPx(), center = center, style = Stroke(2.dp.toPx()))
+                }
+            }
+        }
+        // Corner brackets frame the hologram.
+        val arm = 22.dp.toPx()
+        val inset = 6.dp.toPx()
+        val w = 2.dp.toPx()
+        val bracket = accent.copy(alpha = 0.9f)
+        for ((cx, dx) in listOf(inset to 1f, size.width - inset to -1f)) {
+            for ((cy, dy) in listOf(inset to 1f, size.height - inset to -1f)) {
+                drawLine(bracket, Offset(cx, cy), Offset(cx + dx * arm, cy), w)
+                drawLine(bracket, Offset(cx, cy), Offset(cx, cy + dy * arm), w)
+            }
+        }
+        // Soft vignette so the glow sits in the middle.
+        drawRect(Brush.radialGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.3f)), center, size.maxDimension * 0.8f))
+    }
 }
 
 @SuppressLint("ClickableViewAccessibility") // The touch listener only observes; it never consumes clicks.
@@ -139,17 +225,6 @@ private fun createMap(context: Context): MapView {
     }
 }
 
-/**
- * Inverted luminance tinted with [accent]: the pale daytime land goes near-black while road
- * casings, labels and water turn into glowing lines in the theme color, like a vector display.
- */
-private fun nightFilter(accent: Color): ColorMatrixColorFilter {
-    val contrast = 1.5f
-    val r = accent.red * contrast
-    val g = accent.green * contrast
-    val b = accent.blue * contrast
-    // Each output channel = (255 - luminance) * tint + a faint floor so the land isn't pure black.
-    fun row(tint: Float) = floatArrayOf(-0.299f * tint, -0.587f * tint, -0.114f * tint, 0f, 255f * tint + 6f)
-    val matrix = ColorMatrix(row(r) + row(g) + row(b) + floatArrayOf(0f, 0f, 0f, 1f, 0f))
-    return ColorMatrixColorFilter(matrix)
-}
+/** The tiles as a hologram in the theme's [accent]; the numbers live in [MapStyle]. */
+private fun hologramFilter(accent: Color): ColorMatrixColorFilter =
+    ColorMatrixColorFilter(ColorMatrix(MapStyle.matrix(accent.red, accent.green, accent.blue)))

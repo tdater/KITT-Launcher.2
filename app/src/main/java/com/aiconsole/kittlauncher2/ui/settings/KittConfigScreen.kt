@@ -470,6 +470,9 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
             anchor("theme")
             item { Text("THEME", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
             item { ChoiceRow(UiTheme.entries, theme, { it.label }, { settings.uiTheme.set(it) }, color = ScannerRed) }
+            if (com.aiconsole.kittlauncher2.BuildConfig.HOLO_DESIGN) {
+                item { HoloVehicleSettings(app) }
+            }
             if (theme.hud != null) {
                 item { FilmThemeSettings(app) }
             }

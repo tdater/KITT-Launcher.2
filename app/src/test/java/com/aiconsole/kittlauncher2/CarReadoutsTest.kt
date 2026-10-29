@@ -28,7 +28,8 @@ class CarReadoutsTest {
         val speed = CarReadouts.byKey("speed")!!
         assertEquals("MPH", CarReadouts.chipLabel(speed, false))
         assertEquals("L/H", CarReadouts.chipLabel(CarReadouts.byKey("flow")!!, true))
-        assertEquals("LOAD", CarReadouts.chipLabel(CarReadouts.byKey("load")!!, true))
+        assertEquals("THRTL", CarReadouts.chipLabel(CarReadouts.byKey("throttle")!!, true))
+        assertEquals("LOAD",CarReadouts.chipLabel(CarReadouts.byKey("load")!!, true))
         assertEquals("62", CarReadouts.chipValue("speed", 100.0, false))
         assertEquals("104°F", CarReadouts.chipValue("intake", 40.0, false))
         assertEquals("43%", CarReadouts.chipValue("load", 42.6, true))

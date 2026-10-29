@@ -272,6 +272,8 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val filmIntros = boolPref("film_intros", true)
     /** Each film theme's edition and character (FilmChoices format; "" = the originals). */
     val filmChoices = stringPref("film_choices", "")
+    /** KITT Holo: the vehicle on the hologram turntable ([com.aiconsole.kittlauncher2.ui.components.VehicleChoice] key). */
+    val holoVehicle = stringPref("holo_vehicle", "car")
     /** Theme for night time ("" = keep the day theme), e.g. Stealth or Night Vision. */
     val nightTheme = stringPref("night_theme", "")
     /** The stream window keeps playing in a corner mini player when you leave the Drive page. */

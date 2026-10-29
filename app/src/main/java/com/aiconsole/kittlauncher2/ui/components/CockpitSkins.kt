@@ -196,7 +196,9 @@ fun VehicleStatusHud(
         }
     }
     val milOn = dtcs?.all?.isNotEmpty() == true
-    val book = remember(skin) { readFlipbook(context, skin) }
+    val vehicle by (LocalContext.current.applicationContext as KittApplication).settings.holoVehicle.state.collectAsState()
+    val kind = kindOf(skin, VehicleChoice.decode(vehicle))
+    val book = remember(kind) { readFlipbook(context, kind) }
     // Decode every frame off the UI thread before the turntable reaches it (lite mode keeps one view).
     val ready = remember(book) { mutableIntStateOf(0) }
     LaunchedEffect(book, lite) {
@@ -272,7 +274,7 @@ private fun Readout(label: String, value: String, color: Color, alignEnd: Boolea
     }
 }
 
-private fun levelColor(level: ReadoutLevel): Color = when (level) {
+internal fun levelColor(level: ReadoutLevel): Color = when (level) {
     ReadoutLevel.Unknown -> DashGrey
     ReadoutLevel.Ok -> LedGreen
     ReadoutLevel.Warn -> DashAmber
@@ -281,7 +283,7 @@ private fun levelColor(level: ReadoutLevel): Color = when (level) {
 
 /** A live value as a filled, bold chip; the selected one goes solid. */
 @Composable
-private fun ReadoutChip(label: String, value: String, level: ReadoutLevel, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
+internal fun ReadoutChip(label: String, value: String, level: ReadoutLevel, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
     val color = levelColor(level)
     val shape = MaterialTheme.shapes.small
     Column(
@@ -301,7 +303,7 @@ private fun ReadoutChip(label: String, value: String, level: ReadoutLevel, selec
 
 /** The bigger info box that opens inside the car window: value, session range and what the number means. */
 @Composable
-private fun ReadoutCard(spec: CarReadout, value: Double?, stats: ReadoutStats, metric: Boolean, onClose: () -> Unit, modifier: Modifier) {
+internal fun ReadoutCard(spec: CarReadout, value: Double?, stats: ReadoutStats, metric: Boolean, onClose: () -> Unit, modifier: Modifier) {
     val level = CarReadouts.level(spec.key, value)
     val color = levelColor(level)
     val shape = MaterialTheme.shapes.medium
@@ -418,14 +420,16 @@ private class HoloFrame(val wheels: List<HoloWheel>, val anchors: Map<String, Of
 
 private class Flipbook(val kind: String, val w: Float, val h: Float, val frames: List<HoloFrame>)
 
-private fun kindOf(skin: CockpitSkin) = when (skin) {
-    CockpitSkin.Future -> "wedge"
-    CockpitSkin.RoboCop -> "cruiser"
-    else -> "coupe"
-}
+private fun kindOf(skin: CockpitSkin, choice: VehicleChoice) = HoloVehicle.body(
+    choice,
+    when (skin) {
+        CockpitSkin.Future -> "wedge"
+        CockpitSkin.RoboCop -> "cruiser"
+        else -> "coupe"
+    }
+)
 
-private fun readFlipbook(context: android.content.Context, skin: CockpitSkin): Flipbook {
-    val kind = kindOf(skin)
+private fun readFlipbook(context: android.content.Context, kind: String): Flipbook {
     val id = context.resources.getIdentifier("holo_$kind", "raw", context.packageName)
     val o = org.json.JSONObject(context.resources.openRawResource(id).bufferedReader().use { it.readText() })
     fun pt(a: org.json.JSONArray) = Offset(a.getDouble(0).toFloat(), a.getDouble(1).toFloat())

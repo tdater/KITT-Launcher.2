@@ -818,11 +818,10 @@ fun LauncherRoot(
                     .padding(if (chromeless) 0.dp else if (rail) 6.dp else 8.dp)
             ) {
                 val gap = if (rail) 6.dp else 8.dp
-                val dockHeight = if (BuildConfig.HOLO_DESIGN) (maxHeight * if (isTall) 0.25f else 0.24f).coerceIn(if (isTall) 180.dp else 130.dp, 340.dp)
-                else (maxHeight * if (isTall) 0.15f else 0.20f).coerceIn(112.dp, 280.dp)
+                // Icon keys with a bold label need more room than the old outlined buttons, in every edition.
+                val dockHeight = (maxHeight * if (isTall) 0.25f else 0.24f).coerceIn(if (isTall) 180.dp else 130.dp, 340.dp)
                 // Bigger targets while driving (driving layout on and moving steadily).
-                val dockBarHeight = if (BuildConfig.HOLO_DESIGN) (maxHeight * if (driving) 0.19f else 0.16f).coerceIn(72.dp, 104.dp)
-                else if (driving) (maxHeight * 0.14f).coerceIn(60.dp, 84.dp) else (maxHeight * 0.11f).coerceIn(48.dp, 64.dp)
+                val dockBarHeight = (maxHeight * if (driving) 0.19f else 0.16f).coerceIn(72.dp, 104.dp)
                 val portraitCellWidth = if (maxWidth >= 600.dp) 150.dp else 110.dp
                 val open = { target: LauncherOverlay -> overlay = target }
                 val onDrive = pager.currentPage == HomePage.Drive.ordinal
@@ -866,7 +865,9 @@ fun LauncherRoot(
                             appsContent = { appsModifier -> grid(appsModifier, cellWidth) }
                         )
                     } else {
-                        grid(paneModifier, cellWidth)
+                        com.aiconsole.kittlauncher2.ui.components.ReadoutStrip(dash.reading, dash.metric, paneModifier) { gridModifier ->
+                            grid(gridModifier, cellWidth)
+                        }
                     }
                 }
                 val drivingPanel = @Composable { panelModifier: Modifier ->

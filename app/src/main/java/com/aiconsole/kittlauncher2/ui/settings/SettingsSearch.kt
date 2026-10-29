@@ -24,7 +24,7 @@ object SettingsSearch {
         SettingsEntry("Read messages aloud", "messages", "messages texts sms whatsapp read aloud notifications greeting"),
         SettingsEntry("Screen size", "display", "display screen size scale zoom text big small"),
         SettingsEntry("Performance / lite mode", "performance", "performance lite slow fast animations memory ram"),
-        SettingsEntry("Theme and film editions", "theme", "theme terminator matrix robocop back to the future film edition character colour color"),
+        SettingsEntry("Theme and film editions", "theme", "theme terminator matrix robocop back to the future film edition character colour color hologram vehicle truck pickup car"),
         SettingsEntry("Accent colour", "accent", "accent colour color tint"),
         SettingsEntry("Night mode and units", "night", "night dim dark sunset metric imperial units miles km"),
         SettingsEntry("Driving layout, shift light, scanner overlay", "drivinglayout", "driving layout big buttons shift light rpm scanner overlay over apps"),

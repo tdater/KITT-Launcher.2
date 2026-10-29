@@ -46,7 +46,6 @@ import androidx.compose.ui.unit.dp
 import com.aiconsole.kittlauncher2.KittApplication
 import com.aiconsole.kittlauncher2.ui.components.FilledKey
 import com.aiconsole.kittlauncher2.ui.components.KeyGlyph
-import com.aiconsole.kittlauncher2.ui.components.KittButton
 import com.aiconsole.kittlauncher2.ui.components.VoiceModulator
 import com.aiconsole.kittlauncher2.ui.gauges.SegmentDisplay
 import com.aiconsole.kittlauncher2.ui.theme.DashAmber
@@ -330,48 +329,19 @@ fun DockBar(
                     )
                 }
             }
-            if (BuildConfig.HOLO_DESIGN) {
-                FilledKey(KeyGlyph.Prev, "Prev", { if (current != null) app.media.previous() else sendMediaKey(context, KeyEvent.KEYCODE_MEDIA_PREVIOUS) }, Modifier.width(68.dp).fillMaxHeight(), ScannerRed)
-                FilledKey(
-                    if (current?.playing == true) KeyGlyph.Pause else KeyGlyph.Play,
-                    if (current?.playing == true) "Pause" else "Play",
-                    { if (current != null) app.media.playPause() else sendMediaKey(context, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) },
-                    Modifier.width(72.dp).fillMaxHeight(), ScannerRed, active = current?.playing == true
-                )
-                FilledKey(KeyGlyph.Next, "Next", { if (current != null) app.media.next() else sendMediaKey(context, KeyEvent.KEYCODE_MEDIA_NEXT) }, Modifier.width(68.dp).fillMaxHeight(), ScannerRed)
-            } else {
-            KittButton(
-                "◀◀",
-                { if (current != null) app.media.previous() else sendMediaKey(context, KeyEvent.KEYCODE_MEDIA_PREVIOUS) },
-                Modifier.width(52.dp).fillMaxHeight(),
-                ScannerRed
-            )
-            KittButton(
-                if (current?.playing == true) "❚❚" else "▶",
+            FilledKey(KeyGlyph.Prev, "Prev", { if (current != null) app.media.previous() else sendMediaKey(context, KeyEvent.KEYCODE_MEDIA_PREVIOUS) }, Modifier.width(68.dp).fillMaxHeight(), ScannerRed)
+            FilledKey(
+                if (current?.playing == true) KeyGlyph.Pause else KeyGlyph.Play,
+                if (current?.playing == true) "Pause" else "Play",
                 { if (current != null) app.media.playPause() else sendMediaKey(context, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) },
-                Modifier.width(56.dp).fillMaxHeight(),
-                ScannerRed,
-                active = current?.playing == true
+                Modifier.width(72.dp).fillMaxHeight(), ScannerRed, active = current?.playing == true
             )
-            KittButton(
-                "▶▶",
-                { if (current != null) app.media.next() else sendMediaKey(context, KeyEvent.KEYCODE_MEDIA_NEXT) },
-                Modifier.width(52.dp).fillMaxHeight(),
-                ScannerRed
-            )
-            }
+            FilledKey(KeyGlyph.Next, "Next", { if (current != null) app.media.next() else sendMediaKey(context, KeyEvent.KEYCODE_MEDIA_NEXT) }, Modifier.width(68.dp).fillMaxHeight(), ScannerRed)
         }
-        if (BuildConfig.HOLO_DESIGN) {
-            FilledKey(KeyGlyph.Diag, "Diag", onDiagnostics, Modifier.weight(0.7f).fillMaxHeight(), LedGreen)
-            FilledKey(KeyGlyph.Route, "Trips", onTrip, Modifier.weight(0.7f).fillMaxHeight(), DashAmber)
-            FilledKey(KeyGlyph.Sliders, "Config", onConfig, Modifier.weight(0.7f).fillMaxHeight(), ScannerRed)
-            FilledKey(KeyGlyph.Gear, "System", { openSettings(context, Settings.ACTION_SETTINGS) }, Modifier.weight(0.7f).fillMaxHeight(), Color(0xFF42A5F5))
-        } else {
-            KittButton("Diag", onDiagnostics, Modifier.weight(0.6f).fillMaxHeight(), LedGreen, active = true)
-            KittButton("Trips", onTrip, Modifier.weight(0.6f).fillMaxHeight(), ScannerRed, active = true)
-            KittButton("Config", onConfig, Modifier.weight(0.6f).fillMaxHeight(), DashAmber)
-            KittButton("System", { openSettings(context, Settings.ACTION_SETTINGS) }, Modifier.weight(0.6f).fillMaxHeight(), DashAmber)
-        }
+        FilledKey(KeyGlyph.Diag, "Diag", onDiagnostics, Modifier.weight(0.7f).fillMaxHeight(), LedGreen)
+        FilledKey(KeyGlyph.Route, "Trips", onTrip, Modifier.weight(0.7f).fillMaxHeight(), DashAmber)
+        FilledKey(KeyGlyph.Sliders, "Config", onConfig, Modifier.weight(0.7f).fillMaxHeight(), ScannerRed)
+        FilledKey(KeyGlyph.Gear, "System", { openSettings(context, Settings.ACTION_SETTINGS) }, Modifier.weight(0.7f).fillMaxHeight(), Color(0xFF42A5F5))
     }
 }
 
@@ -505,25 +475,14 @@ private fun MediaSection(onMediaKey: (Int) -> Unit, modifier: Modifier = Modifie
                 .weight(1f),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            KittButton(
-                label = "Prev",
-                onClick = { if (current != null) app.media.previous() else onMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS) },
-                modifier = Modifier.weight(1f).fillMaxHeight(),
-                color = ScannerRed
+            FilledKey(KeyGlyph.Prev, "Prev", { if (current != null) app.media.previous() else onMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS) }, Modifier.weight(1f).fillMaxHeight(), ScannerRed)
+            FilledKey(
+                if (current?.playing == true) KeyGlyph.Pause else KeyGlyph.Play,
+                if (current?.playing == true) "Pause" else "Play",
+                { if (current != null) app.media.playPause() else onMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) },
+                Modifier.weight(1f).fillMaxHeight(), ScannerRed, active = current?.playing == true
             )
-            KittButton(
-                label = if (current?.playing == true) "Pause" else "Play",
-                onClick = { if (current != null) app.media.playPause() else onMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) },
-                modifier = Modifier.weight(1f).fillMaxHeight(),
-                color = ScannerRed,
-                active = current?.playing == true
-            )
-            KittButton(
-                label = "Next",
-                onClick = { if (current != null) app.media.next() else onMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT) },
-                modifier = Modifier.weight(1f).fillMaxHeight(),
-                color = ScannerRed
-            )
+            FilledKey(KeyGlyph.Next, "Next", { if (current != null) app.media.next() else onMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT) }, Modifier.weight(1f).fillMaxHeight(), ScannerRed)
         }
     }
 }
@@ -538,12 +497,12 @@ private fun VehicleSection(
 ) {
     DockSection("Vehicle", LedGreen, modifier) {
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            KittButton("Diagnostics", onDiagnostics, Modifier.weight(1f).fillMaxHeight(), LedGreen, active = true)
-            KittButton("Trips", onTrips, Modifier.weight(1f).fillMaxHeight(), ScannerRed, active = true)
+            FilledKey(KeyGlyph.Diag, "Diag", onDiagnostics, Modifier.weight(1f).fillMaxHeight(), LedGreen)
+            FilledKey(KeyGlyph.Route, "Trips", onTrips, Modifier.weight(1f).fillMaxHeight(), DashAmber)
         }
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            KittButton("KITT Config", onConfig, Modifier.weight(1f).fillMaxHeight(), DashAmber)
-            KittButton("System", onSystemSettings, Modifier.weight(1f).fillMaxHeight(), DashAmber)
+            FilledKey(KeyGlyph.Sliders, "Config", onConfig, Modifier.weight(1f).fillMaxHeight(), ScannerRed)
+            FilledKey(KeyGlyph.Gear, "System", onSystemSettings, Modifier.weight(1f).fillMaxHeight(), Color(0xFF42A5F5))
         }
     }
 }
