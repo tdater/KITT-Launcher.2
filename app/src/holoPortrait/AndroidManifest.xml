@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Visualizer(0) captures the output mix and requires this permission.
+         RECORD_AUDIO remains declared in the shared manifest and must be granted at runtime.
+         This does not request audio focus or open the microphone. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+</manifest>
