@@ -144,7 +144,7 @@ class ObdManager(
     /** Every PID definition the app knows about right now, by id. */
     val definitions: StateFlow<Map<String, PidDefinition>> =
         combine(profile, customPids.pids, settings.manufacturerPids.state) { p, custom, useMfr ->
-            (PidCatalog.standard + PidCatalog.adapterVoltage + (if (useMfr) p.pids else emptyList()) + custom)
+            (PidCatalog.standard + PidCatalog.adapterVoltage + ManufacturerProfiles.generic.pids + (if (useMfr) p.pids else emptyList()) + custom)
                 .associateBy { it.id }
         }.stateIn(scope, SharingStarted.Eagerly, emptyMap())
 
@@ -373,7 +373,7 @@ class ObdManager(
         val link = elm ?: return "Not connected"
         return try {
             val raw = link.exclusive {
-                if (def.header != null) useHeader(def.header) else useDefaultHeader()
+                if (def.header != null) useHeader(def.header, def.receiveHeader ?: Elm327.receiveHeaderFor(def.header)) else useDefaultHeader()
                 val response = send(def.command, 2_000)
                 useDefaultHeader()
                 response
@@ -487,8 +487,17 @@ class ObdManager(
             _unavailable.value = emptySet()
             val supported = link.exclusive { discoverSupported(this, init.isCan) }
             _supportedMode01.value = supported
-            val vin = runCatching { link.exclusive { ObdResponseParser.vin(ObdResponseParser.messages(send("0902", 5_000))) } }
-                .getOrNull()
+            val vin = runCatching {
+                link.exclusive {
+                    ObdResponseParser.vin(ObdResponseParser.messages(send("0902", 5_000)))
+                        ?: if (init.isCan) {
+                            useHeader(BROADCAST_HEADER)
+                            val broadcastVin = ObdResponseParser.vin(ObdResponseParser.messages(send("0902", 5_000)))
+                            useDefaultHeader()
+                            broadcastVin
+                        } else null
+                }
+            }.getOrNull()
             _detected.value = ManufacturerProfiles.detect(vin)
             logEvent(LinkLayer.Ecu, "ECU answered: ${supported.size} PIDs supported" + (vin?.let { ", VIN $it" } ?: ""))
             stageLayer = LinkLayer.Decode
@@ -612,6 +621,8 @@ class ObdManager(
         var multiPid = settings.obdFastPolling.value && isCan
         var countHint = true
         val failures = HashMap<String, Int>()
+        val candidateIndex = HashMap<String, Int>()
+        val lockedCandidate = HashMap<String, Int>()
         var windowStart = System.currentTimeMillis()
         var windowCycles = 0
         var lastLog = 0L
@@ -621,19 +632,29 @@ class ObdManager(
         fun fail(def: PidDefinition) {
             val count = (failures[def.id] ?: 0) + 1
             failures[def.id] = count
-            if (count >= MAX_FAILURES) _unavailable.update { it + def.id }
+            // Tire pressure PIDs cycle through fallback candidates and retry periodically when sensors wake up.
+            if (count >= MAX_FAILURES && def.id !in PidCatalog.TIRES) _unavailable.update { it + def.id }
         }
 
         while (currentCoroutineContext().isActive) {
             val defs = definitions.value
             val supported = _supportedMode01.value
             val dead = _unavailable.value
+            val currentReadings = _readings.value
             val wanted = (watchers.value.values.flatten() + ALWAYS_POLLED).toSet()
                 .mapNotNull { defs[it] }
                 .filter { it.id !in dead }
                 .filter { def -> def.mode01Pid?.let { supported.isEmpty() || it in supported } ?: true }
                 .filter { isCan || it.header == null }
-            val due = wanted.filter { it.fast || cycle % SLOW_EVERY == 0L }
+            val due = wanted.filter { def ->
+                val missCount = failures[def.id] ?: 0
+                when {
+                    def.fast -> true
+                    def.id !in currentReadings && missCount < MAX_FAILURES -> true
+                    missCount >= MAX_FAILURES -> cycle % (SLOW_EVERY * 3) == 0L
+                    else -> cycle % SLOW_EVERY == 0L
+                }
+            }
             if (due.isEmpty()) {
                 delay(250)
                 cycle++
@@ -679,27 +700,42 @@ class ObdManager(
                     ?.let { results[PidCatalog.ADAPTER_VOLTAGE] = it }
             }
 
-            // 3) Manufacturer and custom PIDs, each on its own ECU header.
+            // 3) Manufacturer and custom PIDs, each on its own ECU header (with candidate fallback probing).
             // A module that never answers (e.g. a body module this model doesn't have) times out
             // instead of saying NO DATA; that's a miss for this PID, not a lost adapter. A really
             // dead link still ends the session on the next engine request.
             for (def in due.filter { it.mode01Pid == null && it.source != PidSource.ADAPTER }) {
+                val allCandidates = if (def.candidates.isEmpty()) {
+                    listOf(PidCandidate(def.command, def.header, def.formula, def.receiveHeader))
+                } else {
+                    listOf(PidCandidate(def.command, def.header, def.formula, def.receiveHeader)) + def.candidates
+                }
+                val idx = lockedCandidate[def.id] ?: (candidateIndex[def.id] ?: 0) % allCandidates.size
+                val cand = allCandidates[idx]
                 val raw = try {
                     link.exclusive {
-                        if (def.header != null) useHeader(def.header) else useDefaultHeader()
-                        send(def.command, 1_500)
+                        if (cand.header != null) useHeader(cand.header, cand.receiveHeader ?: Elm327.receiveHeaderFor(cand.header)) else useDefaultHeader()
+                        send(cand.command, 1_500)
                     }
                 } catch (e: ElmTimeoutException) {
-                    Log.w(TAG, "${def.id} on ${def.header ?: "default header"}: ${e.message}")
+                    Log.w(TAG, "${def.id} on ${cand.header ?: "default header"}: ${e.message}")
                     // Each timeout stalls the whole poll for seconds, so give up on it sooner.
                     repeat(TIMEOUT_FAILURE_WEIGHT - 1) { fail(def) }
                     null
                 }
-                val value = raw?.let { decodeData(def, it) }?.let { evaluate(def, it) }
+                val activeDef = def.copy(command = cand.command, header = cand.header, formula = cand.formula, receiveHeader = cand.receiveHeader)
+                val data = raw?.let { decodeData(activeDef, it) }
+                val value = data?.let { evaluate(activeDef, it) }?.takeIf { v ->
+                    v in def.min..def.max && (def.id !in PidCatalog.TIRES || v > 0.0)
+                }
+                if (data != null) rawData[def.id] = data.joinToString(" ") { "%02X".format(Locale.US, it.toInt() and 0xFF) }
                 if (value != null) {
                     results[def.id] = value
                     failures.remove(def.id)
+                    lockedCandidate[def.id] = idx
                 } else {
+                    lockedCandidate.remove(def.id)
+                    if (allCandidates.size > 1) candidateIndex[def.id] = (idx + 1) % allCandidates.size
                     fail(def)
                 }
             }

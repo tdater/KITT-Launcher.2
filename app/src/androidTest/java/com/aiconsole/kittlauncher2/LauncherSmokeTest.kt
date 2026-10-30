@@ -46,7 +46,7 @@ class LauncherSmokeTest {
         ActivityScenario.launch<Activity>(intent).use { scenario ->
             settle(6_000)
             alive(scenario)
-            for (page in listOf("Drive", "Gauges", "Media", "Ai", "Games", "Widgets", "Apps", "Drive")) {
+            for (page in listOf("Drive", "Gauges", "Media", "Ai", "Entertainment", "Widgets", "Apps", "Drive")) {
                 LauncherBus.send(LauncherEvent.ShowPage(page))
                 settle(2_500)
                 alive(scenario)

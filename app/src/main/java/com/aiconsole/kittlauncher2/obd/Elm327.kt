@@ -27,6 +27,7 @@ class Elm327(private val transport: ObdTransport) {
     private val lock = Mutex()
     private val buffer = StringBuilder()
     private var currentHeader: String? = null
+    private var currentReceiveHeader: String? = null
 
     /** Header used for normal Mode 01 polling; "7E0" (engine, physical) once CAN is up. */
     var defaultHeader: String? = null
@@ -35,15 +36,23 @@ class Elm327(private val transport: ObdTransport) {
     inner class Link internal constructor() {
         suspend fun send(command: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS): String = sendRaw(command, timeoutMs)
 
-        suspend fun useHeader(header: String) {
+        suspend fun useHeader(header: String, receiveHeader: String? = receiveHeaderFor(header)) {
             if (header != currentHeader) {
                 sendRaw("ATSH$header", DEFAULT_TIMEOUT_MS)
                 currentHeader = header
             }
+            if (receiveHeader != currentReceiveHeader) {
+                if (receiveHeader != null) {
+                    sendRaw("ATCRA$receiveHeader", DEFAULT_TIMEOUT_MS)
+                } else {
+                    sendRaw("ATAR", DEFAULT_TIMEOUT_MS)
+                }
+                currentReceiveHeader = receiveHeader
+            }
         }
 
         suspend fun useDefaultHeader() {
-            defaultHeader?.let { useHeader(it) }
+            defaultHeader?.let { useHeader(it, null) }
         }
 
         fun setDefaultHeader(header: String) {
@@ -70,6 +79,8 @@ class Elm327(private val transport: ObdTransport) {
         } catch (_: ElmException) {
             send("ATZ", 5_000)
         }
+        currentHeader = null
+        currentReceiveHeader = null
         val version = send("ATI").lines().lastOrNull { it.isNotBlank() }?.trim() ?: "ELM327"
         // Echo off, linefeeds off, spaces off, headers off, adaptive timing, protocol.
         for (command in listOf("ATE0", "ATL0", "ATS0", "ATH0", "ATAT1", "ATSP$protocol")) {
@@ -151,9 +162,27 @@ class Elm327(private val transport: ObdTransport) {
             .filter { it.isNotEmpty() && !it.equals(command, ignoreCase = true) }
             .joinToString("\n")
 
-    private companion object {
-        const val DEFAULT_TIMEOUT_MS = 2_000L
-        const val LINK_SETTLE_MS = 300L
-        const val RESYNC_TIMEOUT_MS = 1_000L
+    companion object {
+        private const val DEFAULT_TIMEOUT_MS = 2_000L
+        private const val LINK_SETTLE_MS = 300L
+        private const val RESYNC_TIMEOUT_MS = 1_000L
+
+        /**
+         * Expected 11-bit CAN response ID (ATCRA) for non-emissions module headers.
+         * Standard 7E0..7E7 and broadcast 7DF use null (ATAR default 7E8..7EF filter).
+         * GM GMLAN body/chassis headers 240..25F reply on header + 0x400 (e.g. 241 -> 641);
+         * other 11-bit physical UDS module headers 700..7DF reply on header + 8 (e.g. 726 -> 72E).
+         */
+        fun receiveHeaderFor(header: String?): String? {
+            val clean = header?.trim()?.uppercase() ?: return null
+            if (clean.length != 3 || clean == "7DF") return null
+            val id = clean.toIntOrNull(16) ?: return null
+            return when {
+                id in 0x7E0..0x7E7 -> null
+                id in 0x240..0x25F -> "%03X".format(java.util.Locale.US, id + 0x400)
+                id in 0x700..0x7DF -> "%03X".format(java.util.Locale.US, id + 8)
+                else -> null
+            }
+        }
     }
 }

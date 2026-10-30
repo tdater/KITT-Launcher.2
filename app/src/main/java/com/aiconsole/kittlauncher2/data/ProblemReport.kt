@@ -2,7 +2,6 @@ package com.aiconsole.kittlauncher2.data
 
 import android.content.Context
 import android.os.Build
-import android.os.Process
 import com.aiconsole.kittlauncher2.obd.ObdManager
 import java.io.File
 import java.io.IOException
@@ -144,7 +143,18 @@ object ProblemReport {
                 val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
                 val exits = am.getHistoricalProcessExitReasons(context.packageName, 0, 8)
                 if (exits.isEmpty()) appendLine("(none recorded)")
-                for (e in exits) appendLine("${stamp.format(Date(e.timestamp))}  ${exitReason(e.reason)}  ${e.description.orEmpty()}")
+                for (e in exits) {
+                    appendLine("${stamp.format(Date(e.timestamp))}  ${exitReason(e.reason)} (status=${e.status} pid=${e.pid} pss=${e.pss shr 10}MB rss=${e.rss shr 10}MB)  ${e.description.orEmpty()}")
+                    if (e.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE ||
+                        e.reason == android.app.ApplicationExitInfo.REASON_CRASH ||
+                        e.reason == android.app.ApplicationExitInfo.REASON_ANR
+                    ) {
+                        readExitTrace(e)?.let { trace ->
+                            appendLine("  --- exit trace (pid ${e.pid}) ---")
+                            appendLine(trace)
+                        }
+                    }
+                }
             }
         }
         section("Recent crashes") {
@@ -164,14 +174,57 @@ object ProblemReport {
         section("App log (this app only)") { append(appLog()) }
     }
 
-    /** This process's recent logcat output; apps may read their own logs without extra permission. */
+    /** Extracts readable tombstone / stack frames from an ApplicationExitInfo trace stream. */
+    private fun readExitTrace(exit: android.app.ApplicationExitInfo): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+        return try {
+            val raw = exit.traceInputStream?.use { it.readBytes() } ?: return null
+            if (raw.isEmpty()) return null
+            val printable = StringBuilder()
+            val current = StringBuilder()
+            for (b in raw) {
+                val c = b.toInt() and 0xFF
+                if (c in 0x20..0x7E || c == 0x09) {
+                    current.append(c.toChar())
+                } else if (c == 0x0A || c == 0x0D) {
+                    if (current.length >= 4) printable.appendLine(current.toString())
+                    current.clear()
+                } else {
+                    if (current.length >= 6) printable.appendLine(current.toString())
+                    current.clear()
+                }
+            }
+            if (current.length >= 4) printable.appendLine(current.toString())
+            val lines = printable.toString().lineSequence()
+                .map { it.trimEnd() }
+                .filter { line ->
+                    line.isNotBlank() && (
+                        "#" in line || "pc " in line || "signal " in line || "ABI:" in line ||
+                            "pid:" in line || "Abort" in line || "Fatal" in line || "sherpa" in line ||
+                            "onnx" in line || "kittlauncher" in line || "Exception" in line || "Error" in line ||
+                            "backtrace" in line || "Cause:" in line || ".so" in line
+                        )
+                }
+                .take(80)
+                .joinToString("\n")
+            lines.ifBlank { printable.toString().take(4_000) }.take(6_000).ifBlank { null }
+        } catch (e: Throwable) {
+            "  (trace unreadable: ${e.javaClass.simpleName}: ${e.message})"
+        }
+    }
+
+    /** This app's recent logcat output across current and prior PIDs (Android scopes logcat by UID). */
     private fun appLog(): String = try {
-        val process = ProcessBuilder("logcat", "-d", "-v", "threadtime", "-t", "3000", "--pid=${Process.myPid()}")
+        val process = ProcessBuilder("logcat", "-d", "-v", "threadtime", "-t", "4000")
             .redirectErrorStream(true)
             .start()
-        // Skip the renderer's slow-frame spam so the useful lines fit.
+        // Skip the renderer's slow-frame and Android 17 frame-rate spam so useful lines fit.
         val output = process.inputStream.bufferedReader().useLines { lines ->
-            lines.filterNot { "Davey! duration=" in it }.joinToString("\n")
+            lines.filterNot { line ->
+                "Davey! duration=" in line ||
+                    "setRequestedFrameRate" in line ||
+                    "Requested frameRateCategory" in line
+            }.toList().takeLast(600).joinToString("\n")
         }
         process.waitFor() // logcat -d exits once it has dumped; the output is already read.
         output.ifBlank { "(empty)\n" }

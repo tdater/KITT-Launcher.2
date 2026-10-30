@@ -61,6 +61,11 @@ import com.aiconsole.kittlauncher2.ui.theme.KittBezel
 import com.aiconsole.kittlauncher2.ui.theme.KittBlack
 import com.aiconsole.kittlauncher2.ui.theme.LedGreen
 import com.aiconsole.kittlauncher2.ui.theme.ScannerRed
+import com.aiconsole.kittlauncher2.ui.theme.ThemeState
+import com.aiconsole.kittlauncher2.ui.theme.UiTheme
+import com.aiconsole.kittlauncher2.ui.theme.HudStyle
+import com.aiconsole.kittlauncher2.ui.theme.assistantName
+import com.aiconsole.kittlauncher2.ui.theme.hud
 
 /**
  * Pursuit mode: a full-screen dash in the style of KITT's 1982 console. A bar-graph
@@ -166,7 +171,7 @@ private fun KittBox(speaking: Boolean, onKitt: () -> Unit, modifier: Modifier) {
     Box(modifier.clip(shape).border(1.dp, ScannerRed.copy(alpha = 0.6f), shape)) {
         Column(Modifier.fillMaxSize().padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             VoiceModulator(active = speaking, modifier = Modifier.fillMaxWidth().weight(1f))
-            KittButton("KITT", onKitt, Modifier.fillMaxWidth().height(48.dp), ScannerRed, active = true)
+            KittButton(assistantName().uppercase(), onKitt, Modifier.fillMaxWidth().height(48.dp), ScannerRed, active = true)
             Text("TAP TO TALK", Modifier.fillMaxWidth().padding(top = 4.dp), style = MaterialTheme.typography.labelSmall, color = DashGrey, textAlign = TextAlign.Center)
         }
     }
@@ -269,8 +274,15 @@ private fun PursuitScreenHolo(
             Box(m, contentAlignment = Alignment.Center) {
                 ArcGauge((speedValue / topSpeed).toFloat(), Modifier.fillMaxSize(), speedColor, emptyList(), needle = false)
                 Column(Modifier.fillMaxWidth(0.5f).fillMaxHeight(0.6f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    val pursuitTitle = when (ThemeState.theme.hud) {
+                        HudStyle.Terminator -> "CYBERDYNE INTERCEPT"
+                        HudStyle.Matrix -> "OVERDRIVE CONSTRUCT"
+                        HudStyle.Future -> "88 MPH TIME RUN"
+                        HudStyle.RoboCop -> "OCP HOT PURSUIT"
+                        null -> if (ThemeState.theme == UiTheme.Karr) "KARR PURSUIT" else "SUPER PURSUIT"
+                    }
                     Text(
-                        "SUPER PURSUIT",
+                        pursuitTitle,
                         style = MaterialTheme.typography.labelSmall.copy(shadow = Shadow(speedColor, Offset.Zero, 10f)),
                         color = speedColor,
                         maxLines = 1

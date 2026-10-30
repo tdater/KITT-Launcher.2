@@ -4,8 +4,9 @@ import kotlin.math.PI
 import kotlin.math.floor
 
 /**
- * Timing for the hologram car's turntable. Plain Kotlin so it is unit-tested: which two rendered
- * frames to show for a yaw and how far to blend between them, and the order to preload frames in.
+ * Timing and manual touch-rotation for the hologram car's turntable. Plain Kotlin so it is unit-tested:
+ * which two rendered frames to show for a yaw, how far to blend between them, manual drag-to-rotate,
+ * and the order to preload frames in.
  */
 object Turntable {
 
@@ -21,6 +22,15 @@ object Turntable {
 
     /** Yaw after [elapsedMs] of turning; time-based, so a late tick doesn't slow the car down. */
     fun advance(yaw: Float, elapsedMs: Long): Float = wrap(yaw + SPEED * elapsedMs.coerceIn(0L, 250L) / 1000f)
+
+    /**
+     * Manual drag rotation: dragging horizontally by [deltaX] across a canvas of [widthPx]
+     * smoothly rotates the 3D hologram in the direction of the finger drag.
+     */
+    fun drag(yaw: Float, deltaX: Float, widthPx: Float): Float {
+        if (widthPx <= 1f) return wrap(yaw)
+        return wrap(yaw + (deltaX / widthPx) * TWO_PI)
+    }
 
     fun blend(yaw: Float, frames: Int): Blend {
         if (frames <= 1) return Blend(0, 0, 0f)

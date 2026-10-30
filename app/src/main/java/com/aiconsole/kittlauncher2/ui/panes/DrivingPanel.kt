@@ -43,6 +43,7 @@ import com.aiconsole.kittlauncher2.ui.theme.DashWhite
 import com.aiconsole.kittlauncher2.ui.theme.KittBezel
 import com.aiconsole.kittlauncher2.ui.theme.KittBlack
 import com.aiconsole.kittlauncher2.ui.theme.ScannerRed
+import com.aiconsole.kittlauncher2.ui.theme.assistantName
 
 /**
  * Replaces the app grid while moving: big media and volume controls, a KITT button and the top favourite
@@ -106,7 +107,7 @@ fun DrivingPanel(
                         contentAlignment = Alignment.Center
                     ) {
                         VoiceModulator(active = kittSpeaking, modifier = Modifier.fillMaxSize().padding(bottom = 14.dp))
-                        Text("KITT", style = MaterialTheme.typography.labelSmall, color = ScannerRed, modifier = Modifier.align(Alignment.BottomCenter))
+                        Text(assistantName().uppercase(), style = MaterialTheme.typography.labelSmall, color = ScannerRed, modifier = Modifier.align(Alignment.BottomCenter), maxLines = 1)
                     }
                     IconKey(KeyGlyph.VolUp, "Vol", { volume(AudioManager.ADJUST_RAISE) }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
                 }
@@ -148,7 +149,7 @@ fun DrivingPanel(
                     contentAlignment = Alignment.Center
                 ) {
                     VoiceModulator(active = kittSpeaking, modifier = Modifier.fillMaxSize())
-                    Text("KITT", style = MaterialTheme.typography.titleLarge, color = ScannerRed)
+                    Text(assistantName().uppercase(), style = MaterialTheme.typography.titleLarge, color = ScannerRed, maxLines = 1)
                 }
                 KittButton("Vol +", { volume(AudioManager.ADJUST_RAISE) }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
             }

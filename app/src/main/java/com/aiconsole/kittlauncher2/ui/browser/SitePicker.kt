@@ -101,15 +101,15 @@ fun SitePicker(
     }
 
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(160.dp),
+        columns = GridCells.Adaptive(176.dp),
         modifier = Modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 KittTextField(address, { address = it }, "Type any address, e.g. twitch.tv", Modifier.weight(1f), onDone = { target?.let { session.open(it) } })
-                KittButton("Go", { target?.let { session.open(it) } }, Modifier.height(48.dp).width(64.dp), ScannerRed, active = target != null, enabled = target != null)
+                KittButton("Go", { target?.let { session.open(it) } }, Modifier.height(36.dp).width(64.dp), ScannerRed, active = target != null, enabled = target != null)
                 KittButton(
                     "★ Save",
                     {
@@ -119,7 +119,7 @@ fun SitePicker(
                             address = ""
                         }
                     },
-                    Modifier.height(48.dp).width(96.dp),
+                    Modifier.height(36.dp).width(96.dp),
                     LedGreen,
                     enabled = target != null
                 )
@@ -142,15 +142,15 @@ fun SitePicker(
         }
         items(mine, key = { "m_${it.url}" }) { site ->
             if (editing) {
-                KittButton("✕ ${site.label}", { bookmarks.set(StreamSites.encode(mine - site)) }, Modifier.height(56.dp), AlertRed)
+                SiteCard(site, onClick = { session.open(site.url, site.label) }, onDelete = { bookmarks.set(StreamSites.encode(mine - site)) })
             } else {
-                KittButton(site.label, { session.open(site.url, site.label) }, Modifier.height(56.dp), LedGreen, active = true)
+                SiteCard(site, onClick = { session.open(site.url, site.label) })
             }
         }
         sections.forEach { section ->
             item(span = { GridItemSpan(maxLineSpan) }) { SectionHeader(section.title, color = ScannerRed) }
             items(section.sites, key = { "${section.title}_${it.url}" }) { site ->
-                KittButton(site.label, { session.open(site.url, site.label) }, Modifier.height(56.dp), ScannerRed)
+                SiteCard(site, onClick = { session.open(site.url, site.label) })
             }
         }
         item(span = { GridItemSpan(maxLineSpan) }) { HelpText(help) }

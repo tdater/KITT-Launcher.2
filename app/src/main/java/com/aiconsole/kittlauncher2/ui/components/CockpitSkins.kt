@@ -67,8 +67,11 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -122,7 +125,7 @@ enum class CockpitSkin(
 }
 
 private const val KPA_TO_PSI = 0.145038
-private val TireIds = listOf("gm_tpms_lf", "gm_tpms_rf", "gm_tpms_lr", "gm_tpms_rr")
+private val TireIds = PidCatalog.TIRES
 
 /**
  * Vehicle status HUD in the mockups' style: a side-view wireframe with a colored tire at each
@@ -140,10 +143,10 @@ fun VehicleStatusHud(
     val skin = CockpitSkin.current()
     val obd = (LocalContext.current.applicationContext as KittApplication).obd
     DisposableEffect(Unit) {
-        obd.watch("vehicle_hud", TireIds.toSet() + PidCatalog.COOLANT + PidCatalog.MODULE_VOLTAGE + PidCatalog.SPEED + PidCatalog.THROTTLE + PidCatalog.ENGINE_LOAD + PidCatalog.FUEL_LEVEL + PidCatalog.RPM + CarReadouts.PIDS)
+        obd.watch("vehicle_hud", TireIds.toSet() + PidCatalog.COOLANT + PidCatalog.MODULE_VOLTAGE + PidCatalog.ADAPTER_VOLTAGE + PidCatalog.SPEED + PidCatalog.THROTTLE + PidCatalog.ENGINE_LOAD + PidCatalog.FUEL_LEVEL + PidCatalog.RPM + PidCatalog.MAF + CarReadouts.PIDS)
         onDispose { obd.unwatch("vehicle_hud") }
     }
-    fun fresh(id: String) = reading(id)?.takeIf { System.currentTimeMillis() - it.timestamp < 15_000 }?.value
+    fun fresh(id: String) = reading(id)?.takeIf { System.currentTimeMillis() - it.timestamp < 120_000 }?.value
     fun tire(id: String): String {
         val kpa = fresh(id) ?: return "--"
         return if (metric) "${kpa.roundToInt()} kPa" else "${(kpa * KPA_TO_PSI).roundToInt()} PSI"
@@ -153,7 +156,7 @@ fun VehicleStatusHud(
         return if (psi in 26.0..40.0) LedGreen else AlertRed
     }
     val coolant = fresh(PidCatalog.COOLANT)?.let { if (metric) "${it.roundToInt()}°C" else "${(it * 9 / 5 + 32).roundToInt()}°F" } ?: "--"
-    val volts = fresh(PidCatalog.MODULE_VOLTAGE)?.let { "%.1fV".format(it) } ?: "--"
+    val volts = (fresh(PidCatalog.MODULE_VOLTAGE) ?: fresh(PidCatalog.ADAPTER_VOLTAGE))?.let { "%.1fV".format(it) } ?: "--"
 
     val lite = LocalLiteMode.current
     val context = LocalContext.current
@@ -166,7 +169,7 @@ fun VehicleStatusHud(
         while (true) {
             delay(1000)
             for (pid in statPids) {
-                readingNow.value(pid)?.takeIf { System.currentTimeMillis() - it.timestamp < 15_000 }?.let { stats.getValue(pid).add(it.value) }
+                readingNow.value(pid)?.takeIf { System.currentTimeMillis() - it.timestamp < 120_000 }?.let { stats.getValue(pid).add(it.value) }
             }
         }
     }
@@ -174,19 +177,23 @@ fun VehicleStatusHud(
     val pulse = remember { mutableFloatStateOf(0f) }
     val turn = remember { mutableFloatStateOf(HOLO_REST_YAW) }
     val scanPhase = remember { mutableFloatStateOf(0f) }
+    val userInteractingUntil = remember { mutableLongStateOf(0L) }
     val speedNow = rememberUpdatedState(fresh(PidCatalog.SPEED) ?: 0.0)
     // The spokes and the engine glow only move while the car does; in lite mode nothing animates.
     LaunchedEffect(lite) {
         if (lite) return@LaunchedEffect
-        // The hologram turns slowly on its base, blending between neighbouring frames; the scan band sweeps up it.
+        // The hologram turns slowly on its base unless the user is manually rotating or inspecting a part.
         var last = SystemClock.uptimeMillis()
         while (true) {
             delay(33)
             val now = SystemClock.uptimeMillis()
             val elapsed = now - last
             last = now
-            turn.floatValue = Turntable.advance(turn.floatValue, elapsed)
+            if (now >= userInteractingUntil.longValue) {
+                turn.floatValue = Turntable.advance(turn.floatValue, elapsed)
+            }
             scanPhase.floatValue = (scanPhase.floatValue + 0.24f * elapsed.coerceAtMost(250L) / 1000f) % 1f
+            pulse.floatValue = (pulse.floatValue + (0.65f + rpmFraction() * 2.6f) * (elapsed.coerceAtMost(250L) / 1000f)) % 1f
         }
     }
     LaunchedEffect(lite) {
@@ -194,7 +201,6 @@ fun VehicleStatusHud(
         while (true) {
             delay(66)
             if (speedNow.value > 3.0) spin.floatValue = (spin.floatValue + (speedNow.value / 10.0 * 0.25).coerceAtMost(8.0).toFloat() * 0.066f) % (2f * PI.toFloat())
-            if (rpmFraction() > 0.01f) pulse.floatValue = (pulse.floatValue + (0.5f + rpmFraction() * 3f) * 0.066f) % 1f
         }
     }
     val milOn = dtcs?.all?.isNotEmpty() == true
@@ -208,15 +214,17 @@ fun VehicleStatusHud(
         if (lite) return@LaunchedEffect
         val start = Turntable.blend(turn.floatValue, book.frames.size).from
         for (i in Turntable.preloadOrder(start, book.frames.size)) {
-            val image = withContext(Dispatchers.IO) { HoloFrames.load(context, book, i) }
-            HoloFrames.put(book, i, image)
+            if (HoloFrames.get(book, i) == null) {
+                val image = withContext(Dispatchers.IO) { HoloFrames.load(context, book, i) }
+                HoloFrames.put(book, i, image)
+            }
             ready.intValue++
         }
     }
     // Live values as callouts around the vehicle: engine, speed, battery and fuel above; the four tyres below.
     val speedV = fresh(PidCatalog.SPEED)
     val coolantV = fresh(PidCatalog.COOLANT)
-    val voltsV = fresh(PidCatalog.MODULE_VOLTAGE)
+    val voltsV = fresh(PidCatalog.MODULE_VOLTAGE) ?: fresh(PidCatalog.ADAPTER_VOLTAGE)
     val fuelV = fresh(PidCatalog.FUEL_LEVEL)
     val rpmV = fresh(PidCatalog.RPM)
     fun tireLevel(id: String): ReadoutLevel {
@@ -240,16 +248,30 @@ fun VehicleStatusHud(
         else -> ReadoutLevel.Ok
     }
     val rpmText = rpmV?.let { "RPM %,d".format(it.roundToInt()) }
-    val burnV = fresh(PidCatalog.FUEL_RATE)
-    val callouts = listOf(
-        Callout("engine", skin.coolantLabel, coolant, if (milOn) "CHECK ENGINE" else rpmText, if (milOn) ReadoutLevel.Warn else engineLevel, 0, "engine"),
-        Callout("speed", "SPEED", CarReadouts.text("speed", speedV, metric), null, CarReadouts.level("speed", speedV), 1, "roof"),
-        Callout("battery", skin.batteryLabel, volts, null, voltLevel, 2, "battery"),
-        Callout("fuel", "FUEL", CarReadouts.text("fuel", fuelV, metric), if (burnV != null) CarReadouts.text("flow", burnV, metric) else null, CarReadouts.level("fuel", fuelV), 3, "fuel"),
-    ) + TireIds.mapIndexed { i, id ->
-        val name = listOf("FL", "FR", "RL", "RR")[i]
-        Callout("tire$i", "${skin.tireLabel} $name", tire(id), tireState(id), tireLevel(id), 4 + i, "w$i")
+    val burnV = PidCatalog.fuelRateLph(fresh(PidCatalog.FUEL_RATE), fresh(PidCatalog.MAF))
+    val lastSlots = remember { mutableMapOf<String, Int>() }
+    val fuelCallout = if (fuelV != null || burnV == null) {
+        Callout("fuel", "FUEL", CarReadouts.text("fuel", fuelV, metric), if (burnV != null) CarReadouts.text("flow", burnV, metric) else null, CarReadouts.level("fuel", fuelV), lastSlots["fuel"] ?: 3, "fuel")
+    } else {
+        Callout("fuel", "FUEL BURN", CarReadouts.text("flow", burnV, metric), rpmText, ReadoutLevel.Ok, lastSlots["fuel"] ?: 3, "fuel")
     }
+    val bottomCallouts = CarReadouts.bottomCallouts(
+        tirePrefix = skin.tireLabel,
+        tiresKpa = TireIds.map(::fresh),
+        metric = metric,
+        load = fresh(PidCatalog.ENGINE_LOAD),
+        throttle = fresh(PidCatalog.THROTTLE),
+        intakeC = fresh(PidCatalog.INTAKE_TEMP),
+        burnLph = burnV,
+        rpm = rpmV,
+        lastSlots = lastSlots
+    )
+    val callouts = listOf(
+        Callout("engine", skin.coolantLabel, coolant, if (milOn) "CHECK ENGINE" else rpmText, if (milOn) ReadoutLevel.Warn else engineLevel, lastSlots["engine"] ?: 0, "engine"),
+        Callout("speed", "SPEED", CarReadouts.text("speed", speedV, metric), null, CarReadouts.level("speed", speedV), lastSlots["speed"] ?: 1, "roof"),
+        Callout("battery", skin.batteryLabel, volts, null, voltLevel, lastSlots["battery"] ?: 2, "battery"),
+        fuelCallout,
+    ) + bottomCallouts
     val calloutsNow = rememberUpdatedState(callouts)
 
     fun lowHighAvg(pid: String, fmt: (Double) -> String): List<Pair<String, String>> {
@@ -286,14 +308,25 @@ fun VehicleStatusHud(
                 val i = key.removePrefix("tire").toIntOrNull() ?: return null
                 val id = TireIds.getOrNull(i) ?: return null
                 val kpa = fresh(id)
-                CalloutDetail(
-                    c.title, c.value, c.level,
-                    listOfNotNull(
-                        kpa?.let { "PRESSURE" to "${it.roundToInt()} kPa / ${(it * KPA_TO_PSI).roundToInt()} PSI" },
-                        tireState(id)?.let { "STATUS" to it },
-                    ) + lowHighAvg(id) { if (metric) "${it.roundToInt()} kPa" else "${(it * KPA_TO_PSI).roundToInt()} PSI" },
-                    "Tyre pressure from the car's sensors. Match the placard on the driver's door jamb, usually 30-36 PSI (210-250 kPa), checked cold. Low pressure wears tyres and costs fuel."
-                )
+                if (TireIds.any { fresh(it) != null } || c.title.startsWith(skin.tireLabel)) {
+                    CalloutDetail(
+                        c.title, c.value, c.level,
+                        listOfNotNull(
+                            kpa?.let { "PRESSURE" to "${it.roundToInt()} kPa / ${(it * KPA_TO_PSI).roundToInt()} PSI" },
+                            tireState(id)?.let { "STATUS" to it },
+                        ) + lowHighAvg(id) { if (metric) "${it.roundToInt()} kPa" else "${(it * KPA_TO_PSI).roundToInt()} PSI" },
+                        "Tyre pressure from the car's sensors. Match the placard on the driver's door jamb, usually 30-36 PSI (210-250 kPa), checked cold. Low pressure wears tyres and costs fuel."
+                    )
+                } else {
+                    val specKey = listOf("load", "throttle", "intake", "flow").getOrNull(i) ?: "load"
+                    val spec = CarReadouts.byKey(specKey)
+                    val pid = spec?.pid ?: PidCatalog.ENGINE_LOAD
+                    CalloutDetail(
+                        c.title, c.value, c.level,
+                        lowHighAvg(pid) { CarReadouts.text(specKey, it, metric) },
+                        spec?.about ?: "Live engine reading from the vehicle computer (shown while TPMS sensors are offline)."
+                    )
+                }
             }
             else -> null
         }
@@ -308,12 +341,69 @@ fun VehicleStatusHud(
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
         Canvas(
-            Modifier.fillMaxSize().pointerInput(Unit) {
-                detectTapGestures { at ->
-                    val boxes = CalloutLayout.boxes(size.width.toFloat(), size.height.toFloat(), density)
-                    val slot = boxes.hit(at.x, at.y, 6.dp.toPx())
-                    val key = calloutsNow.value.firstOrNull { it.slot == slot }?.key
-                    selected = if (key == null || key == selected) null else key
+            Modifier.fillMaxSize().pointerInput(book) {
+                val touchSlopPx = viewConfiguration.touchSlop
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val startPos = down.position
+                    var dragged = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: event.changes.firstOrNull() ?: break
+                        if (!change.pressed) {
+                            if (!dragged) {
+                                val at = change.position
+                                val w = size.width.toFloat()
+                                val h = size.height.toFloat()
+                                val boxes = CalloutLayout.boxes(w, h, density)
+                                val yaw = turn.floatValue
+                                val blend = Turntable.blend(yaw, book.frames.size)
+                                val frame = if (blend.mix > 0f) book.frames[blend.from].mixWith(book.frames[blend.to], blend.mix) else book.frames[blend.from]
+                                val s = minOf((w * 1.14f) / book.w, (boxes.bandHeight * 1.28f) / book.h)
+                                val tx = (w - book.w * s) / 2f
+                                val ty = boxes.bandTop + (boxes.bandHeight - book.h * s) / 2f
+                                fun p(o: Offset) = Offset(tx + o.x * book.w * s, ty + o.y * book.h * s)
+                                fun anchorPos(name: String): Offset = when {
+                                    name == "engine" -> p(frame.anchors.getValue("engine"))
+                                    name == "battery" -> p(frame.anchors.getValue("battery"))
+                                    name == "fuel" -> p(frame.anchors.getValue("fuel"))
+                                    name == "roof" -> frame.anchors["roof"]?.let(::p) ?: p(Offset(0.5f, 0.30f))
+                                    name.startsWith("w") -> frame.wheels.firstOrNull { it.slot == name.drop(1).toIntOrNull() }?.let { p(it.hub) } ?: p(frame.anchors.getValue("engine"))
+                                    else -> p(frame.anchors.getValue("engine"))
+                                }
+                                // 1. Check direct touch on the 3D vehicle anchor area (engine, battery, fuel, roof, or 4 wheels)
+                                val hitAnchorKey = CalloutLayout.hitAnchor(
+                                    x = at.x,
+                                    y = at.y,
+                                    callouts = calloutsNow.value,
+                                    anchorPos = ::anchorPos,
+                                    maxRadius = 32.dp.toPx()
+                                )
+                                // 2. Or check touch on the futuristic callout capsule itself
+                                val slot = boxes.hit(at.x, at.y, 8.dp.toPx())
+                                val hitBoxKey = calloutsNow.value.firstOrNull { it.slot == slot }?.key
+                                val key = hitAnchorKey ?: hitBoxKey
+                                selected = if (key == null || key == selected) null else key
+                                if (selected != null) {
+                                    userInteractingUntil.longValue = SystemClock.uptimeMillis() + 6_000L
+                                }
+                            }
+                            break
+                        }
+                        val totalDx = change.position.x - startPos.x
+                        val totalDy = change.position.y - startPos.y
+                        if (!dragged && hypot(totalDx, totalDy) > touchSlopPx) {
+                            dragged = true
+                        }
+                        if (dragged) {
+                            val dx = change.positionChange().x
+                            if (abs(dx) > 0.1f) {
+                                turn.floatValue = Turntable.drag(turn.floatValue, dx, size.width.toFloat())
+                                userInteractingUntil.longValue = SystemClock.uptimeMillis() + 4_500L
+                            }
+                            change.consume()
+                        }
+                    }
                 }
             }
         ) {
@@ -321,10 +411,11 @@ fun VehicleStatusHud(
             val moving = !lite && (speedNow.value > 3.0)
             val live = LiveCar(
                 coolantC = fresh(PidCatalog.COOLANT), rpm = rpmFraction(), speedKmh = fresh(PidCatalog.SPEED), throttle = fresh(PidCatalog.THROTTLE),
-                load = fresh(PidCatalog.ENGINE_LOAD), fuel = fresh(PidCatalog.FUEL_LEVEL), volts = fresh(PidCatalog.MODULE_VOLTAGE),
+                load = fresh(PidCatalog.ENGINE_LOAD), fuel = fresh(PidCatalog.FUEL_LEVEL), volts = fresh(PidCatalog.MODULE_VOLTAGE) ?: fresh(PidCatalog.ADAPTER_VOLTAGE),
                 mil = milOn, metric = metric, spin = if (moving) spin.floatValue else null, pulse = if (lite) 0f else pulse.floatValue
             )
-            val yaw = if (lite) HOLO_REST_YAW else turn.floatValue
+            // Even in lite mode, reflect manual touch rotation if the user dragged the vehicle.
+            val yaw = turn.floatValue
             ready.intValue // redraw as frames arrive
             val blend = Turntable.blend(yaw, book.frames.size)
             val first = HoloFrames.get(book, blend.from)
@@ -333,7 +424,9 @@ fun VehicleStatusHud(
             // Until both neighbours are decoded (and always in lite mode) show a single frame.
             val mix = if (!lite && first != null && second != null) blend.mix else 0f
             val frame = if (mix > 0f) book.frames[blend.from].mixWith(book.frames[blend.to], mix) else book.frames[blend.from]
-            drawHologram(skin, book, image, second, mix, frame, ScannerRed, tireColor(TireIds[0]), tireColor(TireIds[1]), tireColor(TireIds[2]), tireColor(TireIds[3]), rpmFraction(), live, scanPhase.floatValue, callouts, selected)
+            fun wheelColor(idx: Int): Color = if (fresh(TireIds[idx]) != null) tireColor(TireIds[idx]) else bottomCallouts.getOrNull(idx)?.level?.takeIf { it != ReadoutLevel.Unknown }?.let(::levelColor) ?: DashAmber
+            drawHologram(skin, book, image, second, mix, frame, ScannerRed, wheelColor(0), wheelColor(1), wheelColor(2), wheelColor(3), rpmFraction(), live, scanPhase.floatValue, callouts, selected)
+            for (c in callouts) lastSlots[c.key] = c.slot
         }
         selected?.let { key ->
             detailFor(key)?.let { detail ->
@@ -597,14 +690,18 @@ private fun HoloFrame.mixWith(other: HoloFrame, t: Float): HoloFrame {
 private fun DrawScope.drawBlended(
     a: androidx.compose.ui.graphics.ImageBitmap, b: androidx.compose.ui.graphics.ImageBitmap?, mix: Float,
     dst: androidx.compose.ui.unit.IntSize, off: androidx.compose.ui.unit.IntOffset, alpha: Float,
-    filter: androidx.compose.ui.graphics.ColorFilter
+    filter: androidx.compose.ui.graphics.ColorFilter,
+    blendMode: androidx.compose.ui.graphics.BlendMode = androidx.compose.ui.graphics.BlendMode.SrcOver
 ) {
     if (b == null || mix <= 0.005f) {
-        drawImage(a, dstSize = dst, dstOffset = off, alpha = alpha, colorFilter = filter)
+        drawImage(a, dstSize = dst, dstOffset = off, alpha = alpha, colorFilter = filter, blendMode = blendMode)
         return
     }
     val bounds = androidx.compose.ui.geometry.Rect(off.x.toFloat(), off.y.toFloat(), (off.x + dst.width).toFloat(), (off.y + dst.height).toFloat())
-    drawContext.canvas.saveLayer(bounds, androidx.compose.ui.graphics.Paint().apply { this.alpha = alpha })
+    drawContext.canvas.saveLayer(bounds, androidx.compose.ui.graphics.Paint().apply {
+        this.alpha = alpha
+        this.blendMode = blendMode
+    })
     drawImage(a, dstSize = dst, dstOffset = off, alpha = 1f - mix, colorFilter = filter)
     drawImage(b, dstSize = dst, dstOffset = off, alpha = mix, colorFilter = filter, blendMode = androidx.compose.ui.graphics.BlendMode.Plus)
     drawContext.canvas.restore()
@@ -626,9 +723,9 @@ private fun DrawScope.drawHologram(
     line: Color, lf: Color, rf: Color, lr: Color, rr: Color, rpm: Float, live: LiveCar, scan: Float,
     callouts: List<Callout>, selected: String?
 ) {
-    // The vehicle sits in the band between the callout rows above and below it.
+    // The vehicle sits in the band between the callout rows above and below it, scaled up for maximum presence.
     val boxes = CalloutLayout.boxes(size.width, size.height, 1.dp.toPx())
-    val s = minOf(size.width / book.w, boxes.bandHeight / book.h) * 0.99f
+    val s = minOf((size.width * 1.14f) / book.w, (boxes.bandHeight * 1.28f) / book.h)
     val tx = (size.width - book.w * s) / 2f
     val ty = boxes.bandTop + (boxes.bandHeight - book.h * s) / 2f
     fun p(o: Offset) = Offset(tx + o.x * book.w * s, ty + o.y * book.h * s)
@@ -646,9 +743,9 @@ private fun DrawScope.drawHologram(
     withTransform({ scale(1f, -0.32f, Offset(0f, floorY)) }) {
         drawBlended(image, next, mix, dst, off, 0.20f, androidx.compose.ui.graphics.ColorFilter.tint(line, androidx.compose.ui.graphics.BlendMode.SrcIn))
     }
-    // The hologram: the glow pass in the theme colour, then a lighter pass for the hot cores.
+    // The hologram: the glow pass in the theme colour, then an additive pass for the hot cores.
     drawBlended(image, next, mix, dst, off, 1f, androidx.compose.ui.graphics.ColorFilter.tint(line, androidx.compose.ui.graphics.BlendMode.SrcIn))
-    drawBlended(image, next, mix, dst, off, 0.40f, androidx.compose.ui.graphics.ColorFilter.tint(hot, androidx.compose.ui.graphics.BlendMode.SrcIn))
+    drawBlended(image, next, mix, dst, off, 0.45f, androidx.compose.ui.graphics.ColorFilter.tint(hot, androidx.compose.ui.graphics.BlendMode.SrcIn), androidx.compose.ui.graphics.BlendMode.Plus)
 
     // Wheels: pressure-coloured ring on each tyre (the two nearest to the viewer at full strength) and spokes that turn with speed.
     val spin = live.spin ?: 0f
@@ -684,12 +781,16 @@ private fun DrawScope.drawHologram(
     drawCircle(voltColor(live.volts).copy(alpha = 0.3f), 8.dp.toPx(), battery)
     drawCircle(voltColor(live.volts), 3.5.dp.toPx(), battery)
     val tank = a("fuel")
-    val frac = ((live.fuel ?: 0.0) / 100.0).toFloat().coerceIn(0f, 1f)
-    val tw = 34.dp.toPx()
-    val th = 6.dp.toPx()
-    drawRect(Color.Black.copy(alpha = 0.7f), Offset(tank.x - tw / 2, tank.y - th / 2), Size(tw, th))
-    drawRect(fuelColor(live.fuel), Offset(tank.x - tw / 2, tank.y - th / 2), Size(tw * frac, th))
-    drawRect(fuelColor(live.fuel).copy(alpha = 0.8f), Offset(tank.x - tw / 2, tank.y - th / 2), Size(tw, th), style = Stroke(thin))
+    if (live.fuel != null) {
+        val frac = (live.fuel / 100.0).toFloat().coerceIn(0f, 1f)
+        val tw = 34.dp.toPx()
+        val th = 6.dp.toPx()
+        drawRect(Color.Black.copy(alpha = 0.7f), Offset(tank.x - tw / 2, tank.y - th / 2), Size(tw, th))
+        drawRect(fuelColor(live.fuel), Offset(tank.x - tw / 2, tank.y - th / 2), Size(tw * frac, th))
+        drawRect(fuelColor(live.fuel).copy(alpha = 0.8f), Offset(tank.x - tw / 2, tank.y - th / 2), Size(tw, th), style = Stroke(thin))
+    } else {
+        drawCircle(fuelColor(null).copy(alpha = 0.25f), 6.dp.toPx(), tank)
+    }
     val tail = a("tail")
     val to = a("tailTo")
     val len = hypot(to.x - tail.x, to.y - tail.y).coerceAtLeast(1f)
@@ -713,19 +814,58 @@ private fun DrawScope.drawHologram(
     val by = size.height * (0.18f + 0.62f * scan)
     drawRect(Brush.verticalGradient(listOf(Color.Transparent, line.copy(alpha = 0.16f), Color.Transparent), startY = by - 14.dp.toPx(), endY = by + 14.dp.toPx()), Offset(0f, by - 14.dp.toPx()), Size(size.width, 28.dp.toPx()))
 
+    fun anchorOf(name: String): Offset = when {
+        name == "engine" -> engine
+        name == "battery" -> battery
+        name == "fuel" -> tank
+        name == "roof" -> frame.anchors["roof"]?.let(::p) ?: p(Offset(0.5f, 0.30f))
+        name.startsWith("w") -> frame.wheels.firstOrNull { it.slot == name.drop(1).toIntOrNull() }?.let { p(it.hub) } ?: engine
+        else -> engine
+    }
+
+    // Attention Glow Pass: any live OBD PID area that needs attention (Warn / Bad) or is actively selected
+    // emits a pulsing volumetric radial aura and diagnostic ring right on that part of the 3D vehicle.
+    val pulseWave = 0.5f + 0.5f * sin(live.pulse * 2f * PI.toFloat())
+    for (c in callouts) {
+        val needsAttention = c.level == ReadoutLevel.Warn || c.level == ReadoutLevel.Bad
+        val isSel = c.key == selected
+        if (needsAttention || isSel) {
+            val pt = anchorOf(c.anchor)
+            val glowCol = if (c.level == ReadoutLevel.Bad) AlertRed else if (c.level == ReadoutLevel.Warn) DashAmber else levelColor(c.level)
+            val baseR = when {
+                c.anchor == "engine" -> perMetre * 0.62f
+                c.anchor.startsWith("w") -> perMetre * 0.48f
+                else -> perMetre * 0.42f
+            }
+            val glowR = baseR * (0.90f + 0.28f * pulseWave)
+            val alphaBoost = if (c.level == ReadoutLevel.Bad) 0.62f else if (needsAttention) 0.48f else 0.38f
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        glowCol.copy(alpha = alphaBoost),
+                        glowCol.copy(alpha = alphaBoost * 0.40f),
+                        Color.Transparent
+                    ),
+                    center = pt,
+                    radius = glowR
+                ),
+                radius = glowR,
+                center = pt
+            )
+            val ringR = baseR * (0.34f + 0.16f * pulseWave)
+            drawCircle(
+                color = glowCol.copy(alpha = 0.85f),
+                radius = ringR,
+                center = pt,
+                style = Stroke(width = thin * 1.8f)
+            )
+        }
+    }
+
     // Live-data callouts: boxes with leader lines to the part each one describes.
     drawCallouts(
         callouts, boxes,
-        { name ->
-            when {
-                name == "engine" -> engine
-                name == "battery" -> battery
-                name == "fuel" -> tank
-                name == "roof" -> p(Offset(0.5f, 0.30f))
-                name.startsWith("w") -> frame.wheels.firstOrNull { it.slot == name.drop(1).toIntOrNull() }?.let { p(it.hub) } ?: engine
-                else -> engine
-            }
-        },
+        ::anchorOf,
         line, selected, ::levelColor
     )
 
@@ -824,6 +964,24 @@ fun VehicleDashPane(
     appsContent: @Composable (Modifier) -> Unit
 ) {
     val skin = CockpitSkin.current()
+    val edition = ThemeState.edition
+    val panelTitle = when (skin) {
+        CockpitSkin.Future -> when (edition) {
+            com.aiconsole.kittlauncher2.ui.theme.FilmEdition.HillValley2015 -> "2015 Hover DeLorean // Mr. Fusion"
+            com.aiconsole.kittlauncher2.ui.theme.FilmEdition.Frontier1885 -> "1885 Steam Time Machine // Boiler"
+            else -> "DeLorean Time Machine // 1.21 GW"
+        }
+        CockpitSkin.Kitt -> when (ThemeState.theme) {
+            com.aiconsole.kittlauncher2.ui.theme.UiTheme.Karr -> "KARR Prototype Status"
+            com.aiconsole.kittlauncher2.ui.theme.UiTheme.SuperPursuit -> "Super Pursuit Aerodynamics"
+            com.aiconsole.kittlauncher2.ui.theme.UiTheme.NightVision -> "FLIR Thermal Vehicle Scan"
+            com.aiconsole.kittlauncher2.ui.theme.UiTheme.RetroVfd -> "1984 VFD Instrument Status"
+            com.aiconsole.kittlauncher2.ui.theme.UiTheme.Outrun -> "Outrun Turbo Telemetry"
+            com.aiconsole.kittlauncher2.ui.theme.UiTheme.Stealth -> "Stealth Low-Observable HUD"
+            else -> skin.hudTitle
+        }
+        else -> skin.hudTitle
+    }
     var showApps by rememberSaveable { mutableStateOf(false) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth().height(30.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -833,10 +991,67 @@ fun VehicleDashPane(
         if (showApps) {
             appsContent(Modifier.weight(1f).fillMaxWidth())
         } else {
-            KittPanel(title = skin.hudTitle, modifier = Modifier.weight(1f).fillMaxWidth(), accent = DashAmber) {
-                VehicleStatusHud(reading, metric, rpmFraction, Modifier.fillMaxSize())
+            KittPanel(title = panelTitle, modifier = Modifier.weight(1f).fillMaxWidth(), accent = DashAmber) {
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    VehicleStatusHud(reading, metric, rpmFraction, Modifier.weight(1f).fillMaxWidth())
+                    if (skin == CockpitSkin.Future) {
+                        BttfFluxStrip(reading, metric, edition, Modifier.fillMaxWidth().height(36.dp))
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun BttfFluxStrip(
+    reading: (String) -> PidReading?,
+    metric: Boolean,
+    edition: com.aiconsole.kittlauncher2.ui.theme.FilmEdition?,
+    modifier: Modifier = Modifier
+) {
+    fun fresh(id: String) = reading(id)?.takeIf { System.currentTimeMillis() - it.timestamp < 120_000 }?.value
+    val speedKmh = fresh(PidCatalog.SPEED)
+    val speedDisplay = speedKmh?.let { if (metric) it.roundToInt() else (it * 0.621371).roundToInt() }
+    val coolant = fresh(PidCatalog.COOLANT)?.let { if (metric) it.roundToInt() else (it * 9.0 / 5.0 + 32.0).roundToInt() }
+    val volts = fresh(PidCatalog.MODULE_VOLTAGE) ?: fresh(PidCatalog.ADAPTER_VOLTAGE)
+    val load = fresh(PidCatalog.ENGINE_LOAD)?.roundToInt()
+    val snap = com.aiconsole.kittlauncher2.ui.theme.LiveTelemetrySnapshot(
+        speed = speedDisplay,
+        speedUnit = if (metric) "KM/H" else "MPH",
+        coolantTemp = coolant,
+        tempUnit = if (metric) "°C" else "°F",
+        volts = volts,
+        loadPct = load
+    )
+    val bttf = com.aiconsole.kittlauncher2.ui.theme.FilmHudText.liveBttfCircuits(snap, edition)
+    val shape = MaterialTheme.shapes.extraSmall
+    Row(
+        modifier
+            .clip(shape)
+            .background(Color(0xFF0A0A0C))
+            .skinFrame(shape, DashAmber)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1.15f)) {
+            Text(
+                "FLUX: ${bttf.fluxStatus}",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                color = if (bttf.fluxFraction >= 1f) LedGreen else DashAmber,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 1
+            )
+            Text(
+                bttf.coreStatus,
+                style = MaterialTheme.typography.labelSmall,
+                color = DashWhite,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 1
+            )
+        }
+        LedBarGauge(bttf.fluxFraction, Modifier.weight(0.85f).height(14.dp), segments = 14, color = if (bttf.fluxFraction >= 1f) LedGreen else ScannerRed)
     }
 }
 
@@ -954,30 +1169,107 @@ fun Modifier.skinFrame(shape: androidx.compose.ui.graphics.Shape, accent: Color,
 @Composable
 fun SkinTerminal(modifier: Modifier = Modifier) {
     val skin = CockpitSkin.current()
+    val edition = ThemeState.edition
+    val app = LocalContext.current.applicationContext as? KittApplication
+    val readings by (app?.obd?.displayReadings ?: kotlinx.coroutines.flow.MutableStateFlow(emptyMap())).collectAsState()
+    val hz by (app?.obd?.refreshHz ?: kotlinx.coroutines.flow.MutableStateFlow(0f)).collectAsState()
+    val dtcs by (app?.obd?.dtcs ?: kotlinx.coroutines.flow.MutableStateFlow(null)).collectAsState()
+    val speaking by (app?.kittVoice?.speaking ?: kotlinx.coroutines.flow.MutableStateFlow(false)).collectAsState()
+    val metric by (app?.settings?.metricUnits?.state ?: kotlinx.coroutines.flow.MutableStateFlow(false)).collectAsState()
+    val lite = LocalLiteMode.current
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(lite) {
+        if (lite) return@LaunchedEffect
+        while (true) {
+            delay(450)
+            tick = (tick + 1) and 0x7FFF
+        }
+    }
+    fun fresh(id: String) = readings[id]?.takeIf { System.currentTimeMillis() - it.timestamp < 120_000 }?.value
+    val speedKmh = fresh(PidCatalog.SPEED)
+    val speedDisp = speedKmh?.let { if (metric) it.roundToInt() else (it * 0.621371).roundToInt() }
+    val coolantDisp = fresh(PidCatalog.COOLANT)?.let { if (metric) it.roundToInt() else (it * 9.0 / 5.0 + 32.0).roundToInt() }
+    val intakeDisp = fresh(PidCatalog.INTAKE_TEMP)?.let { if (metric) it.roundToInt() else (it * 9.0 / 5.0 + 32.0).roundToInt() }
+    val volts = fresh(PidCatalog.MODULE_VOLTAGE) ?: fresh(PidCatalog.ADAPTER_VOLTAGE)
+    val snap = com.aiconsole.kittlauncher2.ui.theme.LiveTelemetrySnapshot(
+        rpm = fresh(PidCatalog.RPM)?.roundToInt(),
+        speed = speedDisp,
+        speedUnit = if (metric) "KM/H" else "MPH",
+        coolantTemp = coolantDisp,
+        tempUnit = if (metric) "°C" else "°F",
+        throttlePct = fresh(PidCatalog.THROTTLE)?.roundToInt(),
+        loadPct = fresh(PidCatalog.ENGINE_LOAD)?.roundToInt(),
+        volts = volts,
+        fuelPct = fresh(PidCatalog.FUEL_LEVEL)?.roundToInt(),
+        intakeTemp = intakeDisp,
+        hz = hz.toDouble(),
+        dtcCount = dtcs?.all?.size ?: 0,
+        linked = hz > 0f || readings.isNotEmpty(),
+        speaking = speaking,
+        tick = tick
+    )
+
     val shape = MaterialTheme.shapes.small
     val mono = FontFamily.Monospace
     Box(modifier.clip(shape).background(Color.Black).skinFrame(shape, ScannerRed).padding(8.dp)) {
         when (skin) {
             CockpitSkin.Kitt -> Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                VoiceModulator(active = false, modifier = Modifier.weight(1f).fillMaxHeight())
-                Column(Modifier.weight(1.4f)) {
-                    Text("KITT CO-PILOT", style = MaterialTheme.typography.titleSmall, color = ScannerRed)
-                    Text("VOICE CIRCUITS ONLINE", style = MaterialTheme.typography.labelSmall, color = DashAmber)
+                VoiceModulator(active = speaking, modifier = Modifier.weight(0.95f).fillMaxHeight())
+                Column(Modifier.weight(1.45f), verticalArrangement = Arrangement.SpaceEvenly) {
+                    val title = when (ThemeState.theme) {
+                        com.aiconsole.kittlauncher2.ui.theme.UiTheme.Karr -> "KARR PROTOTYPE CPU"
+                        com.aiconsole.kittlauncher2.ui.theme.UiTheme.SuperPursuit -> "KITT // SPM CONSOLE"
+                        com.aiconsole.kittlauncher2.ui.theme.UiTheme.NightVision -> "KITT // FLIR RECON"
+                        com.aiconsole.kittlauncher2.ui.theme.UiTheme.RetroVfd -> "KNIGHT 2000 // VFD BUS"
+                        com.aiconsole.kittlauncher2.ui.theme.UiTheme.Outrun -> "KITT // OUTRUN TURBO"
+                        com.aiconsole.kittlauncher2.ui.theme.UiTheme.Stealth -> "KITT // STEALTH MODE"
+                        else -> "KNIGHT 2000 CO-PILOT"
+                    }
+                    Text(title, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), color = ScannerRed, maxLines = 1)
+                    Text(
+                        if (snap.linked) "OBD LINK: %.1f HZ // ${snap.dtcCount} DTC".format(java.util.Locale.US, snap.hz) else "VOICE CIRCUITS ONLINE",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (snap.dtcCount > 0) AlertRed else DashAmber,
+                        fontFamily = mono,
+                        maxLines = 1
+                    )
+                    Text(
+                        "RPM ${snap.rpm ?: "--"} | ${snap.speed ?: "--"} ${snap.speedUnit} | ${snap.volts?.let { "%.1fV".format(java.util.Locale.US, it) } ?: "--V"}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = DashWhite,
+                        fontFamily = mono,
+                        maxLines = 1
+                    )
                 }
             }
-            CockpitSkin.Terminator -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
-                listOf("0300: A0 0A 38  LDY #10  SEC", "MODE: SCAN   CPU: ONLINE", "ANALYSIS: NO THREAT", "MISSION: DRIVE").forEach {
-                    Text(it, style = MaterialTheme.typography.labelMedium, color = ScannerRed, fontFamily = mono, maxLines = 1)
+            CockpitSkin.Terminator -> {
+                val regs = com.aiconsole.kittlauncher2.ui.theme.FilmHudText.cpuRegisters(snap, edition)
+                val code = com.aiconsole.kittlauncher2.ui.theme.FilmHudText.liveTerminatorCode(snap, edition)
+                val start = 1 + (tick % 6)
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
+                    Text(regs, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = DashWhite, fontFamily = mono, maxLines = 1)
+                    code.drop(start).take(3).forEach {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = ScannerRed, fontFamily = mono, maxLines = 1)
+                    }
+                    Text(code.last(), style = MaterialTheme.typography.labelSmall, color = if (snap.dtcCount > 0) AlertRed else DashAmber, fontFamily = mono, maxLines = 1)
                 }
             }
-            CockpitSkin.Matrix -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
-                listOf(">_ OPERATOR CONSOLE", "TRACE PROGRAM: RUNNING", "SIGNAL: CLEAN", "STANDING BY_").forEach {
-                    Text(it, style = MaterialTheme.typography.labelMedium, color = ScannerRed, fontFamily = mono, maxLines = 1)
+            CockpitSkin.Matrix -> {
+                val lines = com.aiconsole.kittlauncher2.ui.theme.FilmHudText.liveMatrixConsole(snap, edition)
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
+                    listOf(lines[0], lines[1], lines[2], lines[4], lines[6]).forEachIndexed { idx, line ->
+                        Text(
+                            line,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = if (idx == 0) FontWeight.Bold else FontWeight.Normal),
+                            color = if (idx == 0) DashWhite else ScannerRed,
+                            fontFamily = mono,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
             CockpitSkin.Future -> {
                 var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-                val departed = remember { System.currentTimeMillis() }
                 LaunchedEffect(Unit) {
                     while (true) {
                         now = System.currentTimeMillis()
@@ -985,23 +1277,52 @@ fun SkinTerminal(modifier: Modifier = Modifier) {
                     }
                 }
                 val fmt = remember { java.text.SimpleDateFormat("HH:mm", java.util.Locale.US) }
+                val bttf = com.aiconsole.kittlauncher2.ui.theme.FilmHudText.liveBttfCircuits(snap, edition)
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     listOf(
-                        Triple("DESTINATION TIME", "--:--", Color(0xFFFF3B30)),
+                        Triple("DEST ${bttf.destinationFull.take(11)}", bttf.destinationShort, Color(0xFFFF3B30)),
                         Triple("PRESENT TIME", fmt.format(java.util.Date(now)), LedGreen),
-                        Triple("LAST TIME DEPARTED", fmt.format(java.util.Date(departed)), DashAmber)
+                        Triple("LAST ${bttf.lastDepartedFull.take(11)}", bttf.lastDepartedShort, DashAmber)
                     ).forEach { (label, value, color) ->
                         Row(Modifier.weight(1f).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(label, Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = DashGrey, maxLines = 1)
-                            SegmentDisplay(value, Modifier.weight(1f).fillMaxHeight(), color, cells = 5)
+                            Text(label, Modifier.weight(1.15f), style = MaterialTheme.typography.labelSmall, color = DashWhite, fontFamily = mono, maxLines = 1)
+                            SegmentDisplay(value, Modifier.weight(0.85f).fillMaxHeight(), color, cells = 5)
                         }
                     }
+                    Text(
+                        bttf.fluxStatus,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = if (bttf.fluxFraction >= 1f) LedGreen else DashAmber,
+                        fontFamily = mono,
+                        maxLines = 1
+                    )
                 }
             }
-            CockpitSkin.RoboCop -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
-                Text("PRIME DIRECTIVES", style = MaterialTheme.typography.labelMedium, color = DashYellow, fontFamily = mono, maxLines = 1)
-                listOf("1. SERVE THE PUBLIC TRUST", "2. PROTECT THE INNOCENT", "3. UPHOLD THE LAW", "4. [CLASSIFIED]").forEach {
-                    Text(it, style = MaterialTheme.typography.labelSmall, color = ScannerRed, fontFamily = mono, maxLines = 1)
+            CockpitSkin.RoboCop -> {
+                val dirs = com.aiconsole.kittlauncher2.ui.theme.FilmHudText.liveRobocopDirectives(edition)
+                val vitals = com.aiconsole.kittlauncher2.ui.theme.FilmHudText.liveRobocopTelemetry(snap, edition)
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
+                    Text(
+                        when (edition) {
+                            com.aiconsole.kittlauncher2.ui.theme.FilmEdition.Ed209 -> "ED-209 PACIFICATION"
+                            com.aiconsole.kittlauncher2.ui.theme.FilmEdition.DeltaCity -> "DELTA CITY DIRECTIVES"
+                            else -> "OCP PRIME DIRECTIVES"
+                        },
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = DashYellow,
+                        fontFamily = mono,
+                        maxLines = 1
+                    )
+                    dirs.take(3).forEach { (n, text) ->
+                        Text("$n. $text", style = MaterialTheme.typography.labelSmall, color = ScannerRed, fontFamily = mono, maxLines = 1)
+                    }
+                    Text(
+                        "${vitals[1].second} // ${vitals[3].second}",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = DashWhite,
+                        fontFamily = mono,
+                        maxLines = 1
+                    )
                 }
             }
         }

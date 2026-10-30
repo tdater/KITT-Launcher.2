@@ -192,22 +192,22 @@ fun BrowserView(
 
 @Composable
 private fun TabStrip(session: BrowserSession) {
-    Row(Modifier.fillMaxWidth().height(36.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(Modifier.fillMaxWidth().height(28.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         LazyRow(Modifier.weight(1f).fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             itemsIndexed(session.tabs, key = { _, t -> t.id }) { index, tab ->
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     KittButton(
                         label = (if (tab.playing) "♪ " else "") + (tab.title?.take(18) ?: tab.host ?: "New tab"),
                         onClick = { session.select(index) },
-                        modifier = Modifier.widthIn(min = 80.dp, max = 180.dp).fillMaxHeight(),
+                        modifier = Modifier.widthIn(min = 72.dp, max = 160.dp).fillMaxHeight(),
                         color = ScannerRed,
                         active = index == session.currentIndex
                     )
-                    KittButton("✕", { session.closeTab(index) }, Modifier.width(32.dp).fillMaxHeight(), DashGrey)
+                    KittButton("✕", { session.closeTab(index) }, Modifier.width(26.dp).fillMaxHeight(), DashGrey)
                 }
             }
         }
-        KittButton("+ Tab", { session.newTab() }, Modifier.width(72.dp).fillMaxHeight(), LedGreen, enabled = session.tabs.size < MAX_TABS)
+        KittButton("+ Tab", { session.newTab() }, Modifier.width(62.dp).fillMaxHeight(), LedGreen, enabled = session.tabs.size < MAX_TABS)
     }
 }
 
@@ -216,32 +216,101 @@ private const val MAX_TABS = 8
 @Composable
 private fun Toolbar(session: BrowserSession, tab: BrowserTab, bookmarks: KittSettings.Pref<String>, extraTools: @Composable () -> Unit) {
     var more by remember { mutableStateOf(false) }
+    var editingUrl by remember { mutableStateOf(false) }
+    var urlInput by remember(tab.url) { mutableStateOf(tab.url.orEmpty()) }
     var message by remember { mutableStateOf<String?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(Modifier.fillMaxWidth().height(36.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            KittButton("Back", { session.goBack() }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
-            KittButton("Reload", { session.reload() }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
-            KittButton("▲", { session.run(PageScripts.scrollBy(-0.8)) }, Modifier.weight(0.6f).fillMaxHeight(), DashAmber)
-            KittButton("▼", { session.run(PageScripts.scrollBy(0.8)) }, Modifier.weight(0.6f).fillMaxHeight(), DashAmber)
+        Row(Modifier.fillMaxWidth().height(34.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            KittButton("◀", { session.goBack() }, Modifier.weight(0.55f).fillMaxHeight(), DashAmber, enabled = session.canGoBack())
+            KittButton("▶", { session.goForward() }, Modifier.weight(0.55f).fillMaxHeight(), DashAmber, enabled = session.canGoForward())
+            KittButton("↻", { session.reload() }, Modifier.weight(0.55f).fillMaxHeight(), DashAmber)
+            KittButton("🏠 Sites", { session.showPicker() }, Modifier.weight(0.85f).fillMaxHeight(), DashAmber)
             KittButton(
-                "✕ Popups",
-                { session.run(PageScripts.CLOSE_POPUPS) { n -> message = if (n == "0") "No pop-ups found." else "Closed $n pop-up(s)." } },
-                Modifier.weight(1.2f).fillMaxHeight(),
+                label = (if (session.blockedCount > 0) "🛡${session.blockedCount} " else "🔒 ") + (tab.host?.removePrefix("www.") ?: "Address"),
+                onClick = {
+                    urlInput = tab.url.orEmpty()
+                    editingUrl = !editingUrl
+                },
+                modifier = Modifier.weight(1.7f).fillMaxHeight(),
+                color = DashAmber,
+                active = editingUrl
+            )
+            KittButton("▲", { session.run(PageScripts.scrollBy(-0.75)) }, Modifier.weight(0.5f).fillMaxHeight(), DashAmber)
+            KittButton("▼", { session.run(PageScripts.scrollBy(0.75)) }, Modifier.weight(0.5f).fillMaxHeight(), DashAmber)
+            KittButton(
+                if (tab.playing) "⏸ Video" else "▶ Video",
+                {
+                    session.run(PageScripts.VIDEO_PLAY_PAUSE) { res ->
+                        message = when (res) {
+                            "playing" -> "Video playback started."
+                            "paused" -> "Video paused."
+                            else -> "Tap a video on the page first."
+                        }
+                    }
+                },
+                Modifier.weight(1.0f).fillMaxHeight(),
+                LedGreen,
+                active = tab.playing
+            )
+            KittButton(
+                "⛶ Focus",
+                {
+                    session.focusMedia { state ->
+                        message = when (state) {
+                            "on" -> "Focused player to full window (tap Focus again to restore)."
+                            "off" -> "Restored normal page layout."
+                            else -> "No video or game player found on this page yet."
+                        }
+                    }
+                },
+                Modifier.weight(0.9f).fillMaxHeight(),
                 ScannerRed
             )
             KittButton(
-                "★ Save",
-                {
-                    val url = tab.url ?: return@KittButton
-                    val label = tab.title?.take(40)?.takeIf { it.isNotBlank() } ?: StreamUrls.titleOf(url)
-                    bookmarks.set(StreamSites.encode(StreamSites.decode(bookmarks.value) + StreamSite(label, url)))
-                    message = "Saved \"$label\" to My sites (tap SITES to see it)."
-                },
-                Modifier.weight(1f).fillMaxHeight(),
-                LedGreen
+                if (session.immersive) "⛶ Normal" else "⛶ Full",
+                { session.immersive = !session.immersive },
+                Modifier.weight(0.9f).fillMaxHeight(),
+                if (session.immersive) ScannerRed else DashAmber,
+                active = session.immersive
             )
-            KittButton("Sites", { session.showPicker() }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
-            KittButton(if (more) "Less" else "More", { more = !more }, Modifier.weight(1f).fillMaxHeight(), LedGreen, active = more)
+            KittButton(
+                "✕ Popups",
+                { session.run(PageScripts.CLOSE_POPUPS) { n -> message = if (n == "0") "No pop-ups found." else "Closed $n pop-up(s)." } },
+                Modifier.weight(0.9f).fillMaxHeight(),
+                ScannerRed
+            )
+            KittButton(if (more) "Less" else "⚙ More", { more = !more }, Modifier.weight(0.85f).fillMaxHeight(), LedGreen, active = more)
+        }
+        if (editingUrl) {
+            val navTarget = StreamUrls.normalizeOrSearch(urlInput)
+            Row(Modifier.fillMaxWidth().height(42.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                KittTextField(
+                    value = urlInput,
+                    onValueChange = { urlInput = it },
+                    placeholder = "Enter web address or search query…",
+                    modifier = Modifier.weight(1f),
+                    onDone = {
+                        navTarget?.let {
+                            editingUrl = false
+                            session.open(it, StreamUrls.titleOf(it))
+                        }
+                    }
+                )
+                KittButton(
+                    "Go",
+                    {
+                        navTarget?.let {
+                            editingUrl = false
+                            session.open(it, StreamUrls.titleOf(it))
+                        }
+                    },
+                    Modifier.height(40.dp).width(64.dp),
+                    LedGreen,
+                    active = navTarget != null,
+                    enabled = navTarget != null
+                )
+                KittButton("✕", { editingUrl = false }, Modifier.height(40.dp).width(42.dp), DashGrey)
+            }
         }
         if (more) {
             // Site options live in settings, not Compose state: watch them so the buttons show
@@ -252,7 +321,38 @@ private fun Toolbar(session: BrowserSession, tab: BrowserTab, bookmarks: KittSet
             val ads = session.blocksAds(tab)
             val zoom = session.textZoom(tab)
             val saver = session.dataSaver(tab)
-            LazyRow(Modifier.fillMaxWidth().height(36.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            LazyRow(Modifier.fillMaxWidth().height(32.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                item { KittButton("⏪ -15s", { session.run(PageScripts.videoSeekBy(-15)) }, Modifier.fillMaxHeight(), DashAmber) }
+                item { KittButton("⏩ +15s", { session.run(PageScripts.videoSeekBy(15)) }, Modifier.fillMaxHeight(), DashAmber) }
+                item {
+                    KittButton("Speed", {
+                        session.run(PageScripts.VIDEO_CYCLE_SPEED) { r ->
+                            if (r != "none") message = "Playback speed: $r"
+                        }
+                    }, Modifier.fillMaxHeight(), DashAmber)
+                }
+                item {
+                    KittButton("🔊 Boost", {
+                        session.run(PageScripts.VIDEO_UNMUTE_BOOST) { r ->
+                            if (r != "none") message = "Audio unmuted & volume set to 100%."
+                        }
+                    }, Modifier.fillMaxHeight(), LedGreen)
+                }
+                item { KittButton("▲ Page", { session.run(PageScripts.scrollBy(-0.8)) }, Modifier.fillMaxHeight(), DashAmber) }
+                item { KittButton("▼ Page", { session.run(PageScripts.scrollBy(0.8)) }, Modifier.fillMaxHeight(), DashAmber) }
+                item {
+                    KittButton(
+                        "★ Save",
+                        {
+                            val url = tab.url ?: return@KittButton
+                            val label = tab.title?.take(40)?.takeIf { it.isNotBlank() } ?: StreamUrls.titleOf(url)
+                            bookmarks.set(StreamSites.encode(StreamSites.decode(bookmarks.value) + StreamSite(label, url)))
+                            message = "Saved \"$label\" to My sites (tap SITES to see it)."
+                        },
+                        Modifier.fillMaxHeight(),
+                        LedGreen
+                    )
+                }
                 // Google sign-in always loads as mobile (see SiteSettings.forcesMobile).
                 item { KittButton(if (desktop) "Desktop" else "Mobile", { session.updateSite { it.copy(desktop = !desktop) } }, Modifier.fillMaxHeight(), LedGreen, active = desktop, enabled = !SiteSettings.forcesMobile(tab.host)) }
                 item { KittButton("Dark", { session.updateSite { it.copy(dark = !dark) } }, Modifier.fillMaxHeight(), LedGreen, active = dark) }

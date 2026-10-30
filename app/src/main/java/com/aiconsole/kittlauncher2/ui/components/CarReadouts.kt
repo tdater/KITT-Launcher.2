@@ -13,6 +13,7 @@ data class CarReadout(val key: String, val label: String, val pid: String, val a
 object CarReadouts {
     private const val KMH_TO_MPH = 0.621371
     private const val LITERS_PER_GALLON = 3.78541
+    private const val KPA_TO_PSI = 0.145038
 
     val ALL = listOf(
         CarReadout("speed", "SPEED", PidCatalog.SPEED, "Road speed from the engine computer. The GPS speed on the status strip is the fallback when the adapter is offline."),
@@ -76,6 +77,69 @@ object CarReadouts {
             "intake" -> if (value > 70) ReadoutLevel.Bad else if (value > 55) ReadoutLevel.Warn else ReadoutLevel.Ok
             else -> ReadoutLevel.Ok
         }
+    }
+
+    /**
+     * Builds the four bottom callout boxes (slots 4..7, anchored to wheels w0..w3).
+     * Shows the four tyre pressures when any TPMS sensor reports (or before OBD connects);
+     * automatically falls back to live Mode 01 engine/drivetrain readings (LOAD, THROTTLE, INTAKE,
+     * BURN/RPM) when OBD is streaming Mode 01 data on a vehicle whose TPMS is not on standard CAN.
+     */
+    fun bottomCallouts(
+        tirePrefix: String,
+        tiresKpa: List<Double?>,
+        metric: Boolean,
+        load: Double?,
+        throttle: Double?,
+        intakeC: Double?,
+        burnLph: Double?,
+        rpm: Double? = null,
+        lastSlots: Map<String, Int> = emptyMap()
+    ): List<Callout> {
+        val hasAnyTpms = tiresKpa.any { it != null }
+        val hasMode01 = listOf(load, throttle, intakeC, burnLph, rpm).any { it != null }
+        if (hasAnyTpms || !hasMode01) {
+            val corners = listOf("FL", "FR", "RL", "RR")
+            return (0 until 4).map { i ->
+                val kpa = tiresKpa.getOrNull(i)
+                val value = if (kpa == null) "--" else if (metric) "${kpa.roundToInt()} kPa" else "${(kpa * KPA_TO_PSI).roundToInt()} PSI"
+                val psi = kpa?.times(KPA_TO_PSI)
+                val sub = when {
+                    psi == null -> null
+                    psi < 26.0 -> "LOW"
+                    psi > 40.0 -> "HIGH"
+                    else -> "OK"
+                }
+                val lvl = when {
+                    psi == null -> ReadoutLevel.Unknown
+                    psi in 26.0..40.0 -> ReadoutLevel.Ok
+                    else -> ReadoutLevel.Bad
+                }
+                val key = "tire$i"
+                Callout(key, "$tirePrefix ${corners[i]}", value, sub, lvl, lastSlots[key] ?: (4 + i), "w$i")
+            }
+        }
+        val fourthTitle: String
+        val fourthValue: String
+        val fourthSub: String?
+        val fourthLevel: ReadoutLevel
+        if (burnLph != null || rpm == null) {
+            fourthTitle = "BURN"
+            fourthValue = text("flow", burnLph, metric)
+            fourthSub = if (burnLph != null) "FUEL RATE" else null
+            fourthLevel = if (burnLph != null) ReadoutLevel.Ok else ReadoutLevel.Unknown
+        } else {
+            fourthTitle = "RPM"
+            fourthValue = "%,d rpm".format(java.util.Locale.US, rpm.roundToInt())
+            fourthSub = "ENGINE"
+            fourthLevel = ReadoutLevel.Ok
+        }
+        return listOf(
+            Callout("tire0", "LOAD", text("load", load, metric), if (load != null) "ENGINE" else null, level("load", load), lastSlots["tire0"] ?: 4, "w0"),
+            Callout("tire1", "THROTTLE", text("throttle", throttle, metric), if (throttle != null) "PEDAL" else null, level("throttle", throttle), lastSlots["tire1"] ?: 5, "w1"),
+            Callout("tire2", "INTAKE", text("intake", intakeC, metric), if (intakeC != null) "AIR TEMP" else null, level("intake", intakeC), lastSlots["tire2"] ?: 6, "w2"),
+            Callout("tire3", fourthTitle, fourthValue, fourthSub, fourthLevel, lastSlots["tire3"] ?: 7, "w3")
+        )
     }
 }
 

@@ -19,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -63,6 +64,7 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
     // Main thread only.
     private val queue = ArrayDeque<Utterance>()
     private var worker: Job? = null
+    private var ducked = false
 
     private val _speaking = MutableStateFlow(false)
     val speaking: StateFlow<Boolean> = _speaking.asStateFlow()
@@ -133,8 +135,11 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
      */
     fun speak(text: String, interrupt: Boolean = true, urgent: Boolean = false, deviceOnly: Boolean = false, character: FilmCharacter? = null) {
         if (text.isBlank()) return
+        // Mark speaking immediately so WakeWordListener stands down while the voice model loads and synthesizes.
+        _speaking.value = true
         main.launch {
-            if (interrupt) haltPlayback()
+            if (interrupt) haltPlayback(keepSpeakingFlag = true)
+            _speaking.value = true
             queue.addLast(Utterance(text, urgent, deviceOnly, character))
             if (worker?.isActive != true) worker = main.launch { drain() }
         }
@@ -151,28 +156,46 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
         }
     }
 
-    private fun haltPlayback() {
+    private fun ensureDucked() {
+        if (!ducked) {
+            ducked = true
+            ducker.duck()
+        }
+    }
+
+    private fun releaseDucker() {
+        if (ducked) {
+            ducked = false
+            ducker.release()
+        }
+    }
+
+    private fun haltPlayback(keepSpeakingFlag: Boolean = false) {
         _speakingAs.value = null
         queue.clear()
         worker?.cancel()
         worker = null
         if (ready) tts.stop()
-        _speaking.value = false
+        releaseDucker()
+        if (!keepSpeakingFlag) _speaking.value = false
     }
 
     private suspend fun drain() {
         com.aiconsole.kittlauncher2.data.ReturnHome.noteAudio()
-        // Duck music/video for the whole queue so KITT is always heard.
-        ducker.duck()
+        _speaking.value = true
         try {
             while (true) {
                 val next = queue.removeFirstOrNull() ?: break
                 say(next)
             }
         } finally {
-            _speaking.value = false
             _speakingAs.value = null
-            ducker.release()
+            releaseDucker()
+            // Hold speaking=true briefly so room echo settles before any wake-word session can open.
+            if (queue.isEmpty()) {
+                runCatching { delay(POST_SPEECH_SETTLE_MS) }
+                if (queue.isEmpty()) _speaking.value = false
+            }
         }
     }
 
@@ -260,6 +283,7 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
             } ?: return@supervisorScope index
             if (index + 1 < chunks.size) next = fetch(index + 1)
             _speaking.value = true
+            ensureDucked()
             try {
                 onDevice.play(clip, ducker.attributes, pitch)
             } catch (e: CancellationException) {
@@ -300,6 +324,7 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
             }
             if (index + 1 < chunks.size) next = fetch(index + 1)
             _speaking.value = true
+            ensureDucked()
             try {
                 play(file)
             } catch (e: IOException) {
@@ -321,6 +346,7 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
         val film = filmCharacter()
         tts.setPitch(film?.pitch?.times(0.92f) ?: 0.92f)
         tts.setSpeechRate(film?.rate?.times(0.96f) ?: 0.96f)
+        ensureDucked()
         for (chunk in chunks) {
             val id = "kitt-${System.nanoTime()}"
             val done = CompletableDeferred<Unit>()
@@ -376,5 +402,6 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
         // The first line after start-up also loads the model, slow for Kokoro on weak units.
         const val ON_DEVICE_TIMEOUT_MS = 20_000L
         const val LOCAL_INIT_TIMEOUT_MS = 5_000L
+        const val POST_SPEECH_SETTLE_MS = 650L
     }
 }

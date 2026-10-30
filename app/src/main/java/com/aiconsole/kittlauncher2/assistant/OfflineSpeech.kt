@@ -129,13 +129,16 @@ class OfflineSpeech(context: Context) {
         lock.withLock {
             idleRelease?.cancel()
             val model = load()
-            val stream = model.createStream()
-            val text = try {
-                stream.acceptWaveform(SpeechRoutes.samples(pcm), RATE)
-                model.decode(stream)
-                model.getResult(stream).text
-            } finally {
-                stream.release()
+            val samples = SpeechRoutes.samples(pcm)
+            val text = synchronized(OnDeviceVoice.nativeInitLock) {
+                val stream = model.createStream()
+                try {
+                    stream.acceptWaveform(samples, RATE)
+                    model.decode(stream)
+                    model.getResult(stream).text
+                } finally {
+                    runCatching { stream.release() }
+                }
             }
             idleRelease = scope.launch {
                 delay(IDLE_RELEASE_MS)
@@ -149,7 +152,7 @@ class OfflineSpeech(context: Context) {
     suspend fun release() = lock.withLock {
         idleRelease?.cancel()
         idleRelease = null
-        recognizer?.release()
+        synchronized(OnDeviceVoice.nativeInitLock) { recognizer?.release() }
         recognizer = null
     }
 
@@ -164,19 +167,21 @@ class OfflineSpeech(context: Context) {
         unavailable?.let { throw IOException("Offline speech can't run on this head unit ($it)") }
         if (!_installed.value) throw IOException("The offline speech model isn't downloaded")
         return try {
-            OfflineRecognizer(
-                config = OfflineRecognizerConfig(
-                    featConfig = FeatureConfig(sampleRate = RATE, featureDim = 80),
-                    modelConfig = OfflineModelConfig(
-                        moonshine = OfflineMoonshineModelConfig(
-                            encoder = File(dir, ENCODER).path,
-                            mergedDecoder = File(dir, DECODER).path
-                        ),
-                        tokens = File(dir, "tokens.txt").path,
-                        numThreads = 2
+            synchronized(OnDeviceVoice.nativeInitLock) {
+                OfflineRecognizer(
+                    config = OfflineRecognizerConfig(
+                        featConfig = FeatureConfig(sampleRate = RATE, featureDim = 80),
+                        modelConfig = OfflineModelConfig(
+                            moonshine = OfflineMoonshineModelConfig(
+                                encoder = File(dir, ENCODER).path,
+                                mergedDecoder = File(dir, DECODER).path
+                            ),
+                            tokens = File(dir, "tokens.txt").path,
+                            numThreads = 2
+                        )
                     )
                 )
-            ).also { recognizer = it }
+            }.also { recognizer = it }
         } catch (e: Throwable) {
             // UnsatisfiedLinkError (no native library for this CPU) or a broken model.
             Log.w(TAG, "Offline speech model failed to load", e)

@@ -657,7 +657,7 @@ fun LauncherRoot(
     val pageBrowser = when (HomePage.entries[pager.currentPage]) {
         HomePage.Drive -> stream.takeIf { it.visible }
         HomePage.Ai -> aiBrowser
-        HomePage.Games -> gamesBrowser
+        HomePage.Entertainment -> gamesBrowser
         else -> null
     }
     BackHandler(enabled = pageBrowser != null && overlay == LauncherOverlay.None) {
@@ -670,7 +670,7 @@ fun LauncherRoot(
         }
     }
     // Game mode (Games page) and theater (stream window) hide the rail, dock and status strip.
-    val gameMode = gamesBrowser.immersive && pager.currentPage == HomePage.Games.ordinal
+    val gameMode = gamesBrowser.immersive && pager.currentPage == HomePage.Entertainment.ordinal
     val theater = stream.immersive && stream.visible && pager.currentPage == HomePage.Drive.ordinal
     val chromeless = (gameMode || theater) && overlay == LauncherOverlay.None
     LaunchedEffect(homeTrigger) {
@@ -709,8 +709,11 @@ fun LauncherRoot(
             when (event) {
                 is LauncherEvent.ShowPage -> {
                     overlay = LauncherOverlay.None
-                    HomePage.entries.firstOrNull { it.name.equals(event.page, ignoreCase = true) }
-                        ?.let { pager.animateScrollToPage(it.ordinal) }
+                    HomePage.entries.firstOrNull {
+                        it.name.equals(event.page, ignoreCase = true) ||
+                        it.label.equals(event.page, ignoreCase = true) ||
+                        (it == HomePage.Entertainment && (event.page.equals("games", ignoreCase = true) || event.page.equals("arcade", ignoreCase = true)))
+                    }?.let { pager.animateScrollToPage(it.ordinal) }
                 }
                 is LauncherEvent.OpenStream -> {
                     overlay = LauncherOverlay.None
@@ -914,9 +917,9 @@ fun LauncherRoot(
                             when (HomePage.entries[page]) {
                                 HomePage.Drive -> if (isTall) {
                                     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
-                                        // 50 : 35 of the space above the dock keeps the 50/35/15 split
-                                        val navWeight = if (BuildConfig.HOLO_DESIGN) 0.42f else 0.50f
-                                        val lowerWeight = if (BuildConfig.HOLO_DESIGN) 0.46f else 0.35f
+                                        // Larger rotating vehicle HUD, smaller map pane above it
+                                        val navWeight = if (BuildConfig.HOLO_DESIGN) 0.32f else 0.38f
+                                        val lowerWeight = if (BuildConfig.HOLO_DESIGN) 0.58f else 0.52f
                                         navPane(Modifier.fillMaxWidth().weight(navWeight))
                                         if (driving) drivingPanel(Modifier.fillMaxWidth().weight(lowerWeight))
                                         else vehiclePane(Modifier.fillMaxWidth().weight(lowerWeight), portraitCellWidth)
@@ -932,12 +935,18 @@ fun LauncherRoot(
                                         reading = dash.reading,
                                         metric = dash.metric,
                                         kittSpeaking = dash.kittSpeaking,
-                                        modifier = Modifier.fillMaxSize()
+                                        modifier = Modifier.fillMaxSize(),
+                                        onAssistant = {
+                                            autoListen = false
+                                            open(LauncherOverlay.Assistant)
+                                        },
+                                        onDiagnostics = { open(LauncherOverlay.Diagnostics) },
+                                        onPursuit = { open(LauncherOverlay.Pursuit) }
                                     )
                                 } else {
                                     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(gap)) {
-                                        val navWeight = if (BuildConfig.HOLO_DESIGN) 0.55f else 0.60f
-                                        val sideWeight = if (BuildConfig.HOLO_DESIGN) 0.45f else 0.40f
+                                        val navWeight = if (BuildConfig.HOLO_DESIGN) 0.40f else 0.45f
+                                        val sideWeight = if (BuildConfig.HOLO_DESIGN) 0.60f else 0.55f
                                         navPane(Modifier.fillMaxHeight().weight(navWeight))
                                         if (driving) drivingPanel(Modifier.fillMaxHeight().weight(sideWeight))
                                         else vehiclePane(Modifier.fillMaxHeight().weight(sideWeight), if (rail) 100.dp else 120.dp)
@@ -954,7 +963,7 @@ fun LauncherRoot(
                                 HomePage.Media -> MediaPane(Modifier.fillMaxSize())
                                 HomePage.Widgets -> WidgetsPane(Modifier.fillMaxSize())
                                 HomePage.Ai -> AiPane(aiBrowser, Modifier.fillMaxSize())
-                                HomePage.Games -> GamesPane(gamesBrowser, Modifier.fillMaxSize())
+                                HomePage.Entertainment -> GamesPane(gamesBrowser, Modifier.fillMaxSize())
                                 HomePage.Apps -> AppDrawerPane(apps, onAppClick, Modifier.fillMaxSize())
                             }
                         }
@@ -1100,7 +1109,7 @@ private const val DRIVING_EXIT_MS = 60_000L
 
 /** Home pages, swiped or picked from the tabs above the dock. */
 private enum class HomePage(val label: String) {
-    Drive("Drive"), Gauges("Gauges"), Media("Media"), Ai("AI"), Games("Games"), Widgets("Widgets"), Apps("Apps")
+    Drive("Drive"), Gauges("Gauges"), Media("Media"), Ai("AI"), Entertainment("Entertainment"), Widgets("Widgets"), Apps("Apps")
 }
 
 /** Page selector drawn as KITT console buttons: big targets, readable at a glance. */

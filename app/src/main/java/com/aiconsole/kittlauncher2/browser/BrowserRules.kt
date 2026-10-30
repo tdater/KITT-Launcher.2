@@ -94,6 +94,8 @@ object Bookmarks {
         .mapNotNull { m ->
             val url = unescape(m.groupValues[1].trim())
             if (!url.startsWith("http://", true) && !url.startsWith("https://", true)) return@mapNotNull null
+            val lower = url.lowercase()
+            if ("iprovpn.com" in lower || "privacysavvy.com" in lower) return@mapNotNull null
             val title = unescape(m.groupValues[2].replace(TAG, "").trim()).ifEmpty { url }
             title to url
         }
@@ -245,6 +247,159 @@ object PageScripts {
     } catch (e) {}
   }
   resume(document);
+})();
+"""
+
+    /**
+     * Injected at document start so pre-bookmarked streaming sites (Tubi, Pluto TV, Plex, Roku Channel,
+     * Crackle, Xumo, Sling, Fandango, Kanopy, Hoopla, PBS, YouTube, Twitch, Rumble, Dailymotion,
+     * Archive.org, Spotify, Pandora, Amazon Music, Deezer) play smoothly in Android WebView:
+     * 1. Adds Widevine EME `requestMediaKeySystemAccess` robustness fallback so players requesting
+     *    `HW_SECURE_ALL` or `SW_SECURE_DECODE` fall back to L3 (`SW_SECURE_CRYPTO` / `""`) instead of
+     *    rejecting on head units without L1 DRM.
+     * 2. Ensures `<video>` elements allow inline playback (`playsInline = true`) and cross-origin streaming.
+     * 3. Recovers muted autoplay if a site's initial unmuted `video.play()` is rejected before user tap.
+     */
+    const val VIDEO_COMPAT = """
+(function () {
+  if (window.__kittVideoCompat) return;
+  window.__kittVideoCompat = true;
+  try {
+    if (navigator.requestMediaKeySystemAccess) {
+      var origEme = navigator.requestMediaKeySystemAccess.bind(navigator);
+      navigator.requestMediaKeySystemAccess = function (keySystem, configs) {
+        return origEme(keySystem, configs).catch(function (err) {
+          try {
+            var relaxed = (configs || []).map(function (cfg) {
+              var copy = Object.assign({}, cfg);
+              if (Array.isArray(cfg.videoCapabilities)) {
+                copy.videoCapabilities = cfg.videoCapabilities.map(function (vc) {
+                  var v = Object.assign({}, vc);
+                  if (v.robustness && v.robustness !== 'SW_SECURE_CRYPTO') v.robustness = 'SW_SECURE_CRYPTO';
+                  return v;
+                });
+              }
+              if (Array.isArray(cfg.audioCapabilities)) {
+                copy.audioCapabilities = cfg.audioCapabilities.map(function (ac) {
+                  var a = Object.assign({}, ac);
+                  if (a.robustness && a.robustness !== 'SW_SECURE_CRYPTO') a.robustness = 'SW_SECURE_CRYPTO';
+                  return a;
+                });
+              }
+              return copy;
+            });
+            return origEme(keySystem, relaxed).catch(function () {
+              var bare = (configs || []).map(function (cfg) {
+                var copy = Object.assign({}, cfg);
+                if (Array.isArray(cfg.videoCapabilities)) {
+                  copy.videoCapabilities = cfg.videoCapabilities.map(function (vc) {
+                    var v = Object.assign({}, vc);
+                    delete v.robustness;
+                    return v;
+                  });
+                }
+                if (Array.isArray(cfg.audioCapabilities)) {
+                  copy.audioCapabilities = cfg.audioCapabilities.map(function (ac) {
+                    var a = Object.assign({}, ac);
+                    delete a.robustness;
+                    return a;
+                  });
+                }
+                return copy;
+              });
+              return origEme(keySystem, bare);
+            });
+          } catch (e2) {
+            throw err;
+          }
+        });
+      };
+    }
+  } catch (e) {}
+  try {
+    function fixVideo(v) {
+      if (v && v.tagName === 'VIDEO') {
+        v.playsInline = true;
+        v.setAttribute('playsinline', '');
+        v.setAttribute('webkit-playsinline', '');
+      }
+    }
+    document.querySelectorAll('video').forEach(fixVideo);
+    if (window.MutationObserver) {
+      new MutationObserver(function (mutations) {
+        for (var i = 0; i < mutations.length; i++) {
+          var added = mutations[i].addedNodes;
+          for (var j = 0; j < added.length; j++) {
+            if (added[j].nodeType === 1) {
+              if (added[j].tagName === 'VIDEO') fixVideo(added[j]);
+              else if (added[j].querySelectorAll) added[j].querySelectorAll('video').forEach(fixVideo);
+            }
+          }
+        }
+      }).observe(document.documentElement || document.body, { childList: true, subtree: true });
+    }
+  } catch (e) {}
+})();
+"""
+
+    /** Toggles play/pause on the primary video or audio element on the page. */
+    const val VIDEO_PLAY_PAUSE = """
+(function () {
+  var list = Array.prototype.slice.call(document.querySelectorAll('video, audio'));
+  if (!list.length) return 'none';
+  var m = list.sort(function (a, b) {
+    var ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+    return (rb.width * rb.height) - (ra.width * ra.height);
+  })[0];
+  if (m.paused || m.ended) {
+    m.muted = false;
+    var p = m.play();
+    if (p && p.catch) p.catch(function () { m.muted = true; m.play(); });
+    return 'playing';
+  } else {
+    m.pause();
+    return 'paused';
+  }
+})();
+"""
+
+    /** Seeks the primary video or audio element by [seconds] (negative to rewind, positive to fast-forward). */
+    fun videoSeekBy(seconds: Int): String = """
+(function () {
+  var list = Array.prototype.slice.call(document.querySelectorAll('video, audio'));
+  if (!list.length) return 'none';
+  var m = list[0];
+  try {
+    m.currentTime = Math.max(0, (m.currentTime || 0) + ($seconds));
+    return Math.round(m.currentTime) + 's';
+  } catch (e) { return 'err'; }
+})();
+"""
+
+    /** Cycles playback speed on the primary video/audio element: 1.0x -> 1.25x -> 1.5x -> 2.0x -> 1.0x. */
+    const val VIDEO_CYCLE_SPEED = """
+(function () {
+  var list = Array.prototype.slice.call(document.querySelectorAll('video, audio'));
+  if (!list.length) return 'none';
+  var m = list[0];
+  var rates = [1.0, 1.25, 1.5, 2.0];
+  var cur = m.playbackRate || 1.0;
+  var next = rates[0];
+  for (var i = 0; i < rates.length; i++) {
+    if (Math.abs(cur - rates[i]) < 0.05) { next = rates[(i + 1) % rates.length]; break; }
+  }
+  m.playbackRate = next;
+  return next + 'x';
+})();
+"""
+
+    /** Unmutes the active video/audio element and boosts volume to 100%. */
+    const val VIDEO_UNMUTE_BOOST = """
+(function () {
+  var list = Array.prototype.slice.call(document.querySelectorAll('video, audio'));
+  if (!list.length) return 'none';
+  list.forEach(function (m) { m.muted = false; m.volume = 1.0; });
+  return 'unmuted';
 })();
 """
 

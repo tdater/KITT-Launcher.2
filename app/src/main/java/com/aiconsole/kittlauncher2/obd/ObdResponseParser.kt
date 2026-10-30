@@ -56,6 +56,11 @@ object ObdResponseParser {
                         flush()
                         result += hexBytes(line)
                     }
+                    HEX_LINE.matches(line) && line.length >= 7 && line.length % 2 == 1 -> {
+                        // A 3-digit CAN response header (e.g. 641, 72E, 7E8) prefixed to even hex data bytes.
+                        flush()
+                        result += hexBytes(line.substring(3))
+                    }
                     // Anything else (prompts, "OK", noise) is ignored.
                 }
             }
@@ -92,11 +97,14 @@ object ObdResponseParser {
         if (request.isEmpty()) return null
         val positive = (request[0].u() + 0x40).toByte()
         for (message in messages) {
-            if (message.size < request.size) continue
-            if (message[0] != positive) continue
-            var matches = true
-            for (k in 1 until request.size) if (message[k] != request[k]) matches = false
-            if (matches) return message.copyOfRange(request.size, message.size)
+            for (offset in 0..1) {
+                if (offset == 1 && (message.isEmpty() || message[0].u() !in 1..7)) continue
+                if (message.size <= offset + request.size) continue
+                if (message[offset] != positive) continue
+                var matches = true
+                for (k in 1 until request.size) if (message[offset + k] != request[k]) matches = false
+                if (matches) return message.copyOfRange(offset + request.size, message.size)
+            }
         }
         return null
     }

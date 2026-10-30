@@ -1,6 +1,7 @@
 package com.aiconsole.kittlauncher2
 
 import com.aiconsole.kittlauncher2.obd.DtcDecoder
+import com.aiconsole.kittlauncher2.obd.Elm327
 import com.aiconsole.kittlauncher2.obd.FormulaEvaluator
 import com.aiconsole.kittlauncher2.obd.ManufacturerProfiles
 import com.aiconsole.kittlauncher2.obd.ObdResponseParser
@@ -151,6 +152,36 @@ class ObdProtocolTest {
         assertEquals("ford", ManufacturerProfiles.detect("1FTFW1ET5DFC10312")?.id)
         assertEquals("gm", ManufacturerProfiles.detect("1GCUYDED1LZ000000")?.id)
         assertNull(ManufacturerProfiles.detect(null))
+    }
+
+    @Test
+    fun tpms_canReceiveHeadersAndDecodersWorkAcrossFormats() {
+        // GM BCM 241 replies on 641; Ford BCM 726 replies on 72E; standard 7E0/7DF use default ATAR (null).
+        assertEquals("641", Elm327.receiveHeaderFor("241"))
+        assertEquals("72E", Elm327.receiveHeaderFor("726"))
+        assertEquals("758", Elm327.receiveHeaderFor("750"))
+        assertNull(Elm327.receiveHeaderFor("7E0"))
+        assertNull(Elm327.receiveHeaderFor("7DF"))
+
+        // 2-byte GM BCM TPMS: 0x0E 0x40 -> 3648 / 16 = 228.0 kPa
+        assertEquals(228.0, FormulaEvaluator.evaluate("tpms(A)", bytes(0x0E, 0x40)), 0.01)
+        // 1-byte GM BCM TPMS: 0x38 (56) -> 56 * 4 = 224.0 kPa
+        assertEquals(224.0, FormulaEvaluator.evaluate("tpms(A)", bytes(0x38)), 0.01)
+        // 2-byte GM BCM with status byte: 0x38 0x00 -> 56 * 4 = 224.0 kPa
+        assertEquals(224.0, FormulaEvaluator.evaluate("tpms(A)", bytes(0x38, 0x00)), 0.01)
+
+        // Mode 22 reply with 3-digit CAN ID prefix and PCI length byte: "641 05 62 50 05 0E 40"
+        val messages = ObdResponseParser.messages("641056250050E40")
+        val data = ObdResponseParser.serviceData(messages, bytes(0x22, 0x50, 0x05))
+        assertArrayEquals(bytes(0x0E, 0x40), data)
+
+        // Every manufacturer profile (including generic) exposes all four canonical tire pressure PIDs.
+        for (profile in ManufacturerProfiles.all) {
+            val ids = profile.pids.map { it.id }.toSet()
+            for (tireId in PidCatalog.TIRES) {
+                assertTrue("${profile.id} missing $tireId", tireId in ids)
+            }
+        }
     }
 
     // ---- Scanner light --------------------------------------------------------------------

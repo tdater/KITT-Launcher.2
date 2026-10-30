@@ -128,6 +128,21 @@ object FormulaEvaluator {
             "abs" -> { requireArgs(name, args, 1); val a = args[0]; Expr { kotlin.math.abs(a.eval(it)) } }
             "min" -> { requireArgs(name, args, 2); val (a, b) = args; Expr { minOf(a.eval(it), b.eval(it)) } }
             "max" -> { requireArgs(name, args, 2); val (a, b) = args; Expr { maxOf(a.eval(it), b.eval(it)) } }
+            "tpms" -> {
+                requireArgs(name, args, 1)
+                val a = args[0]
+                Expr { data ->
+                    val byteA = a.eval(data)
+                    if (data.size >= 2) {
+                        val byteB = (data[1].toInt() and 0xFF).toDouble()
+                        val v16 = (byteA * 256.0 + byteB) / 16.0
+                        val v4 = byteA * 4.0
+                        if (v16 in 50.0..450.0) v16 else if (v4 in 50.0..450.0) v4 else v16
+                    } else {
+                        byteA * 4.0
+                    }
+                }
+            }
             else -> throw FormulaException("Unknown function '$name'")
         }
 

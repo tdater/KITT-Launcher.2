@@ -12,6 +12,7 @@ import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.KeywordSpotter
 import com.k2fsa.sherpa.onnx.KeywordSpotterConfig
 import com.k2fsa.sherpa.onnx.OnlineModelConfig
+import com.k2fsa.sherpa.onnx.OnlineStream
 import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -97,6 +98,9 @@ class OfflineWake(context: Context) {
     private var generation = 0
     private var active = false // main thread
 
+    /** Serializes listen sessions so a new thread never overlaps native teardown of the previous one. */
+    private val sessionLock = Any()
+
     suspend fun install() = withContext(Dispatchers.IO) {
         val temp = File(dir.parentFile, "$ARCHIVE.part")
         temp.deleteRecursively()
@@ -122,8 +126,10 @@ class OfflineWake(context: Context) {
 
     fun remove() {
         stop()
-        dir.deleteRecursively()
-        _installed.value = false
+        synchronized(sessionLock) {
+            dir.deleteRecursively()
+            _installed.value = false
+        }
     }
 
     /**
@@ -149,67 +155,80 @@ class OfflineWake(context: Context) {
 
     @SuppressLint("MissingPermission") // Checked by WakeWordListener before starting.
     private fun listen(gen: Int, onHeard: (OfflineHeard) -> Unit, onFailed: () -> Unit) {
-        var spotter: KeywordSpotter? = null
-        var record: AudioRecord? = null
-        try {
-            val keywords = File(dir, "keywords-kitt.txt")
-            val tokenizer = PieceTokenizer.fromModel(File(dir, "bpe.model").readBytes())
-            keywords.writeText(OfflinePhrases.keywords(tokenizer::encode))
-            spotter = KeywordSpotter(
-                config = KeywordSpotterConfig(
-                    featConfig = FeatureConfig(sampleRate = RATE, featureDim = 80),
-                    modelConfig = OnlineModelConfig(
-                        transducer = OnlineTransducerModelConfig(
-                            encoder = File(dir, ENCODER).path,
-                            decoder = File(dir, DECODER).path,
-                            joiner = File(dir, JOINER).path
-                        ),
-                        tokens = File(dir, "tokens.txt").path,
-                        numThreads = 1,
-                        modelType = "zipformer2"
-                    ),
-                    keywordsFile = keywords.path
-                )
-            )
-            val stream = spotter.createStream()
-            val minBuffer = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-            record = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(minBuffer, CHUNK * 4))
-            if (record.state != AudioRecord.STATE_INITIALIZED) throw IOException("the microphone didn't open")
-            record.startRecording()
-            val pcm = ShortArray(CHUNK)
-            val samples = FloatArray(CHUNK)
-            while (generation == gen) {
-                val n = record.read(pcm, 0, CHUNK)
-                if (n <= 0) {
-                    if (n < 0) throw IOException("microphone read failed ($n)")
-                    continue
+        synchronized(sessionLock) {
+            if (generation != gen) return
+            var spotter: KeywordSpotter? = null
+            var stream: OnlineStream? = null
+            var record: AudioRecord? = null
+            try {
+                val keywords = File(dir, "keywords-kitt.txt")
+                if (!keywords.exists() || keywords.length() == 0L) {
+                    val tokenizer = PieceTokenizer.fromModel(File(dir, "bpe.model").readBytes())
+                    keywords.writeText(OfflinePhrases.keywords(tokenizer::encode))
                 }
-                for (i in 0 until n) samples[i] = pcm[i] / 32768f
-                stream.acceptWaveform(if (n == CHUNK) samples else samples.copyOf(n), RATE)
-                while (spotter.isReady(stream)) spotter.decode(stream)
-                val keyword = spotter.getResult(stream).keyword
-                if (keyword.isNotBlank()) {
-                    spotter.reset(stream)
-                    OfflinePhrases.heard(keyword)?.let { heard -> main.post { if (generation == gen) onHeard(heard) } }
+                if (generation != gen) return
+                spotter = synchronized(OnDeviceVoice.nativeInitLock) {
+                    KeywordSpotter(
+                        config = KeywordSpotterConfig(
+                            featConfig = FeatureConfig(sampleRate = RATE, featureDim = 80),
+                            modelConfig = OnlineModelConfig(
+                                transducer = OnlineTransducerModelConfig(
+                                    encoder = File(dir, ENCODER).path,
+                                    decoder = File(dir, DECODER).path,
+                                    joiner = File(dir, JOINER).path
+                                ),
+                                tokens = File(dir, "tokens.txt").path,
+                                numThreads = 1,
+                                modelType = "zipformer2"
+                            ),
+                            keywordsFile = keywords.path
+                        )
+                    )
                 }
-            }
-            stream.release()
-        } catch (e: Throwable) {
-            // UnsatisfiedLinkError (no native library for this CPU), a broken model or a busy mic.
-            if (generation == gen) {
-                Log.w(TAG, "Offline wake word stopped", e)
-                if (e !is IOException) unavailable = e.message ?: e.javaClass.simpleName
-                main.post {
-                    if (generation == gen) {
-                        active = false
-                        onFailed()
+                val minBuffer = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+                if (minBuffer <= 0) throw IOException("invalid AudioRecord minBuffer ($minBuffer)")
+                record = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(minBuffer, CHUNK * 4))
+                if (record.state != AudioRecord.STATE_INITIALIZED) throw IOException("the microphone didn't open")
+                stream = synchronized(OnDeviceVoice.nativeInitLock) { spotter.createStream() }
+                val activeStream = stream!!
+                record.startRecording()
+                val pcm = ShortArray(CHUNK)
+                val samples = FloatArray(CHUNK)
+                while (generation == gen) {
+                    val n = record.read(pcm, 0, CHUNK)
+                    if (n <= 0) {
+                        if (n < 0) throw IOException("microphone read failed ($n)")
+                        continue
+                    }
+                    for (i in 0 until n) samples[i] = pcm[i] / 32768f
+                    activeStream.acceptWaveform(if (n == CHUNK) samples else samples.copyOf(n), RATE)
+                    while (spotter.isReady(activeStream)) spotter.decode(activeStream)
+                    val keyword = spotter.getResult(activeStream).keyword
+                    if (keyword.isNotBlank()) {
+                        spotter.reset(activeStream)
+                        OfflinePhrases.heard(keyword)?.let { heard -> main.post { if (generation == gen) onHeard(heard) } }
                     }
                 }
+            } catch (e: Throwable) {
+                // UnsatisfiedLinkError (no native library for this CPU), a broken model or a busy mic.
+                if (generation == gen) {
+                    Log.w(TAG, "Offline wake word stopped", e)
+                    if (e !is IOException) unavailable = e.message ?: e.javaClass.simpleName
+                    main.post {
+                        if (generation == gen) {
+                            active = false
+                            onFailed()
+                        }
+                    }
+                }
+            } finally {
+                runCatching { record?.stop() }
+                runCatching { record?.release() }
+                synchronized(OnDeviceVoice.nativeInitLock) {
+                    runCatching { stream?.release() }
+                    runCatching { spotter?.release() }
+                }
             }
-        } finally {
-            runCatching { record?.stop() }
-            record?.release()
-            spotter?.release()
         }
     }
 

@@ -14,6 +14,15 @@ object StreamUrls {
         }
     }
 
+    /** Turns a typed address into a URL, or a search query into a DuckDuckGo search URL. */
+    fun normalizeOrSearch(input: String): String? {
+        val text = input.trim()
+        if (text.isEmpty()) return null
+        normalize(text)?.let { return it }
+        val encoded = java.net.URLEncoder.encode(text, "UTF-8")
+        return "https://duckduckgo.com/?q=$encoded"
+    }
+
     /** Short title for the window header, e.g. "twitch.tv". */
     fun titleOf(url: String): String =
         url.substringAfter("://").substringBefore('/').removePrefix("www.").removePrefix("m.").ifEmpty { "Stream" }

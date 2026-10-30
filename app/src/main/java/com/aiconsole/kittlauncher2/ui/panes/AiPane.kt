@@ -25,6 +25,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,6 +75,7 @@ fun AiPane(session: BrowserSession, modifier: Modifier = Modifier) {
     var prompt by remember { mutableStateOf("") }
     var status by remember { mutableStateOf<String?>(null) }
     var bigText by remember { mutableStateOf<String?>(null) }
+    var showHud by rememberSaveable { mutableStateOf(false) }
 
     fun sendToAll(text: String) {
         val targets = session.tabs.filter { AiSites.forHost(it.host) != null && it.web != null }
@@ -104,28 +106,22 @@ fun AiPane(session: BrowserSession, modifier: Modifier = Modifier) {
         }
     }
 
+    fun askKitt(text: String) {
+        app.assistantInbox.value = AssistantPrompt(text, diagnostic = true)
+        LauncherBus.send(LauncherEvent.OpenAssistant)
+    }
+
     KittPanel(title = "AI", modifier = modifier, accent = ScannerRed) {
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (BuildConfig.HOLO_DESIGN) {
-                com.aiconsole.kittlauncher2.ui.components.SkinTerminal(Modifier.fillMaxWidth().height(96.dp))
-                com.aiconsole.kittlauncher2.ui.components.EcuCards(Modifier.fillMaxWidth().height(64.dp))
-                // KITT co-pilot shortcuts. All are read-only questions; clearing codes stays a manual
-                // action on the Diagnostics screen.
-                Row(Modifier.fillMaxWidth().height(40.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    fun askKitt(text: String) {
-                        app.assistantInbox.value = AssistantPrompt(text, diagnostic = true)
-                        LauncherBus.send(LauncherEvent.OpenAssistant)
-                    }
-                    KittButton("Diagnose ECU", { askKitt("Run a diagnosis on the engine and tell me what you see in the live data.") }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
-                    KittButton("Read codes", { askKitt("Read my stored fault codes and explain what each one means.") }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
-                    KittButton("Range report", { askKitt("Give me a range report: fuel level, how far I can go, and the nearest gas.") }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
-                }
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (BuildConfig.HOLO_DESIGN && showHud) {
+                com.aiconsole.kittlauncher2.ui.components.SkinTerminal(Modifier.fillMaxWidth().height(64.dp))
+                com.aiconsole.kittlauncher2.ui.components.EcuCards(Modifier.fillMaxWidth().height(52.dp))
             }
-            Row(Modifier.fillMaxWidth().height(52.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().height(36.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 val listening = speechState is SpeechState.Listening
-                KittButton(if (listening) "Stop" else "🎤 Speak", ::mic, Modifier.width(110.dp).fillMaxHeight(), ScannerRed, active = true)
+                KittButton(if (listening) "Stop" else "🎤 Speak", ::mic, Modifier.width(76.dp).fillMaxHeight(), ScannerRed, active = true)
                 if (listening) {
-                    VoiceModulator(active = true, modifier = Modifier.width(80.dp).fillMaxHeight())
+                    VoiceModulator(active = true, modifier = Modifier.width(60.dp).fillMaxHeight())
                 }
                 KittTextField(prompt, { prompt = it }, "Ask every open AI…", Modifier.weight(1f), onDone = {
                     if (prompt.isNotBlank()) {
@@ -138,19 +134,24 @@ fun AiPane(session: BrowserSession, modifier: Modifier = Modifier) {
                         sendToAll(prompt)
                         prompt = ""
                     }
-                }, Modifier.width(80.dp).fillMaxHeight(), LedGreen, enabled = prompt.isNotBlank())
-                KittButton("Read reply", {
+                }, Modifier.width(54.dp).fillMaxHeight(), LedGreen, enabled = prompt.isNotBlank())
+                KittButton("🔊 Read", {
                     val tab = session.current ?: return@KittButton
                     session.runIn(tab, AiSites.readLatest(AiSites.forHost(tab.host))) { reply ->
                         if (reply.isBlank()) status = "Couldn't find a reply on this page." else app.kittVoice.speak(reply)
                     }
-                }, Modifier.width(110.dp).fillMaxHeight(), DashAmber)
-                KittButton("Big text", {
+                }, Modifier.width(66.dp).fillMaxHeight(), DashAmber)
+                KittButton("🔍 Text", {
                     val tab = session.current ?: return@KittButton
                     session.runIn(tab, AiSites.readLatest(AiSites.forHost(tab.host))) { reply ->
                         if (reply.isBlank()) status = "Couldn't find a reply on this page." else bigText = reply
                     }
-                }, Modifier.width(100.dp).fillMaxHeight(), LedGreen)
+                }, Modifier.width(60.dp).fillMaxHeight(), LedGreen)
+                if (BuildConfig.HOLO_DESIGN) {
+                    KittButton("Diagnose", { askKitt("Run a diagnosis on the engine and tell me what you see in the live data.") }, Modifier.width(72.dp).fillMaxHeight(), DashAmber)
+                    KittButton("Codes", { askKitt("Read my stored fault codes and explain what each one means.") }, Modifier.width(54.dp).fillMaxHeight(), DashAmber)
+                    KittButton(if (showHud) "HUD ✕" else "HUD", { showHud = !showHud }, Modifier.width(52.dp).fillMaxHeight(), if (showHud) ScannerRed else DashGrey, active = showHud)
+                }
             }
             val line = when (val s = speechState) {
                 is SpeechState.Listening -> s.partial.ifEmpty { "LISTENING…" }
@@ -189,17 +190,43 @@ private fun AiPicker(app: KittApplication, session: BrowserSession) {
             "sign-ins. Turn on SPLIT under MORE to see two at once. SPEAK types your words into every open AI tab and sends " +
             "them. These sites change their layouts, so sending or reading aloud can occasionally miss.",
         extra = {
-            KittButton("Open all four as tabs", {
-                AiSites.ALL.forEachIndexed { i, site ->
-                    if (i == 0) session.open(site.url, site.label) else session.newTab(site.url, site.label)
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                KittButton("Open all 4 as tabs", {
+                    AiSites.ALL.forEachIndexed { i, site ->
+                        if (i == 0) session.open(site.url, site.label) else session.newTab(site.url, site.label)
+                    }
+                    session.select(0)
+                }, Modifier.fillMaxWidth().height(32.dp), LedGreen, active = true)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    com.aiconsole.kittlauncher2.ui.browser.SiteCard(
+                        StreamSite("Gemini", "https://gemini.google.com/"),
+                        onClick = { session.open("https://gemini.google.com/", "Gemini") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    com.aiconsole.kittlauncher2.ui.browser.SiteCard(
+                        StreamSite("Claude", "https://claude.ai/"),
+                        onClick = { session.open("https://claude.ai/", "Claude") },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
-                session.select(0)
-            }, Modifier.fillMaxWidth().height(56.dp), LedGreen, active = true)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    com.aiconsole.kittlauncher2.ui.browser.SiteCard(
+                        StreamSite("ChatGPT", "https://chatgpt.com/"),
+                        onClick = { session.open("https://chatgpt.com/", "ChatGPT") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    com.aiconsole.kittlauncher2.ui.browser.SiteCard(
+                        StreamSite("Perplexity", "https://www.perplexity.ai/"),
+                        onClick = { session.open("https://www.perplexity.ai/", "Perplexity") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
             // The official apps are the fallback when a site is slow or won't sign in on this unit.
             val context = LocalContext.current
             val apps = remember { AiAppHandoff.installed(context) }
             if (apps.isNotEmpty()) {
-                Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.fillMaxWidth().height(30.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     apps.forEach { ai ->
                         KittButton("${ai.label} app", { AiAppHandoff.open(context, ai) }, Modifier.weight(1f).fillMaxHeight(), DashAmber)
                     }

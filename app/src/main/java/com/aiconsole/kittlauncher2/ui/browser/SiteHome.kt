@@ -87,6 +87,7 @@ fun SiteHome(
     continueTitle: String,
     searchHint: String,
     help: String,
+    topSections: List<Pair<String, List<HomeSite>>> = emptyList(),
     sections: List<Pair<String, List<HomeSite>>> = emptyList()
 ) {
     val context = LocalContext.current
@@ -102,10 +103,17 @@ fun SiteHome(
     val favorites = SiteHomeRules.decodeFavorites(favText)
     val visits = SiteHomeRules.decodeVisits(visitText).distinctBy { it.url }
     val target = StreamUrls.normalize(query)
+    val searchOrUrl = StreamUrls.normalizeOrSearch(query)
     val mineTiles = mine.map { HomeSite(it.label, it.url, StreamUrls.titleOf(it.url), 0xFF455A64, listOf(SiteHomeRules.MINE)) }
     val all = (sites + mineTiles).distinctBy { it.url }
     val chips = listOf(SiteHomeRules.ALL, SiteHomeRules.FAVORITES, SiteHomeRules.MINE) + SiteHomeRules.tags(sites)
+    val topUrls = remember(topSections) { topSections.flatMap { it.second }.map { it.url }.toSet() }
     val shown = SiteHomeRules.filter(all, filter, favorites, query)
+    val remainingShown = if (filter == SiteHomeRules.ALL && query.isBlank() && topSections.isNotEmpty()) {
+        shown.filter { it.url !in topUrls || it.url in favorites }
+    } else {
+        shown
+    }
     val open = { url: String, title: String -> session.open(url, title) }
     val star = { url: String -> prefs.favorites.set(SiteHomeRules.toggleFavorite(prefs.favorites.value, url)) }
 
@@ -151,8 +159,8 @@ fun SiteHome(
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                KittTextField(query, { query = it }, searchHint, Modifier.weight(1f), onDone = { target?.let { open(it, StreamUrls.titleOf(it)) } })
-                KittButton("Go", { target?.let { open(it, StreamUrls.titleOf(it)) } }, Modifier.height(48.dp).width(64.dp), ScannerRed, active = target != null, enabled = target != null)
+                KittTextField(query, { query = it }, searchHint, Modifier.weight(1f), onDone = { searchOrUrl?.let { open(it, StreamUrls.titleOf(it)) } })
+                KittButton(if (target != null) "Go" else "Search", { searchOrUrl?.let { open(it, StreamUrls.titleOf(it)) } }, Modifier.height(48.dp).width(78.dp), ScannerRed, active = searchOrUrl != null, enabled = searchOrUrl != null)
                 KittButton(
                     "★ Save",
                     {
@@ -223,7 +231,18 @@ fun SiteHome(
                 HelpText(if (filter == SiteHomeRules.FAVORITES) "Tap ☆ on a tile to make it a favourite." else "Nothing matches. Type a full address and tap GO to open it.")
             }
         }
-        items(shown, key = { "t_${it.url}" }) { site ->
+        if (filter == SiteHomeRules.ALL && query.isBlank() && topSections.isNotEmpty()) {
+            topSections.forEach { (title, group) ->
+                item(span = { GridItemSpan(maxLineSpan) }) { SectionHeader(title, color = LedGreen) }
+                items(group, key = { "top_${title}_${it.url}" }) { site ->
+                    SiteTile(site, site.url in favorites, { open(site.url, site.name) }, { star(site.url) })
+                }
+            }
+            if (remainingShown.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) { SectionHeader("More Built-In & Saved Sites", color = DashAmber) }
+            }
+        }
+        items(remainingShown, key = { "t_${it.url}" }) { site ->
             val saved = SiteHomeRules.MINE in site.tags
             if (editing && saved) {
                 KittButton("✕ ${site.name}", { prefs.bookmarks.set(StreamSites.encode(mine.filterNot { it.url == site.url })) }, Modifier.height(92.dp), AlertRed)
@@ -252,6 +271,7 @@ private fun SiteTile(site: HomeSite, favorite: Boolean, onOpen: () -> Unit, onSt
 private fun ClassicSiteTile(site: HomeSite, favorite: Boolean, onOpen: () -> Unit, onStar: () -> Unit) {
     val color = Color(site.color.toInt())
     val shape = MaterialTheme.shapes.medium
+    val brand = remember(site.url, site.name) { SiteVisuals.resolve(site.url, site.name) }
     Box(
         Modifier
             .fillMaxWidth()
@@ -261,11 +281,16 @@ private fun ClassicSiteTile(site: HomeSite, favorite: Boolean, onOpen: () -> Uni
             .border(1.dp, if (favorite) DashYellow else KittBezel, shape)
             .clickable(onClick = onOpen)
     ) {
-        Column(Modifier.fillMaxSize().padding(start = 10.dp, end = 34.dp, top = 8.dp, bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(site.name, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(site.description, style = MaterialTheme.typography.bodySmall, color = DashWhite.copy(alpha = 0.85f), maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (site.tags.isNotEmpty()) {
-                Text(site.tags.joinToString(" · ").uppercase(), style = MaterialTheme.typography.labelSmall, color = DashGrey, maxLines = 1)
+        Row(Modifier.fillMaxSize().padding(start = 8.dp, end = 34.dp, top = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+                BrandEmblem(brand, Modifier.fillMaxSize())
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(site.name, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(site.description, style = MaterialTheme.typography.bodySmall, color = DashWhite.copy(alpha = 0.85f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (site.tags.isNotEmpty()) {
+                    Text(site.tags.joinToString(" · ").uppercase(), style = MaterialTheme.typography.labelSmall, color = DashGrey, maxLines = 1)
+                }
             }
         }
         Box(
@@ -328,12 +353,17 @@ private fun HoloSiteTile(site: HomeSite, favorite: Boolean, onOpen: () -> Unit, 
                 }
             }
     ) {
+        val brand = remember(site.url, site.name) { SiteVisuals.resolve(site.url, site.name) }
         Column(Modifier.fillMaxSize()) {
-            // A logo-style monogram over the site's colour, then a dark strip with its name and kind, like the design's tiles.
+            // Authentic visual brand emblem with subtle scanlines
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                val words = site.name.split(" ", "-", ".").filter { it.isNotBlank() }
-                val mark = (if (words.size > 1) words.take(2).joinToString("") { it.take(1) } else site.name.take(2)).uppercase()
-                Text(mark, style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold), color = Color.White.copy(alpha = 0.92f), maxLines = 1)
+                if (brand.icon != BrandIcon.Generic) {
+                    BrandEmblem(brand, Modifier.size(52.dp))
+                } else {
+                    val words = site.name.split(" ", "-", ".").filter { it.isNotBlank() }
+                    val mark = (if (words.size > 1) words.take(2).joinToString("") { it.take(1) } else site.name.take(2)).uppercase()
+                    Text(mark, style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold), color = Color.White.copy(alpha = 0.92f), maxLines = 1)
+                }
             }
             Column(Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.72f)).padding(horizontal = 6.dp, vertical = 3.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(site.name.uppercase(), style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)

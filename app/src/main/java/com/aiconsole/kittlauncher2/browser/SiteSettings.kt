@@ -52,7 +52,27 @@ object SiteSettings {
      * desktop player stalled and reloaded) but whose mobile site works: mobile unless the driver
      * picked Desktop for that site.
      */
-    fun prefersMobile(host: String?): Boolean = keyFor(host) == "music.youtube.com"
+    private val PREFER_MOBILE_HOSTS = setOf(
+        "music.youtube.com",
+        "tubitv.com",
+        "pluto.tv",
+        "therokuchannel.roku.com",
+        "plex.tv",
+        "xumo.com",
+        "crackle.com",
+        "fawesome.tv",
+        "sling.com"
+    )
+
+    /**
+     * Web apps whose desktop version is far too heavy for head-unit hardware or where desktop
+     * players fail MSE/DRM checks on Android WebView, but whose mobile site works cleanly:
+     * mobile unless the driver picked Desktop for that site.
+     */
+    fun prefersMobile(host: String?): Boolean {
+        val h = keyFor(host)
+        return PREFER_MOBILE_HOSTS.any { h == it || h.endsWith(".$it") }
+    }
 
     fun blockAllowed(host: String?): Boolean {
         val h = keyFor(host)

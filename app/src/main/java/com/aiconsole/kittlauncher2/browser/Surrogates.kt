@@ -17,6 +17,9 @@ object Surrogates {
             h.endsWith("googletagmanager.com") && (p.contains("/gtag/js") || p.contains("/gtm.js")) -> GTAG
             h.endsWith("google-analytics.com") && (p.endsWith("/analytics.js") || p.endsWith("/ga.js")) -> ANALYTICS
             (h.endsWith("googletagservices.com") || h.endsWith("doubleclick.net")) && p.contains("gpt") -> GPT
+            h.endsWith("imasdk.googleapis.com") || h.endsWith("springserve.com") || h.endsWith("spotxchange.com") ||
+                h.endsWith("connatix.com") || h.endsWith("aniview.com") || h.endsWith("vidazoo.com") ||
+                h.endsWith("primis.tech") || h.endsWith("playwire.com") -> IMA3
             h.endsWith("adinplay.com") -> AIPTAG
             else -> null
         }
@@ -26,10 +29,18 @@ object Surrogates {
     fun looksLikeScript(path: String, accept: String?): Boolean {
         val p = path.lowercase()
         return p.endsWith(".js") || p.contains(".js?") || p.contains("/js/") || p.contains("/gtag/") ||
-            p.contains("/tag/") || p.contains("adsbygoogle") || accept?.contains("javascript") == true
+            p.contains("/tag/") || p.contains("adsbygoogle") || p.contains("ima3") || accept?.contains("javascript") == true
+    }
+
+    /** Whether a blocked request is a VAST/VMAP XML ad tag that video players parse as XML. */
+    fun looksLikeVast(path: String, query: String?): Boolean {
+        val p = path.lowercase()
+        val q = query?.lowercase().orEmpty()
+        return p.endsWith(".xml") || p.contains("vast") || p.contains("vmap") || q.contains("output=vast") || q.contains("output=xml_vast")
     }
 
     const val EMPTY = "/* blocked by KITT */"
+    const val EMPTY_VAST = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><VAST version=\"3.0\"/>"
 
     /** AdSense, including the H5 games API (adBreak / adConfig) that game pages wait on. */
     private const val ADSBYGOOGLE = """(function () {
@@ -147,5 +158,145 @@ object Surrogates {
   run(t.cmd.player);
   run(t.cmd.display);
   run(t.cmd);
+})();"""
+
+    /**
+     * Google Interactive Media Ads (IMA3 SDK) stand-in: Tubi, Pluto TV, Plex, Roku Channel,
+     * Crackle, Sling, Xumo, Fawesome, PBS and Dailymotion load `imasdk.googleapis.com/js/sdkloader/ima3.js`
+     * and wait for `google.ima.AdsLoader` to fire `ADS_MANAGER_LOADED` -> `CONTENT_RESUME_REQUESTED`
+     * -> `ALL_ADS_COMPLETED` before starting the main video stream.
+     */
+    private const val IMA3 = """(function () {
+  var w = window;
+  w.google = w.google || {};
+  var ima = w.google.ima = w.google.ima || {};
+  function EvTarget() { this._l = {}; }
+  EvTarget.prototype.addEventListener = function (t, fn) {
+    if (!this._l[t]) this._l[t] = [];
+    if (typeof fn === 'function') this._l[t].push(fn);
+  };
+  EvTarget.prototype.removeEventListener = function (t, fn) {
+    if (!this._l[t]) return;
+    this._l[t] = this._l[t].filter(function (f) { return f !== fn; });
+  };
+  EvTarget.prototype._emit = function (t, data) {
+    var list = (this._l && this._l[t]) ? this._l[t].slice() : [];
+    for (var i = 0; i < list.length; i++) {
+      try { list[i](data); } catch (e) {}
+    }
+  };
+  var AdEventType = {
+    AD_BREAK_READY: 'adBreakReady',
+    AD_BUFFERING: 'adBuffering',
+    AD_CAN_PLAY: 'adCanPlay',
+    AD_METADATA: 'adMetadata',
+    AD_PROGRESS: 'adProgress',
+    ALL_ADS_COMPLETED: 'allAdsCompleted',
+    CLICK: 'click',
+    COMPLETE: 'complete',
+    CONTENT_PAUSE_REQUESTED: 'contentPauseRequested',
+    CONTENT_RESUME_REQUESTED: 'contentResumeRequested',
+    DURATION_CHANGE: 'durationChange',
+    FIRST_QUARTILE: 'firstQuartile',
+    IMPRESSION: 'impression',
+    INTERACTION: 'interaction',
+    LINEAR_CHANGED: 'linearChanged',
+    LOADED: 'loaded',
+    LOG: 'log',
+    MIDPOINT: 'midpoint',
+    PAUSED: 'paused',
+    RESUMED: 'resumed',
+    SKIPPABLE_STATE_CHANGED: 'skippableStateChanged',
+    SKIPPED: 'skipped',
+    STARTED: 'started',
+    THIRD_QUARTILE: 'thirdQuartile',
+    USER_CLOSE: 'userClose',
+    VOLUME_CHANGED: 'volumeChanged',
+    VOLUME_MUTED: 'volumeMuted'
+  };
+  var AdsManagerLoadedEventType = { ADS_MANAGER_LOADED: 'adsManagerLoaded' };
+  var AdErrorEventType = { AD_ERROR: 'adError' };
+  ima.AdEvent = { Type: AdEventType };
+  ima.AdsManagerLoadedEvent = { Type: AdsManagerLoadedEventType };
+  ima.AdErrorEvent = { Type: AdErrorEventType };
+  ima.AdError = { ErrorCode: {}, Type: {} };
+  ima.ViewMode = { NORMAL: 'normal', FULLSCREEN: 'fullscreen' };
+  ima.ImaSdkSettings = function () {};
+  ima.ImaSdkSettings.VpaidMode = { DISABLED: 0, ENABLED: 1, INSECURE: 2 };
+  ima.ImaSdkSettings.prototype = {
+    setVpaidMode: function () {}, setLocale: function () {}, setNumRedirects: function () {},
+    setAutoPlayAdBreaks: function () {}, setCookiesEnabled: function () {}, setPlayerType: function () {},
+    setPlayerVersion: function () {}, setPpid: function () {}, setSessionId: function () {},
+    setFeatureFlags: function () {}, setDisableCustomPlaybackForIOS10Plus: function () {}
+  };
+  ima.settings = new ima.ImaSdkSettings();
+  ima.AdDisplayContainer = function () {
+    this.initialize = function () {};
+    this.destroy = function () {};
+  };
+  ima.AdsRequest = function () {
+    this.setAdWillAutoPlay = function () {};
+    this.setAdWillPlayMuted = function () {};
+    this.setContinuousPlayback = function () {};
+  };
+  ima.AdsRenderingSettings = function () {};
+  ima.CompanionAdSelectionSettings = function () {};
+  ima.CompanionAdSelectionSettings.CreativeType = { ALL: 'All', FLASH: 'Flash', IMAGE: 'Image' };
+  ima.CompanionAdSelectionSettings.ResourceType = { ALL: 'All', HTML: 'Html', IFRAME: 'IFrame', STATIC: 'Static' };
+  ima.CompanionAdSelectionSettings.SizeCriteria = { IGNORE: 'IgnoreSize', SELECT_EXACT_MATCH: 'SelectExactMatch', SELECT_NEAR_MATCH: 'SelectNearMatch' };
+  function makeManager() {
+    var m = new EvTarget();
+    m.init = function () {};
+    m.start = function () {
+      setTimeout(function () {
+        m._emit(AdEventType.CONTENT_RESUME_REQUESTED, { type: AdEventType.CONTENT_RESUME_REQUESTED, getAd: function () { return null; }, getAdData: function () { return {}; } });
+        m._emit(AdEventType.ALL_ADS_COMPLETED, { type: AdEventType.ALL_ADS_COMPLETED, getAd: function () { return null; }, getAdData: function () { return {}; } });
+      }, 0);
+    };
+    m.resize = m.pause = m.resume = m.stop = m.skip = m.destroy = m.discardAdBreak = m.updateAdsRenderingSettings = m.focus = function () {};
+    m.setVolume = function () {};
+    m.getVolume = function () { return 1; };
+    m.getRemainingTime = function () { return 0; };
+    m.getCuePoints = function () { return []; };
+    m.getCurrentAd = function () { return null; };
+    m.isCustomClickTrackingUsed = function () { return false; };
+    m.isCustomPlaybackUsed = function () { return false; };
+    return m;
+  }
+  ima.AdsLoader = function () {
+    EvTarget.call(this);
+    this._settings = ima.settings;
+  };
+  ima.AdsLoader.prototype = Object.create(EvTarget.prototype);
+  ima.AdsLoader.prototype.getSettings = function () { return this._settings; };
+  ima.AdsLoader.prototype.contentComplete = function () {};
+  ima.AdsLoader.prototype.destroy = function () {};
+  ima.AdsLoader.prototype.requestAds = function () {
+    var self = this;
+    var mgr = makeManager();
+    setTimeout(function () {
+      self._emit(AdsManagerLoadedEventType.ADS_MANAGER_LOADED, {
+        type: AdsManagerLoadedEventType.ADS_MANAGER_LOADED,
+        getAdsManager: function () { return mgr; },
+        getUserRequestContext: function () { return {}; }
+      });
+    }, 0);
+  };
+  ima.dai = ima.dai || {
+    api: {
+      StreamManager: function () {
+        EvTarget.call(this);
+        this.requestStream = function () {};
+        this.replaceAdTagParameters = function () {};
+        this.reset = function () {};
+        this.setClickElement = function () {};
+        this.processMetadata = function () {};
+        this.onTimedMetadata = function () {};
+      },
+      StreamEvent: { Type: { LOADED: 'loaded', AD_BREAK_STARTED: 'adBreakStarted', AD_BREAK_ENDED: 'adBreakEnded', ERROR: 'error' } },
+      VODStreamRequest: function () {},
+      LiveStreamRequest: function () {}
+    }
+  };
 })();"""
 }

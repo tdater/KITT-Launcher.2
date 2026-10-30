@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -41,15 +42,24 @@ import com.aiconsole.kittlauncher2.KittApplication
 import com.aiconsole.kittlauncher2.ui.components.HelpText
 import com.aiconsole.kittlauncher2.ui.components.KittButton
 import com.aiconsole.kittlauncher2.ui.components.KittPanel
+import com.aiconsole.kittlauncher2.ui.components.SectionHeader
 import com.aiconsole.kittlauncher2.ui.theme.AlertRed
 import com.aiconsole.kittlauncher2.ui.theme.DashAmber
 import com.aiconsole.kittlauncher2.ui.theme.DashGrey
 import com.aiconsole.kittlauncher2.ui.theme.DashWhite
+import com.aiconsole.kittlauncher2.ui.theme.DashYellow
 import com.aiconsole.kittlauncher2.ui.theme.KittBezel
 import com.aiconsole.kittlauncher2.ui.theme.KittBlack
 import com.aiconsole.kittlauncher2.ui.theme.LedGreen
+import com.aiconsole.kittlauncher2.ui.theme.ScannerRed
 
-/** Widgets page: standard Android home-screen widgets (weather, music, calendar…) in a column. */
+private enum class WidgetFilter(val label: String) {
+    All("All Widgets"),
+    Tools("Cockpit Tools"),
+    AppWidgets("App Widgets")
+}
+
+/** Widgets page: built-in cockpit driver utilities and standard Android home-screen widgets. */
 @Composable
 fun WidgetsPane(modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -60,6 +70,7 @@ fun WidgetsPane(modifier: Modifier = Modifier) {
     var picking by remember { mutableStateOf(false) }
     var pendingId by remember { mutableStateOf<Int?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    var filter by remember { mutableStateOf(WidgetFilter.All) }
 
     fun save(list: List<Int>) = app.settings.widgetIds.set(list.distinct().joinToString("\n"))
     fun discard(id: Int) {
@@ -119,24 +130,45 @@ fun WidgetsPane(modifier: Modifier = Modifier) {
     }
 
     KittPanel(
-        title = "Widgets",
+        title = "Widgets & Tools",
         modifier = modifier,
         accent = DashAmber,
         trailing = {
-            KittButton(if (picking) "Cancel" else "+ Add widget", { picking = !picking }, Modifier.height(32.dp), LedGreen, active = !picking)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                KittButton(if (picking) "Cancel" else "+ Add App Widget", { picking = !picking }, Modifier.height(32.dp), LedGreen, active = !picking)
+            }
         }
     ) {
         if (BuildConfig.HOLO_DESIGN) {
             com.aiconsole.kittlauncher2.ui.components.AnnunciatorRow(
                 listOf(
-                    com.aiconsole.kittlauncher2.ui.components.Annunciator("WIDGETS ${ids.size}", ids.isNotEmpty(), LedGreen),
-                    com.aiconsole.kittlauncher2.ui.components.Annunciator("ADD MODE", picking, DashAmber),
-                    com.aiconsole.kittlauncher2.ui.components.Annunciator("FAULT", message != null, AlertRed)
+                    com.aiconsole.kittlauncher2.ui.components.Annunciator("COCKPIT TOOLS 7", true, LedGreen),
+                    com.aiconsole.kittlauncher2.ui.components.Annunciator("APP WIDGETS ${ids.size}", ids.isNotEmpty(), DashAmber),
+                    com.aiconsole.kittlauncher2.ui.components.Annunciator("ADD MODE", picking, ScannerRed)
                 ),
                 Modifier.fillMaxWidth().padding(bottom = 6.dp)
             )
         }
+
+        // Section filter pills
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            WidgetFilter.entries.forEach { f ->
+                KittButton(
+                    f.label,
+                    { filter = f },
+                    Modifier.weight(1f).height(32.dp),
+                    if (filter == f) ScannerRed else DashGrey,
+                    active = filter == f
+                )
+            }
+        }
+
         message?.let { HelpText(it, color = AlertRed) }
+
         if (picking) {
             val providers = remember { manager.installedProviders.sortedBy { it.loadLabel(context.packageManager).lowercase() } }
             LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -156,40 +188,71 @@ fun WidgetsPane(modifier: Modifier = Modifier) {
             }
             return@KittPanel
         }
-        if (ids.isEmpty()) {
-            HelpText("Add weather, calendar, music or any other app's home-screen widgets here.")
-            return@KittPanel
-        }
-        LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(ids, key = { it }) { id ->
-                val info = remember(id) { manager.getAppWidgetInfo(id) }
-                if (info == null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Widget no longer available", Modifier.weight(1f), color = DashGrey)
-                        KittButton("Remove", { save(ids - id); discard(id) }, Modifier.height(36.dp), AlertRed)
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Built-in Cockpit Widgets
+            if (filter == WidgetFilter.All || filter == WidgetFilter.Tools) {
+                item { SectionHeader("Built-In Cockpit Driver Tools", color = LedGreen) }
+                item { NavDispatcherWidget() }
+                item { ParkingSentryWidget() }
+                item { InclinometerWidget() }
+                item { CabinSoundMeterWidget() }
+                item { CockpitScratchpadWidget() }
+                item { UnitConverterWidget() }
+                item { VehicleEmergencyWidget() }
+            }
+
+            // Android System AppWidgets
+            if (filter == WidgetFilter.All || filter == WidgetFilter.AppWidgets) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        SectionHeader("Android System App Widgets (${ids.size})", color = DashAmber)
+                        KittButton("+ Add Widget", { picking = true }, Modifier.height(28.dp), DashAmber)
                     }
-                    return@items
                 }
-                val minHeight = with(LocalDensity.current) { info.minHeight.toDp() }.coerceAtLeast(110.dp)
-                Column(
-                    Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).background(KittBlack)
-                        .then(if (BuildConfig.HOLO_DESIGN) Modifier.skinFrame(MaterialTheme.shapes.small, KittBezel) else Modifier.border(1.dp, KittBezel, MaterialTheme.shapes.small)).padding(4.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            info.loadLabel(context.packageManager).uppercase(),
-                            Modifier.weight(1f).padding(start = 4.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = DashWhite,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        KittButton("X", { save(ids - id); discard(id) }, Modifier.height(28.dp).width(40.dp), AlertRed)
+                if (ids.isEmpty()) {
+                    item {
+                        HelpText("No Android app widgets added yet. Tap '+ Add App Widget' above to embed weather, calendar, or music widgets from your installed apps.")
                     }
-                    AndroidView(
-                        factory = { ctx -> app.widgetHost.createView(ctx, id, info) },
-                        modifier = Modifier.fillMaxWidth().height(minHeight)
-                    )
+                } else {
+                    items(ids, key = { it }) { id ->
+                        val info = remember(id) { manager.getAppWidgetInfo(id) }
+                        if (info == null) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Widget no longer available", Modifier.weight(1f), color = DashGrey)
+                                KittButton("Remove", { save(ids - id); discard(id) }, Modifier.height(36.dp), AlertRed)
+                            }
+                            return@items
+                        }
+                        val minHeight = with(LocalDensity.current) { info.minHeight.toDp() }.coerceAtLeast(110.dp)
+                        Column(
+                            Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).background(KittBlack)
+                                .then(if (BuildConfig.HOLO_DESIGN) Modifier.skinFrame(MaterialTheme.shapes.small, KittBezel) else Modifier.border(1.dp, KittBezel, MaterialTheme.shapes.small)).padding(4.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    info.loadLabel(context.packageManager).uppercase(),
+                                    Modifier.weight(1f).padding(start = 4.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = DashWhite,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                KittButton("X", { save(ids - id); discard(id) }, Modifier.height(28.dp).width(40.dp), AlertRed)
+                            }
+                            AndroidView(
+                                factory = { ctx -> app.widgetHost.createView(ctx, id, info) },
+                                modifier = Modifier.fillMaxWidth().height(minHeight)
+                            )
+                        }
+                    }
                 }
             }
         }

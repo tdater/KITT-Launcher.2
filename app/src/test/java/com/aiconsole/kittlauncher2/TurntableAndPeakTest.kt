@@ -52,6 +52,14 @@ class TurntableAndPeakTest {
     }
 
     @Test
+    fun manualTouchDragRotatesYawAndWrapsAround() {
+        val quarterDrag = Turntable.drag(0f, deltaX = 100f, widthPx = 400f)
+        assertEquals(twoPi * 0.25f, quarterDrag, 0.001f)
+        val reverseDrag = Turntable.drag(0.1f, deltaX = -200f, widthPx = 400f)
+        assertEquals((0.1f - twoPi * 0.5f + twoPi) % twoPi, reverseDrag, 0.001f)
+    }
+
+    @Test
     fun peakHoldsTheHighestValueThisDrive() {
         val peaks = PeakHold()
         assertEquals(50.0, peaks.update("g", 50.0, 1_000), 0.0)

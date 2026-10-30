@@ -127,7 +127,7 @@ fun MediaDeck(app: KittApplication, now: NowPlaying?, hasAccess: Boolean, modifi
         }
         val spectrum = @Composable { m: Modifier ->
             Column(m) {
-                LedEqualizer16(Modifier.weight(1f).fillMaxWidth(), active = true, micGranted = mic, labels = true)
+                LedEqualizer16(Modifier.weight(1f).fillMaxWidth(), active = true, micGranted = mic, labels = true, playing = now?.playing == true || com.aiconsole.kittlauncher2.browser.WebMedia.busy)
                 if (!mic) KittButton("Enable spectrum (microphone)", { askMic.launch(Manifest.permission.RECORD_AUDIO) }, Modifier.fillMaxWidth().height(30.dp), DashAmber)
             }
         }
@@ -199,7 +199,7 @@ fun MediaDeck(app: KittApplication, now: NowPlaying?, hasAccess: Boolean, modifi
                 TransportKey("NEXT", "▶▶", false, now != null, Modifier.weight(1f)) { app.media.next() }
                 TransportKey("REPEAT", "↻", repeatOk, repeatOk, Modifier.weight(1f)) { app.media.fireAction("repeat") }
                 TransportKey("SHUFFLE", "⇄", shuffleOk, shuffleOk, Modifier.weight(1f)) { app.media.fireAction("shuffle") }
-                Rocker("LIBRARY", true, onLibrary)
+                Rocker("MUSIC HUB", true, onLibrary)
             }
         }
     }

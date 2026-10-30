@@ -213,6 +213,12 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     val keyBindings = stringPref("key_bindings", "")
     /** Home-screen widget ids, one per line. */
     val widgetIds = stringPref("widget_ids", "")
+    /** Built-in cockpit widget scratchpad memo. */
+    val widgetScratchpad = stringPref("widget_scratchpad", "")
+    /** Built-in parking sentry pinned location and time. */
+    val widgetParkingSpot = stringPref("widget_parking_spot", "")
+    /** Built-in parking meter expiration timestamp (epoch millis). */
+    val widgetMeterEndEpoch = longPref("widget_meter_end_epoch", 0L)
 
     /** Stream window asks sites for their desktop layout (full players, more settings). */
     val streamDesktop = boolPref("stream_desktop", true)
@@ -221,6 +227,9 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
     /** Saved sites on the AI and Games pages (StreamSites format). */
     val aiBookmarks = stringPref("ai_bookmarks", "")
     val gameBookmarks = stringPref("game_bookmarks", "")
+    val musicBookmarks = stringPref("music_bookmarks", "")
+    val musicFavorites = stringPref("music_favorites", "")
+    val musicVisits = stringPref("music_visits", "")
     /** Per-site browser options (SiteSettings format). */
     val siteSettings = stringPref("site_settings", "")
     /** Darken pages that have no dark theme of their own (default for sites without an override). */

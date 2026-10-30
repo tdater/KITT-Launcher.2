@@ -68,6 +68,7 @@ fun StreamWindow(session: BrowserSession, modifier: Modifier = Modifier) {
                     prefs = prefs,
                     continueTitle = "Continue watching",
                     searchHint = "Search services, or type any address",
+                    topSections = StreamSites.FEATURED_SECTIONS,
                     help = "Free, legal services: ad-supported, free tiers, or free with a library card. Save any other site with " +
                         "★ SAVE (My sites), or import bookmarks from another browser. Sign-ins stay in this window's own sandbox. " +
                         "THEATER gives the window the whole screen; FOCUS blows the video up inside the page. Ads and pop-ups " +

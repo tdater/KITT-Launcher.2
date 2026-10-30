@@ -6,6 +6,7 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import android.view.ViewGroup
 import androidx.compose.ui.graphics.toArgb
@@ -64,13 +65,20 @@ object WebMedia {
     private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
         // In problem reports: shows which app interrupts a page's playback, and how.
         Log.i("WebMedia", "Audio focus change $change while ${playingTabs().size} page(s) play")
+        val now = SystemClock.elapsedRealtime()
+        fun shouldPause(tab: BrowserTab): Boolean {
+            // Never pause a tab that the driver is actively watching on-screen if it started playing recently (< 5s),
+            // because Chromium WebView requests internal audio focus when starting media playback.
+            if (tab.attached && (now - tab.lastPlayStartAt < 5000L)) return false
+            return true
+        }
         when (MediaFocus.onChange(change)) {
             MediaFocus.Action.Pause -> {
                 hasFocus = false
                 pausedUntilGain.clear()
-                playingTabs().forEach(::pause)
+                playingTabs().filter(::shouldPause).forEach(::pause)
             }
-            MediaFocus.Action.PauseUntilGain -> playingTabs().forEach { tab ->
+            MediaFocus.Action.PauseUntilGain -> playingTabs().filter(::shouldPause).forEach { tab ->
                 pausedUntilGain += tab
                 pause(tab)
             }
@@ -131,6 +139,7 @@ object WebMedia {
         tab.playing = tab.playingFrames.isNotEmpty()
         if (tab.playing == was) return
         if (tab.playing) {
+            tab.lastPlayStartAt = SystemClock.elapsedRealtime()
             pausedUntilGain.clear()
             playingTabs().filter { it !== tab }.forEach(::pause)
             requestFocus()

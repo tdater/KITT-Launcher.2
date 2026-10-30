@@ -63,7 +63,7 @@ class MediaCaptureTest {
     @Test
     fun pages() = launch().use {
         pause(10_000)
-        for (page in listOf("Drive", "Gauges", "Media", "Ai", "Games", "Apps")) {
+        for (page in listOf("Drive", "Gauges", "Media", "Ai", "Entertainment", "Apps")) {
             show(page)
             shot(page.lowercase())
         }
@@ -132,7 +132,7 @@ class MediaCaptureTest {
             pause(12_000)
             stop(intro)
             val tour = record("tour")
-            for (page in listOf("Drive", "Gauges", "Media", "Ai", "Games", "Apps", "Drive")) show(page, 2_000)
+            for (page in listOf("Drive", "Gauges", "Media", "Ai", "Entertainment", "Apps", "Drive")) show(page, 2_000)
             stop(tour)
         }
     }

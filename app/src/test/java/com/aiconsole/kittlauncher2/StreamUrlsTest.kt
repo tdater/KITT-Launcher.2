@@ -24,6 +24,9 @@ class StreamUrlsTest {
         assertNull(StreamUrls.normalize(""))
         assertNull(StreamUrls.normalize("cat videos"))
         assertNull(StreamUrls.normalize("youtube"))
+        assertNull(StreamUrls.normalizeOrSearch("   "))
+        assertEquals("https://tubitv.com", StreamUrls.normalizeOrSearch("tubitv.com"))
+        assertEquals("https://duckduckgo.com/?q=knight+rider+full+episodes", StreamUrls.normalizeOrSearch("knight rider full episodes"))
     }
 
     @Test
@@ -67,5 +70,14 @@ class StreamSitesTest {
         val all = com.aiconsole.kittlauncher2.stream.StreamSites.video + com.aiconsole.kittlauncher2.stream.StreamSites.audio
         org.junit.Assert.assertTrue(all.all { it.url.startsWith("https://") })
         assertEquals(all.size, all.map { it.url }.distinct().size)
+        val sections = com.aiconsole.kittlauncher2.stream.StreamSites.FEATURED_SECTIONS
+        org.junit.Assert.assertEquals(9, sections.size)
+        org.junit.Assert.assertEquals("Live Sports Streams", sections[0].first)
+        org.junit.Assert.assertEquals("Live TV Channels", sections[1].first)
+        org.junit.Assert.assertEquals("Free Movies & TV Portals", sections[2].first)
+        org.junit.Assert.assertEquals("https://tubitv.com/", com.aiconsole.kittlauncher2.stream.StreamSites.FREE_LICENSED_STREAMING.first().url)
+        org.junit.Assert.assertEquals("https://open.spotify.com/", com.aiconsole.kittlauncher2.stream.StreamSites.PICK_A_SONG.first().url)
+        org.junit.Assert.assertEquals("https://www.pandora.com/", com.aiconsole.kittlauncher2.stream.StreamSites.FREE_RADIO_AND_STATIONS.first().url)
+        org.junit.Assert.assertEquals("https://bandcamp.com/", com.aiconsole.kittlauncher2.stream.StreamSites.INDEPENDENT_MUSIC_AND_MIXES.first().url)
     }
 }

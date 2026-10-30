@@ -96,7 +96,7 @@ class OnDeviceVoice(context: Context) {
     suspend fun remove(voice: LocalVoice) = withContext(Dispatchers.IO) {
         engineLock.withLock {
             if (engineId == voice.id) {
-                engine?.release()
+                synchronized(nativeInitLock) { engine?.release() }
                 engine = null
                 engineId = null
             }
@@ -113,7 +113,9 @@ class OnDeviceVoice(context: Context) {
                 idleRelease?.cancel()
                 val tts = load(voice) ?: return@withLock null
                 val started = System.currentTimeMillis()
-                val audio = tts.generate(text, sid = LocalVoices.speaker(voice, speaker), speed = speed)
+                val audio = synchronized(nativeInitLock) {
+                    tts.generate(text, sid = LocalVoices.speaker(voice, speaker), speed = speed)
+                }
                 val audioMs = if (audio.sampleRate > 0) audio.samples.size * 1000L / audio.sampleRate else 0L
                 VoiceLog.add("${voice.id}: ${VoiceLog.speed(audioMs, System.currentTimeMillis() - started)}, ${text.length} chars")
                 // The model holds 60-300 MB: let it go after a few quiet minutes (it reloads in a second or two).
@@ -133,7 +135,7 @@ class OnDeviceVoice(context: Context) {
     suspend fun release() = engineLock.withLock {
         idleRelease?.cancel()
         idleRelease = null
-        engine?.release()
+        synchronized(nativeInitLock) { engine?.release() }
         engine = null
         engineId = null
     }
@@ -146,23 +148,30 @@ class OnDeviceVoice(context: Context) {
     /** Loads (or reuses) the voice's model. Called with [engineLock] held. */
     private fun load(voice: LocalVoice): OfflineTts? {
         if (engineId == voice.id) engine?.let { return it }
-        engine?.release()
+        synchronized(nativeInitLock) { engine?.release() }
         engine = null
         engineId = null
         val dir = File(root, voice.id)
         val model = dir.listFiles().orEmpty().firstOrNull { it.name.endsWith(".onnx") } ?: return null
-        val tokens = File(dir, "tokens.txt").path
-        val data = File(dir, "espeak-ng-data").path
+        val tokensFile = File(dir, "tokens.txt")
+        val dataDir = File(dir, "espeak-ng-data")
+        if (!tokensFile.exists() || !dataDir.exists()) {
+            VoiceLog.add("${voice.id}: missing tokens.txt or espeak-ng-data")
+            return null
+        }
         val voices = File(dir, "voices.bin")
         val threads = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 4)
         val modelConfig = if (voices.exists()) {
-            OfflineTtsModelConfig(kokoro = OfflineTtsKokoroModelConfig(model = model.path, voices = voices.path, tokens = tokens, dataDir = data), numThreads = threads)
+            OfflineTtsModelConfig(kokoro = OfflineTtsKokoroModelConfig(model = model.path, voices = voices.path, tokens = tokensFile.path, dataDir = dataDir.path), numThreads = threads)
         } else {
-            OfflineTtsModelConfig(vits = OfflineTtsVitsModelConfig(model = model.path, tokens = tokens, dataDir = data), numThreads = threads)
+            OfflineTtsModelConfig(vits = OfflineTtsVitsModelConfig(model = model.path, tokens = tokensFile.path, dataDir = dataDir.path), numThreads = threads)
         }
         val started = System.currentTimeMillis()
+        VoiceLog.add("${voice.id}: loading model (${if (voices.exists()) "kokoro" else "vits"}, $threads threads)...")
         return try {
-            OfflineTts(config = OfflineTtsConfig(model = modelConfig)).also {
+            synchronized(nativeInitLock) {
+                OfflineTts(config = OfflineTtsConfig(model = modelConfig))
+            }.also {
                 engine = it
                 engineId = voice.id
                 VoiceLog.add("${voice.id}: model loaded in ${System.currentTimeMillis() - started} ms ($threads threads)")
@@ -247,7 +256,9 @@ class OnDeviceVoice(context: Context) {
         return IOException("On-device playback stalled: $why")
     }
 
-    private companion object {
+    companion object {
+        /** Shared lock so sherpa-onnx JNI calls across TTS, wake-word and STT never race in C++. */
+        val nativeInitLock = Any()
         const val IDLE_RELEASE_MS = 5 * 60_000L
         const val TAG = "OnDeviceVoice"
         const val READY = ".ready"

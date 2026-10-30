@@ -135,8 +135,16 @@ data class HomeSite(
  * are links, and the driver can add any other site to My sites.
  */
 object GameSites {
-    val ALL: List<HomeSite> = listOf(
-        HomeSite("RetroGames.cc", "https://www.retrogames.cc/", "Huge NES, SNES, Genesis, GBA, N64, PS1 and arcade library", 0xFFD84315, listOf("Arcade", "Consoles")),
+    /** User-curated Free Retro Browser Games section — shown first before any other game sites. */
+    val FREE_RETRO_BROWSER_GAMES: List<HomeSite> = listOf(
+        HomeSite("RetroGames.cc", "https://www.retrogames.cc/", "Huge NES, SNES, Genesis, GBA, N64, PS1 and arcade library", 0xFFD84315, listOf("Free Retro Browser Games", "Arcade", "Consoles")),
+        HomeSite("Internet Archive - MS-DOS Games", "https://archive.org/details/softwarelibrary_msdos_games", "Internet Archive: thousands of playable MS-DOS games", 0xFF424242, listOf("Free Retro Browser Games", "DOS", "Archive")),
+        HomeSite("ClassicReload", "https://classicreload.com/", "Thousands of DOS, Windows 3.1 and console classics", 0xFF2E7D32, listOf("Free Retro Browser Games", "DOS", "PC")),
+        HomeSite("itch.io - Free Retro Browser Games", "https://itch.io/games/free/tag-browser/tag-retro", "Free indie & retro browser games playable right now", 0xFFC2185B, listOf("Free Retro Browser Games", "Browser games", "Arcade")),
+        HomeSite("EmuBrowser", "https://emubrowser.com/", "Browser-based retro console and arcade emulator", 0xFF00838F, listOf("Free Retro Browser Games", "Consoles", "Arcade"))
+    )
+
+    val ALL: List<HomeSite> = (FREE_RETRO_BROWSER_GAMES + listOf(
         HomeSite("PlayClassic.games", "https://playclassic.games/", "Classic console and DOS games in the browser", 0xFF6A1B9A, listOf("Consoles", "DOS")),
         HomeSite("ClassicReload", "https://classicreload.com/", "Thousands of DOS, Windows 3.1 and console classics", 0xFF2E7D32, listOf("DOS", "PC")),
         HomeSite("Emulator Gamer", "https://emulatorgamer.com/", "Play emulator games online for free", 0xFF1565C0, listOf("Consoles")),
@@ -155,7 +163,7 @@ object GameSites {
         HomeSite("Poki", "https://poki.com/", "Free browser games, touch friendly", 0xFF1E88E5, listOf("Browser games")),
         HomeSite("CrazyGames", "https://www.crazygames.com/", "Free browser games", 0xFF7B1FA2, listOf("Browser games")),
         HomeSite("Addicting Games", "https://www.addictinggames.com/", "Over 5,000 free browser games", 0xFFF57C00, listOf("Browser games"))
-    )
+    )).distinctBy { it.url }
 
     /** Emulator apps for the head unit itself, by their official download pages. */
     val EMULATORS: List<HomeSite> = listOf(

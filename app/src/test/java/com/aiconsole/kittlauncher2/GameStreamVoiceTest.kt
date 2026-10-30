@@ -80,8 +80,13 @@ class GameStreamVoiceTest {
         assertFalse(AdBlock.isBlocked("archive.org"))
         assertTrue(AdBlock.isBlocked("a.exoclick.com"))
         assertNotNull(Surrogates.find("pagead2.googlesyndication.com", "/pagead/js/adsbygoogle.js"))
+        assertNotNull(Surrogates.find("imasdk.googleapis.com", "/js/sdkloader/ima3.js"))
+        assertTrue(Surrogates.looksLikeVast("/pubads/gampad/ads", "output=xml_vast4"))
         assertNull(Surrogates.find("popads.net", "/x.js"))
         assertTrue(Surrogates.looksLikeScript("/tag/js/gpt.js", null))
+        assertEquals(5, GameSites.FREE_RETRO_BROWSER_GAMES.size)
+        assertEquals("https://www.retrogames.cc/", GameSites.FREE_RETRO_BROWSER_GAMES.first().url)
+        assertTrue(GameSites.FREE_RETRO_BROWSER_GAMES.any { it.url == "https://emubrowser.com/" })
     }
 
     @Test

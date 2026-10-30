@@ -65,4 +65,42 @@ class CarReadoutsTest {
         assertEquals(20.0, s.average, 1e-9)
         assertEquals(3, s.count)
     }
+
+    @Test fun bottomCalloutsShowTpmsWhenAvailableAndFallbackToMode01WhenAbsent() {
+        // 1) When TPMS is reported, show the 4 tire pressures
+        val tpmsBoxes = CarReadouts.bottomCallouts(
+            tirePrefix = "TPMS",
+            tiresKpa = listOf(220.0, 220.0, 214.0, 160.0),
+            metric = false,
+            load = 35.0,
+            throttle = 18.0,
+            intakeC = 28.0,
+            burnLph = 4.2,
+            rpm = 1850.0
+        )
+        assertEquals(listOf("TPMS FL", "TPMS FR", "TPMS RL", "TPMS RR"), tpmsBoxes.map { it.title })
+        assertEquals("32 PSI", tpmsBoxes[0].value)
+        assertEquals("OK", tpmsBoxes[0].sub)
+        assertEquals(ReadoutLevel.Ok, tpmsBoxes[0].level)
+        assertEquals("23 PSI", tpmsBoxes[3].value)
+        assertEquals("LOW", tpmsBoxes[3].sub)
+        assertEquals(ReadoutLevel.Bad, tpmsBoxes[3].level)
+
+        // 2) When no TPMS is reported but Mode 01 OBD is streaming, fall back to live Mode 01 boxes
+        val fallbackBoxes = CarReadouts.bottomCallouts(
+            tirePrefix = "TPMS",
+            tiresKpa = listOf(null, null, null, null),
+            metric = false,
+            load = 42.0,
+            throttle = 21.0,
+            intakeC = 30.0,
+            burnLph = 3.78541,
+            rpm = 1900.0
+        )
+        assertEquals(listOf("LOAD", "THROTTLE", "INTAKE", "BURN"), fallbackBoxes.map { it.title })
+        assertEquals("42%", fallbackBoxes[0].value)
+        assertEquals("21%", fallbackBoxes[1].value)
+        assertEquals("86°F", fallbackBoxes[2].value)
+        assertEquals("1.00 gal/h", fallbackBoxes[3].value)
+    }
 }

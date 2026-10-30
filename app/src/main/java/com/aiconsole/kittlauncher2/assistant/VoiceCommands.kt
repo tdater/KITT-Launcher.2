@@ -35,7 +35,7 @@ object VoiceCommands {
         "media" to "media", "music player" to "media",
         "widgets" to "widgets", "widget" to "widgets",
         "apps" to "apps", "app drawer" to "apps", "applications" to "apps",
-        "ai" to "ai", "a i" to "ai", "chat" to "ai", "games" to "games", "game" to "games", "arcade" to "games"
+        "ai" to "ai", "a i" to "ai", "chat" to "ai", "entertainment" to "entertainment", "games" to "entertainment", "game" to "entertainment", "arcade" to "entertainment", "stream" to "entertainment", "tv" to "entertainment"
     )
 
     /** "play music" and friends mean resume, which the plain Play command handles. */

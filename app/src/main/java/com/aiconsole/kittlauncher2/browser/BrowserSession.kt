@@ -17,6 +17,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
+import android.webkit.PermissionRequest
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -57,6 +58,8 @@ class BrowserTab(val id: Long, initialUrl: String?, initialTitle: String?) {
     var playing by mutableStateOf(false)
         internal set
     internal val playingFrames = mutableSetOf<String>()
+    var lastPlayStartAt = 0L
+        internal set
 
     /** The new-tab page (site picker) instead of a website. */
     val isPicker: Boolean get() = url == null
@@ -288,6 +291,8 @@ class BrowserSession(
 
     fun canGoBack(): Boolean = current?.web?.canGoBack() == true
     fun goBack() = current?.web?.goBack()
+    fun canGoForward(): Boolean = current?.web?.canGoForward() == true
+    fun goForward() = current?.web?.goForward()
     fun reload() = current?.web?.reload()
 
     fun run(script: String, onResult: (String) -> Unit = {}) {
@@ -409,6 +414,7 @@ class BrowserSession(
         tab.handlers.clear()
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
         tab.handlers += WebViewCompat.addDocumentStartJavaScript(web, PageScripts.MEDIA_WATCH, setOf("*"))
+        tab.handlers += WebViewCompat.addDocumentStartJavaScript(web, PageScripts.VIDEO_COMPAT, setOf("*"))
         // Gamepad API emulators see the controllers and the touch pad (every frame, before the page runs).
         if (gamepad) tab.handlers += WebViewCompat.addDocumentStartJavaScript(web, VirtualPads.POLYFILL, setOf("*"))
         scripts.filter { it.enabled }.forEach { installed ->
@@ -470,6 +476,13 @@ class BrowserSession(
         settings.domStorageEnabled = true
         settings.databaseEnabled = true
         settings.mediaPlaybackRequiresUserGesture = false
+        runCatching {
+            CookieManager.getInstance().setAcceptCookie(true)
+            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
+                WebViewCompat.getProfile(this).cookieManager.setAcceptCookie(true)
+            }
+        }
         settings.builtInZoomControls = true
         settings.displayZoomControls = false
         settings.setSupportMultipleWindows(true)
@@ -632,6 +645,7 @@ class BrowserSession(
             if (url != null && url.startsWith("http")) onVisit?.invoke(view.title, url)
             if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
             view.evaluateJavascript(PageScripts.MEDIA_WATCH, null)
+            view.evaluateJavascript(PageScripts.VIDEO_COMPAT, null)
             if (gamepad) view.evaluateJavascript(VirtualPads.POLYFILL, null)
             userscripts.scripts.value.filter { it.enabled }.forEach { view.evaluateJavascript(Userscripts.wrap(it.script), null) }
         }
@@ -644,13 +658,16 @@ class BrowserSession(
             // Scripts get a stand-in (or an empty script): game and video pages often wait on an
             // ad library's callback before they start, and would hang on a missing script.
             val path = request.url.path.orEmpty()
+            val headers = mapOf("Access-Control-Allow-Origin" to "*", "Cache-Control" to "no-store")
+            if (Surrogates.looksLikeVast(path, request.url.query)) {
+                return WebResourceResponse("application/xml", "utf-8", 200, "OK", headers, ByteArrayInputStream(Surrogates.EMPTY_VAST.toByteArray()))
+            }
             val surrogate = Surrogates.find(request.url.host.orEmpty(), path)
             if (surrogate != null || Surrogates.looksLikeScript(path, request.requestHeaders["Accept"])) {
                 val body = (surrogate ?: Surrogates.EMPTY).toByteArray()
-                val headers = mapOf("Access-Control-Allow-Origin" to "*", "Cache-Control" to "no-store")
                 return WebResourceResponse("application/javascript", "utf-8", 200, "OK", headers, ByteArrayInputStream(body))
             }
-            return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
+            return WebResourceResponse("text/plain", "utf-8", 200, "OK", headers, ByteArrayInputStream(ByteArray(0)))
         }
 
         // A crashed or killed renderer must not take the launcher down: drop this tab's WebView;
@@ -690,6 +707,23 @@ class BrowserSession(
             fullscreenView = null
             fullscreenCallback = null
         }
+
+        /**
+         * Grant Widevine EME DRM (`RESOURCE_PROTECTED_MEDIA_ID`) and WebMIDI requests so
+         * pre-bookmarked streaming sites (Tubi, Pluto TV, Plex, Roku Channel, Xumo, Crackle,
+         * Sling, Fandango, Kanopy, Hoopla, PBS, YouTube Movies, Spotify, Pandora, Amazon Music,
+         * Deezer) can initialize their HTML5 encrypted video/audio players instead of failing.
+         */
+        override fun onPermissionRequest(request: PermissionRequest) {
+            val allowed = request.resources.filter {
+                it == PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID ||
+                    it == PermissionRequest.RESOURCE_MIDI_SYSEX
+            }.toTypedArray()
+            if (allowed.isNotEmpty()) request.grant(allowed) else request.deny()
+        }
+
+        override fun getDefaultVideoPoster(): Bitmap =
+            Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
 
         /** Pop-ups the driver triggered open as a new tab; unrequested ones are blocked. */
         override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {

@@ -38,6 +38,14 @@ enum class Quantity(val metricUnit: String, val imperialUnit: String) {
 
 enum class PidSource { STANDARD, MANUFACTURER, CUSTOM, ADAPTER }
 
+/** Alternative module/command/formula to try when a manufacturer PID varies by platform or model year. */
+data class PidCandidate(
+    val command: String,
+    val header: String?,
+    val formula: String,
+    val receiveHeader: String? = null
+)
+
 /**
  * One readable value. [command] is the raw request ("010C", "221940", "ATRV"); [formula]
  * maps response data bytes A, B, C... to a value in the [quantity]'s metric unit.
@@ -59,7 +67,11 @@ data class PidDefinition(
     val customUnit: String = "",
     /** Fast-changing values are polled every cycle, slow ones every few cycles. */
     val fast: Boolean = false,
-    val note: String? = null
+    val note: String? = null,
+    /** Optional CAN receive filter (ATCRA); defaults to [Elm327.receiveHeaderFor] when null. */
+    val receiveHeader: String? = null,
+    /** Additional module/command candidates probed automatically if the primary command does not answer. */
+    val candidates: List<PidCandidate> = emptyList()
 ) {
     /** Standard Mode 01 PID on the engine ECU; these can be batched into multi-PID requests. */
     val mode01Pid: Int? get() =
@@ -86,6 +98,11 @@ object PidCatalog {
     const val MODULE_VOLTAGE = "01_42"
     const val MAF = "01_10"
     const val FUEL_RATE = "01_5E"
+    const val TIRE_LF = "gm_tpms_lf"
+    const val TIRE_RF = "gm_tpms_rf"
+    const val TIRE_LR = "gm_tpms_lr"
+    const val TIRE_RR = "gm_tpms_rr"
+    val TIRES: List<String> = listOf(TIRE_LF, TIRE_RF, TIRE_LR, TIRE_RR)
 
     /** Gasoline stoichiometric air-fuel ratio and fuel density (g/L), for MAF-based fuel rate. */
     private const val STOICH_AFR = 14.7

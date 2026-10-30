@@ -84,7 +84,7 @@ fun GamesPane(session: BrowserSession, modifier: Modifier = Modifier) {
     val prefs = remember { HomePrefs(app.settings.gameBookmarks, app.settings.gameFavorites, app.settings.gameVisits) }
 
     KittPanel(
-        title = if (session.immersive) (session.current?.title?.take(30) ?: "Game") else "Games",
+        title = if (session.immersive) (session.current?.title?.take(30) ?: "Entertainment") else "Entertainment",
         modifier = modifier,
         accent = ScannerRed,
         trailing = {
@@ -127,7 +127,7 @@ fun GamesPane(session: BrowserSession, modifier: Modifier = Modifier) {
                     }
                     if (session.immersive) {
                         item { KittButton("Back", { session.goBack() }, Modifier.height(40.dp).width(72.dp), DashAmber) }
-                        item { KittButton("Games", { session.immersive = false; session.showPicker() }, Modifier.height(40.dp).width(88.dp), DashAmber) }
+                        item { KittButton("Entertainment", { session.immersive = false; session.showPicker() }, Modifier.height(40.dp).width(124.dp), DashAmber) }
                     }
                 }
                 focusNote?.let { HelpText(it, color = DashAmber) }
@@ -138,16 +138,17 @@ fun GamesPane(session: BrowserSession, modifier: Modifier = Modifier) {
                 picker = {
                     SiteHome(
                         session = it,
-                        sites = GameSites.ALL,
+                        sites = (StreamSites.HOME + GameSites.ALL).distinctBy { s -> s.url },
                         prefs = prefs,
-                        continueTitle = "Continue playing",
-                        searchHint = "Search games sites, or type any address",
+                        continueTitle = "Continue playing & streaming",
+                        searchHint = "Search games & streaming, or type any address",
                         help = "Pair a Bluetooth controller in Android settings or plug in a USB one, or use the on-screen TOUCH PAD. " +
                             "INPUT: AUTO sends a game controller to pages that read one and keyboard keys to the rest " +
                             "(A→X  B→Z  X→S  Y→A  L/R→Q/W  Start→Enter  Select→Shift). GAME MODE gives the game the whole screen; " +
                             "FOCUS GAME blows the game up inside the page. Ads and pop-ups are blocked; a held pop-up can be opened " +
                             "from the bar above the page. Downloads (emulator apps, homebrew) go to Downloads/KITT. " +
                             "These sites aren't run by KITT: what you play is up to you.",
+                        topSections = StreamSites.FEATURED_SECTIONS + listOf("Free Retro Browser Games" to GameSites.FREE_RETRO_BROWSER_GAMES),
                         sections = listOf("Emulator apps for the head unit" to GameSites.EMULATORS, "Free homebrew games" to GameSites.GAME_SOURCES)
                     )
                 },
@@ -178,7 +179,7 @@ private fun GamesPaneHolo(session: BrowserSession, modifier: Modifier = Modifier
     val prefs = remember { HomePrefs(app.settings.gameBookmarks, app.settings.gameFavorites, app.settings.gameVisits) }
 
     KittPanel(
-        title = if (session.immersive) (session.current?.title?.take(30) ?: "Game") else "Games",
+        title = if (session.immersive) (session.current?.title?.take(30) ?: "Entertainment") else "Entertainment",
         modifier = modifier,
         accent = ScannerRed,
         trailing = {
@@ -208,7 +209,7 @@ private fun GamesPaneHolo(session: BrowserSession, modifier: Modifier = Modifier
                     }
                     if (session.immersive) {
                         item { KittButton("Back", { session.goBack() }, Modifier.height(40.dp).width(72.dp), DashAmber) }
-                        item { KittButton("Games", { session.immersive = false; session.showPicker() }, Modifier.height(40.dp).width(88.dp), DashAmber) }
+                        item { KittButton("Entertainment", { session.immersive = false; session.showPicker() }, Modifier.height(40.dp).width(124.dp), DashAmber) }
                     }
                 }
                 focusNote?.let { HelpText(it, color = DashAmber) }
@@ -256,6 +257,11 @@ private fun GamesPaneHolo(session: BrowserSession, modifier: Modifier = Modifier
                             "FOCUS GAME blows the game up inside the page. Ads and pop-ups are blocked; a held pop-up can be opened " +
                             "from the bar above the page. Downloads (emulator apps, homebrew) go to Downloads/KITT. " +
                             "These sites aren't run by KITT: what you play is up to you.",
+                        topSections = when (category) {
+                            GameCategory.Arcade -> listOf("Free Retro Browser Games" to GameSites.FREE_RETRO_BROWSER_GAMES)
+                            GameCategory.Streaming -> StreamSites.FEATURED_SECTIONS
+                            else -> emptyList()
+                        },
                         sections = if (category == GameCategory.Arcade) {
                             listOf("Emulator apps for the head unit" to GameSites.EMULATORS, "Free homebrew games" to GameSites.GAME_SOURCES)
                         } else emptyList()
