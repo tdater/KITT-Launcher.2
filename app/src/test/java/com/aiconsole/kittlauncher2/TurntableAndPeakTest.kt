@@ -3,6 +3,8 @@ package com.aiconsole.kittlauncher2
 import com.aiconsole.kittlauncher2.ui.components.Turntable
 import com.aiconsole.kittlauncher2.ui.gauges.PeakHold
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.PI
 
@@ -57,6 +59,13 @@ class TurntableAndPeakTest {
         assertEquals(twoPi * 0.25f, quarterDrag, 0.001f)
         val reverseDrag = Turntable.drag(0.1f, deltaX = -200f, widthPx = 400f)
         assertEquals((0.1f - twoPi * 0.5f + twoPi) % twoPi, reverseDrag, 0.001f)
+    }
+
+    @Test
+    fun hologramStopsTurningWhileAWebPageIsShownOrInLiteMode() {
+        assertTrue(Turntable.shouldAnimate(lite = false, webPageShown = false))
+        assertFalse(Turntable.shouldAnimate(lite = false, webPageShown = true))
+        assertFalse(Turntable.shouldAnimate(lite = true, webPageShown = false))
     }
 
     @Test

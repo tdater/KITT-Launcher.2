@@ -7,6 +7,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import android.os.SystemClock
+import com.aiconsole.kittlauncher2.browser.WebMedia
 import com.aiconsole.kittlauncher2.ui.theme.LocalLiteMode
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberUpdatedState
@@ -180,8 +181,10 @@ fun VehicleStatusHud(
     val userInteractingUntil = remember { mutableLongStateOf(0L) }
     val speedNow = rememberUpdatedState(fresh(PidCatalog.SPEED) ?: 0.0)
     // The spokes and the engine glow only move while the car does; in lite mode nothing animates.
-    LaunchedEffect(lite) {
-        if (lite) return@LaunchedEffect
+    // Frozen while a web page is on screen, like the film HUD and rain: the redraws starve video playback.
+    val animate = Turntable.shouldAnimate(lite, WebMedia.pagesOnScreen > 0)
+    LaunchedEffect(animate) {
+        if (!animate) return@LaunchedEffect
         // The hologram turns slowly on its base unless the user is manually rotating or inspecting a part.
         var last = SystemClock.uptimeMillis()
         while (true) {
@@ -196,8 +199,8 @@ fun VehicleStatusHud(
             pulse.floatValue = (pulse.floatValue + (0.65f + rpmFraction() * 2.6f) * (elapsed.coerceAtMost(250L) / 1000f)) % 1f
         }
     }
-    LaunchedEffect(lite) {
-        if (lite) return@LaunchedEffect
+    LaunchedEffect(animate) {
+        if (!animate) return@LaunchedEffect
         while (true) {
             delay(66)
             if (speedNow.value > 3.0) spin.floatValue = (spin.floatValue + (speedNow.value / 10.0 * 0.25).coerceAtMost(8.0).toFloat() * 0.066f) % (2f * PI.toFloat())

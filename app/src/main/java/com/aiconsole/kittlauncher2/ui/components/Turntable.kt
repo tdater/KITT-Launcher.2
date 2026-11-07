@@ -15,6 +15,12 @@ object Turntable {
     /** Radians per second the car turns: one revolution in about 26 s. */
     const val SPEED = 0.24f
 
+    /**
+     * Whether the hologram animates: never in lite mode, and not while a web page is on screen
+     * (each redraw makes the WebView composite again, which starves a playing video's decoder).
+     */
+    fun shouldAnimate(lite: Boolean, webPageShown: Boolean): Boolean = !lite && !webPageShown
+
     /** Two neighbouring frames and the blend from [from] (0) to [to] (1). */
     data class Blend(val from: Int, val to: Int, val mix: Float)
 
