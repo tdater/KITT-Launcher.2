@@ -260,18 +260,39 @@ class ObdManager(
         }
     }
 
-    /** Mode 04: clears codes and freeze frame, and resets readiness monitors. */
-    suspend fun clearCodes(): Result<DtcReport> {
+    /** What a clear did: what the ECUs said, and the codes re-read afterwards. */
+    data class ClearResult(val reply: ClearReply, val report: DtcReport)
+
+    /**
+     * Mode 04: clears codes and freeze frame, and resets readiness monitors. Only ever called
+     * from the explicit Clear action. Broadcast first; if no module confirms it, the engine (7E0)
+     * and transmission (7E1) modules are asked directly, since some trucks ignore the broadcast.
+     * A refusal (`7F 04 xx`) is reported as such, not as success.
+     */
+    suspend fun clearCodes(): Result<ClearResult> {
         val link = elm ?: return Result.failure(IOException("OBD adapter not connected"))
         return try {
-            val raw = link.exclusive {
-                if (isCan) useHeader(BROADCAST_HEADER)
-                val response = send("04", 5_000)
-                useDefaultHeader()
-                response
+            var reply: ClearReply = ClearReply.Silent
+            val targets = if (isCan) listOf(BROADCAST_HEADER, "7E0", "7E1") else listOf(null)
+            for (header in targets) {
+                var attempt = 0
+                do {
+                    val raw = link.exclusive {
+                        if (header != null) useHeader(header)
+                        val response = send("04", 5_000)
+                        useDefaultHeader()
+                        response
+                    }
+                    reply = ClearRules.classify(raw)
+                    logEvent(LinkLayer.Ecu, "Clear codes via ${header ?: "default"}: $reply")
+                    if (ClearRules.retryable(reply)) delay(1_500)
+                } while (ClearRules.retryable(reply) && ++attempt < 3)
+                // Conditions not correct is the same answer from every module: stop and say so.
+                if (reply is ClearReply.Accepted || (reply is ClearReply.Refused && reply.nrc == ClearRules.NRC_CONDITIONS)) break
             }
-            ObdResponseParser.errorOf(raw)?.let { return Result.failure(IOException("Clear failed: $it")) }
-            Result.success(readCodesInternal(link))
+            // Give the ECU a moment to finish before reading back.
+            delay(1_000)
+            Result.success(ClearResult(reply, readCodesInternal(link)))
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
