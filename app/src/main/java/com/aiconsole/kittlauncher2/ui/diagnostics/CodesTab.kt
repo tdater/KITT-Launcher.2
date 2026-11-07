@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.aiconsole.kittlauncher2.obd.ClearRules
 import com.aiconsole.kittlauncher2.KittApplication
 import com.aiconsole.kittlauncher2.obd.DtcDecoder
 import com.aiconsole.kittlauncher2.obd.FreezeFrame
@@ -129,7 +130,7 @@ fun CodesTab(app: KittApplication, onAskKitt: (String) -> Unit) {
                             busy = true
                             scope.launch {
                                 message = app.obd.clearCodes().fold(
-                                    onSuccess = { "Codes cleared. ${it.all.size} remain." },
+                                    onSuccess = { ClearRules.summary(it.reply, it.report) },
                                     onFailure = { it.message }
                                 )
                                 busy = false

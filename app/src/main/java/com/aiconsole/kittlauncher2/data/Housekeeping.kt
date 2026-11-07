@@ -11,6 +11,18 @@ object ReleaseNotes {
 
     val ALL = listOf(
         ReleaseNote(
+            13,
+            listOf(
+                "Clearing codes now tells the truth: if the ECU refuses (usually because the engine is running) it says so, " +
+                    "asks the engine and transmission modules directly when the broadcast gets no answer, and explains codes that " +
+                    "come straight back (an active fault) or are permanent.",
+                "KITT Holo: a projector base under the hologram with a live tach arc and speed arc, turning ticks, a radar sweep and a " +
+                    "light beam with rising data motes, plus scanlines, a colour fringe and an occasional flicker, tuned for every theme.",
+                "Video fix: the hologram stops turning while a web page is on screen, and a full-screen request that has nowhere to " +
+                    "show is refused so the video plays instead of freezing the launcher.",
+            )
+        ),
+        ReleaseNote(
             12,
             listOf(
                 "KITT Holo: live readings are now callouts around the vehicle, like a scanner display. Engine, speed, battery and " +

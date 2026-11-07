@@ -7,6 +7,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import android.os.SystemClock
+import com.aiconsole.kittlauncher2.browser.WebMedia
 import com.aiconsole.kittlauncher2.ui.theme.LocalLiteMode
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberUpdatedState
@@ -180,8 +181,10 @@ fun VehicleStatusHud(
     val userInteractingUntil = remember { mutableLongStateOf(0L) }
     val speedNow = rememberUpdatedState(fresh(PidCatalog.SPEED) ?: 0.0)
     // The spokes and the engine glow only move while the car does; in lite mode nothing animates.
-    LaunchedEffect(lite) {
-        if (lite) return@LaunchedEffect
+    // Frozen while a web page is on screen, like the film HUD and rain: the redraws starve video playback.
+    val animate = Turntable.shouldAnimate(lite, WebMedia.pagesOnScreen > 0)
+    LaunchedEffect(animate) {
+        if (!animate) return@LaunchedEffect
         // The hologram turns slowly on its base unless the user is manually rotating or inspecting a part.
         var last = SystemClock.uptimeMillis()
         while (true) {
@@ -196,8 +199,8 @@ fun VehicleStatusHud(
             pulse.floatValue = (pulse.floatValue + (0.65f + rpmFraction() * 2.6f) * (elapsed.coerceAtMost(250L) / 1000f)) % 1f
         }
     }
-    LaunchedEffect(lite) {
-        if (lite) return@LaunchedEffect
+    LaunchedEffect(animate) {
+        if (!animate) return@LaunchedEffect
         while (true) {
             delay(66)
             if (speedNow.value > 3.0) spin.floatValue = (spin.floatValue + (speedNow.value / 10.0 * 0.25).coerceAtMost(8.0).toFloat() * 0.066f) % (2f * PI.toFloat())
@@ -412,7 +415,8 @@ fun VehicleStatusHud(
             val live = LiveCar(
                 coolantC = fresh(PidCatalog.COOLANT), rpm = rpmFraction(), speedKmh = fresh(PidCatalog.SPEED), throttle = fresh(PidCatalog.THROTTLE),
                 load = fresh(PidCatalog.ENGINE_LOAD), fuel = fresh(PidCatalog.FUEL_LEVEL), volts = fresh(PidCatalog.MODULE_VOLTAGE) ?: fresh(PidCatalog.ADAPTER_VOLTAGE),
-                mil = milOn, metric = metric, spin = if (moving) spin.floatValue else null, pulse = if (lite) 0f else pulse.floatValue
+                mil = milOn, metric = metric, spin = if (moving) spin.floatValue else null, pulse = if (lite) 0f else pulse.floatValue,
+                yaw = turn.floatValue, fx = !lite
             )
             // Even in lite mode, reflect manual touch rotation if the user dragged the vehicle.
             val yaw = turn.floatValue
@@ -524,7 +528,8 @@ internal fun ReadoutCard(spec: CarReadout, value: Double?, stats: ReadoutStats, 
 /** Everything live that is painted onto the car; [spin] and [pulse] only move while the car does. */
 private class LiveCar(
     val coolantC: Double?, val rpm: Float, val speedKmh: Double?, val throttle: Double?, val load: Double?,
-    val fuel: Double?, val volts: Double?, val mil: Boolean, val metric: Boolean, val spin: Float?, val pulse: Float
+    val fuel: Double?, val volts: Double?, val mil: Boolean, val metric: Boolean, val spin: Float?, val pulse: Float,
+    val yaw: Float = 0f, val fx: Boolean = false
 )
 
 private fun heatColor(c: Double?): Color = when {
@@ -738,13 +743,29 @@ private fun DrawScope.drawHologram(
 
     // The stage: a perspective grid on the floor under the vehicle, like the reference.
     drawFloorGrid(line, p(Offset(0f, 0.905f)).y)
+    // Projector the hologram stands on: tach and speed arcs, turning ticks, radar sweep and a light beam with data motes.
+    val fx = HoloFx.style(skin)
+    if (live.fx) {
+        val base = p(Offset(0.5f, 0.905f))
+        drawProjector(
+            line = line, hot = hot, warn = DashAmber, alert = if (live.mil) AlertRed else null,
+            cx = base.x, floorY = base.y, rx = book.w * s * 0.40f, height = book.h * s * 0.85f,
+            rpm = live.rpm, speedFrac = (((live.speedKmh ?: 0.0) / 140.0).toFloat()), yaw = live.yaw, pulse = live.pulse, ticks = fx.ticks
+        )
+    }
     // A squashed, faded mirror image on the floor, like the reflection under the car in the reference.
     val floorY = p(Offset(0f, 0.905f)).y
     withTransform({ scale(1f, -0.32f, Offset(0f, floorY)) }) {
         drawBlended(image, next, mix, dst, off, 0.20f, androidx.compose.ui.graphics.ColorFilter.tint(line, androidx.compose.ui.graphics.BlendMode.SrcIn))
     }
     // The hologram: the glow pass in the theme colour, then an additive pass for the hot cores.
-    drawBlended(image, next, mix, dst, off, 1f, androidx.compose.ui.graphics.ColorFilter.tint(line, androidx.compose.ui.graphics.BlendMode.SrcIn))
+    if (live.fx) {
+        // A faint colour fringe either side of the car, like light split through a lens.
+        val fringe = 1.5.dp.toPx().roundToInt()
+        val split = androidx.compose.ui.graphics.ColorFilter.tint(lerp(line, fx.fringe, 0.7f), androidx.compose.ui.graphics.BlendMode.SrcIn)
+        drawBlended(image, next, mix, dst, androidx.compose.ui.unit.IntOffset(off.x + fringe, off.y), 0.16f, split, androidx.compose.ui.graphics.BlendMode.Plus)
+    }
+    drawBlended(image, next, mix, dst, off, if (live.fx) HoloFx.flicker(live.pulse) else 1f, androidx.compose.ui.graphics.ColorFilter.tint(line, androidx.compose.ui.graphics.BlendMode.SrcIn))
     drawBlended(image, next, mix, dst, off, 0.45f, androidx.compose.ui.graphics.ColorFilter.tint(hot, androidx.compose.ui.graphics.BlendMode.SrcIn), androidx.compose.ui.graphics.BlendMode.Plus)
 
     // Wheels: pressure-coloured ring on each tyre (the two nearest to the viewer at full strength) and spokes that turn with speed.
@@ -810,6 +831,7 @@ private fun DrawScope.drawHologram(
         }
     }
 
+    if (live.fx) drawScanlines(line, fx.scanlineAlpha, off.x.toFloat(), off.y.toFloat(), dst.width.toFloat(), dst.height.toFloat())
     // Scan band sweeping up the car.
     val by = size.height * (0.18f + 0.62f * scan)
     drawRect(Brush.verticalGradient(listOf(Color.Transparent, line.copy(alpha = 0.16f), Color.Transparent), startY = by - 14.dp.toPx(), endY = by + 14.dp.toPx()), Offset(0f, by - 14.dp.toPx()), Size(size.width, 28.dp.toPx()))

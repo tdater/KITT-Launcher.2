@@ -179,6 +179,11 @@ fun BrowserView(
                 else -> Page(session, current, Modifier.fillMaxSize())
             }
             if (current != null && !current.isPicker && !current.gone && session.pendingInstall == null && !session.showScripts) pageOverlay()
+            // A player asked for full screen on a page that isn't the settled one (mid-swipe): there is
+            // nowhere to show it, and leaving the request open stalls the player. Refuse it so it plays inline.
+            if (fullscreen != null && !LocalWebViewHostActive.current) {
+                LaunchedEffect(fullscreen) { session.exitFullscreen() }
+            }
             if (fullscreen != null && LocalWebViewHostActive.current) {
                 AndroidView(
                     factory = { fullscreen.also { (it.parent as? ViewGroup)?.removeView(it) } },
