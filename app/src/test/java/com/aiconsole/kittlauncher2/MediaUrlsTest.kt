@@ -34,4 +34,18 @@ class MediaUrlsTest {
         assertEquals("1:01:01", MediaUrls.clock(3_661_000))
         assertEquals("0:00", MediaUrls.clock(-5))
     }
+
+    private fun play(url: String = "https://cdn.example.com/a.mp4", main: Boolean = true, back: String? = null, ad: Boolean = false, tapped: Boolean = true, current: Boolean = true) =
+        MediaUrls.shouldPlayNatively(main, url, back, ad, tapped, current)
+
+    @Test
+    fun onlyATappedVideoLinkInTheShownTabGoesToTheNativePlayer() {
+        assertTrue(play())
+        assertFalse(play(ad = true))
+        assertFalse(play(tapped = false))
+        assertFalse(play(current = false))
+        assertFalse(play(main = false))
+        assertFalse(play(url = "https://example.com/page"))
+        assertFalse(play(back = "https://cdn.example.com/a.mp4"))
+    }
 }

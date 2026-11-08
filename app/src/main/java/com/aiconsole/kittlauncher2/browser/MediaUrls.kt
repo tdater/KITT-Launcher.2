@@ -15,6 +15,14 @@ object MediaUrls {
         return name.substringAfterLast('.') in EXTENSIONS
     }
 
+    /**
+     * Whether a navigation goes to the native player. Only a video link the driver tapped, in the tab on screen, that isn't from
+     * a blocked ad host, and that wasn't just sent back to the page. An ad redirect or a script's untapped hop is left to the
+     * browser's own ad-block and pop-up rules, so it can't start playing on its own.
+     */
+    fun shouldPlayNatively(isMainFrame: Boolean, url: String, loadInPage: String?, adHost: Boolean, tapped: Boolean, currentTab: Boolean): Boolean =
+        isMainFrame && url != loadInPage && isDirectVideo(url) && !adHost && tapped && currentTab
+
     /** "m:ss" or "h:mm:ss" for a position in milliseconds. */
     fun clock(ms: Long): String {
         val total = (ms.coerceAtLeast(0L) / 1000L)
