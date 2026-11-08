@@ -15,6 +15,8 @@ object ReleaseNotes {
             listOf(
                 "Direct video links (mp4, webm, mkv, HLS, DASH) now open in a built-in native player with big Play/Pause, ±10 s and " +
                     "seek controls, instead of a web page. If a stream won't play, Open in page hands it back to the browser.",
+                "KITT Holo: the hologram now breathes. A slow glow swells and fades on the car or truck, with bloom on the edges, a pool " +
+                    "of light under the vehicle and a glowing tail lamp, tuned for every theme.",
             )
         ),
         ReleaseNote(
