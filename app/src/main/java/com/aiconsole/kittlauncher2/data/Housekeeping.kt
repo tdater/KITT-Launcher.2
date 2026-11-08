@@ -11,6 +11,13 @@ object ReleaseNotes {
 
     val ALL = listOf(
         ReleaseNote(
+            14,
+            listOf(
+                "Direct video links (mp4, webm, mkv, HLS, DASH) now open in a built-in native player with big Play/Pause, ±10 s and " +
+                    "seek controls, instead of a web page. If a stream won't play, Open in page hands it back to the browser.",
+            )
+        ),
+        ReleaseNote(
             13,
             listOf(
                 "Clearing codes now tells the truth: if the ECU refuses (usually because the engine is running) it says so, " +
