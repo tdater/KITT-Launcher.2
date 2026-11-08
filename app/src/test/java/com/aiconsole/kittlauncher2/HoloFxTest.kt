@@ -61,4 +61,26 @@ class HoloFxTest {
         assertTrue(styles.values.all { it.ticks in 36..120 && it.scanlineAlpha in 0.01f..0.2f })
         assertTrue(styles.getValue(CockpitSkin.Matrix).scanlineAlpha > styles.getValue(CockpitSkin.Kitt).scanlineAlpha)
     }
+
+    @Test
+    fun breathEasesBetweenZeroAndOneAndWraps() {
+        assertEquals(0f, HoloFx.breath(0f), 0.001f)
+        assertEquals(1f, HoloFx.breath(0.5f), 0.001f)
+        assertEquals(0f, HoloFx.breath(1f), 0.001f)
+        assertEquals(HoloFx.breath(0.25f), HoloFx.breath(1.25f), 0.001f)
+        assertEquals(HoloFx.breath(0.75f), HoloFx.breath(-0.25f), 0.001f)
+        assertTrue((0..200).all { HoloFx.breath(it / 100f) in 0f..1f })
+    }
+
+    @Test
+    fun breathHasNoJumpBetweenNeighbouringMoments() {
+        val step = (0 until 1000).map { Math.abs(HoloFx.breath((it + 1) / 1000f) - HoloFx.breath(it / 1000f)) }
+        assertTrue(step.max() < 0.01f)
+    }
+
+    @Test
+    fun everyThemeHasALampColourAndBloom() {
+        assertTrue(CockpitSkin.entries.all { HoloFx.style(it).bloom in 0.5f..2f })
+        assertTrue(HoloFx.style(CockpitSkin.Matrix).bloom > HoloFx.style(CockpitSkin.RoboCop).bloom)
+    }
 }
