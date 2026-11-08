@@ -178,6 +178,7 @@ fun VehicleStatusHud(
     val pulse = remember { mutableFloatStateOf(0f) }
     val turn = remember { mutableFloatStateOf(HOLO_REST_YAW) }
     val scanPhase = remember { mutableFloatStateOf(0f) }
+    val breathPhase = remember { mutableFloatStateOf(0f) }
     val userInteractingUntil = remember { mutableLongStateOf(0L) }
     val speedNow = rememberUpdatedState(fresh(PidCatalog.SPEED) ?: 0.0)
     // The spokes and the engine glow only move while the car does; in lite mode nothing animates.
@@ -196,6 +197,7 @@ fun VehicleStatusHud(
                 turn.floatValue = Turntable.advance(turn.floatValue, elapsed)
             }
             scanPhase.floatValue = (scanPhase.floatValue + 0.24f * elapsed.coerceAtMost(250L) / 1000f) % 1f
+            breathPhase.floatValue = (breathPhase.floatValue + elapsed.coerceAtMost(250L) / (HoloFx.BREATH_SECONDS * 1000f)) % 1f
             pulse.floatValue = (pulse.floatValue + (0.65f + rpmFraction() * 2.6f) * (elapsed.coerceAtMost(250L) / 1000f)) % 1f
         }
     }
@@ -416,7 +418,7 @@ fun VehicleStatusHud(
                 coolantC = fresh(PidCatalog.COOLANT), rpm = rpmFraction(), speedKmh = fresh(PidCatalog.SPEED), throttle = fresh(PidCatalog.THROTTLE),
                 load = fresh(PidCatalog.ENGINE_LOAD), fuel = fresh(PidCatalog.FUEL_LEVEL), volts = fresh(PidCatalog.MODULE_VOLTAGE) ?: fresh(PidCatalog.ADAPTER_VOLTAGE),
                 mil = milOn, metric = metric, spin = if (moving) spin.floatValue else null, pulse = if (lite) 0f else pulse.floatValue,
-                yaw = turn.floatValue, fx = !lite
+                yaw = turn.floatValue, fx = !lite, breath = HoloFx.breath(breathPhase.floatValue)
             )
             // Even in lite mode, reflect manual touch rotation if the user dragged the vehicle.
             val yaw = turn.floatValue
@@ -529,7 +531,7 @@ internal fun ReadoutCard(spec: CarReadout, value: Double?, stats: ReadoutStats, 
 private class LiveCar(
     val coolantC: Double?, val rpm: Float, val speedKmh: Double?, val throttle: Double?, val load: Double?,
     val fuel: Double?, val volts: Double?, val mil: Boolean, val metric: Boolean, val spin: Float?, val pulse: Float,
-    val yaw: Float = 0f, val fx: Boolean = false
+    val yaw: Float = 0f, val fx: Boolean = false, val breath: Float = 0f
 )
 
 private fun heatColor(c: Double?): Color = when {
@@ -753,6 +755,18 @@ private fun DrawScope.drawHologram(
             rpm = live.rpm, speedFrac = (((live.speedKmh ?: 0.0) / 140.0).toFloat()), yaw = live.yaw, pulse = live.pulse, ticks = fx.ticks
         )
     }
+    val breath = live.breath
+    if (live.fx) {
+        // A pool of accent light under the car that swells and fades with the breathing glow.
+        val under = p(Offset(0.5f, 0.905f))
+        val poolR = book.w * s * 0.5f
+        withTransform({ scale(1f, 0.20f, Offset(0f, under.y)) }) {
+            drawCircle(
+                Brush.radialGradient(listOf(fx.fringe.copy(alpha = (0.16f + 0.26f * breath) * fx.bloom), Color.Transparent), center = under, radius = poolR),
+                poolR, under
+            )
+        }
+    }
     // A squashed, faded mirror image on the floor, like the reflection under the car in the reference.
     val floorY = p(Offset(0f, 0.905f)).y
     withTransform({ scale(1f, -0.32f, Offset(0f, floorY)) }) {
@@ -765,8 +779,19 @@ private fun DrawScope.drawHologram(
         val split = androidx.compose.ui.graphics.ColorFilter.tint(lerp(line, fx.fringe, 0.7f), androidx.compose.ui.graphics.BlendMode.SrcIn)
         drawBlended(image, next, mix, dst, androidx.compose.ui.unit.IntOffset(off.x + fringe, off.y), 0.16f, split, androidx.compose.ui.graphics.BlendMode.Plus)
     }
-    drawBlended(image, next, mix, dst, off, if (live.fx) HoloFx.flicker(live.pulse) else 1f, androidx.compose.ui.graphics.ColorFilter.tint(line, androidx.compose.ui.graphics.BlendMode.SrcIn))
-    drawBlended(image, next, mix, dst, off, 0.45f, androidx.compose.ui.graphics.ColorFilter.tint(hot, androidx.compose.ui.graphics.BlendMode.SrcIn), androidx.compose.ui.graphics.BlendMode.Plus)
+    if (live.fx) {
+        // Bloom: four slightly offset, faint copies thicken the glowing edges; the offset and strength breathe.
+        val r = (1.0f + 1.8f * breath) * fx.bloom * 1.dp.toPx()
+        val glow = androidx.compose.ui.graphics.ColorFilter.tint(line, androidx.compose.ui.graphics.BlendMode.SrcIn)
+        for ((dx, dy) in listOf(r to r, -r to r, r to -r, -r to -r)) {
+            drawImage(
+                image, dstSize = dst, dstOffset = androidx.compose.ui.unit.IntOffset(off.x + dx.roundToInt(), off.y + dy.roundToInt()),
+                alpha = (0.07f + 0.10f * breath) * fx.bloom, colorFilter = glow, blendMode = androidx.compose.ui.graphics.BlendMode.Plus
+            )
+        }
+    }
+    drawBlended(image, next, mix, dst, off, if (live.fx) HoloFx.flicker(live.pulse) * (0.86f + 0.14f * breath) else 1f, androidx.compose.ui.graphics.ColorFilter.tint(line, androidx.compose.ui.graphics.BlendMode.SrcIn))
+    drawBlended(image, next, mix, dst, off, if (live.fx) 0.30f + 0.30f * breath else 0.45f, androidx.compose.ui.graphics.ColorFilter.tint(hot, androidx.compose.ui.graphics.BlendMode.SrcIn), androidx.compose.ui.graphics.BlendMode.Plus)
 
     // Wheels: pressure-coloured ring on each tyre (the two nearest to the viewer at full strength) and spokes that turn with speed.
     val spin = live.spin ?: 0f
@@ -817,6 +842,11 @@ private fun DrawScope.drawHologram(
     val len = hypot(to.x - tail.x, to.y - tail.y).coerceAtLeast(1f)
     val dir = Offset((to.x - tail.x) / len, (to.y - tail.y) / len)
     val across = Offset(-dir.y, dir.x)
+    if (live.fx) {
+        // Tail lamp glow in the theme's lamp colour, breathing with the rest.
+        val lampR = perMetre * (0.20f + 0.10f * breath) * fx.bloom
+        drawCircle(Brush.radialGradient(listOf(fx.lamp.copy(alpha = 0.55f + 0.30f * breath), Color.Transparent), center = tail, radius = lampR), lampR, tail)
+    }
     val exhaust = a("exhaust")
     val throttleF = ((live.throttle ?: 0.0) / 100.0).toFloat().coerceIn(0f, 1f)
     for (k in 0..3) {

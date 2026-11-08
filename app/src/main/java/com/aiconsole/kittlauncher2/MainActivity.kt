@@ -663,6 +663,7 @@ fun LauncherRoot(
     BackHandler(enabled = pageBrowser != null && overlay == LauncherOverlay.None) {
         val browser = pageBrowser ?: return@BackHandler
         when {
+            browser.nativeVideo != null -> browser.closeNativeVideo()
             browser.fullscreenView != null -> browser.exitFullscreen()
             browser.canGoBack() -> browser.goBack()
             browser.immersive -> browser.immersive = false

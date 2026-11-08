@@ -48,15 +48,24 @@ object HoloFx {
     }
 
     /** How the effects look for one theme; the colours of the hologram itself come from the theme as before. */
-    data class Style(val fringe: Color, val ticks: Int, val scanlineAlpha: Float)
+    data class Style(val fringe: Color, val ticks: Int, val scanlineAlpha: Float, val lamp: Color, val bloom: Float)
+
+    /** Seconds for one slow in-and-out of the hologram's glow. */
+    const val BREATH_SECONDS = 4.5f
+
+    /** Glow level 0..1 at [phase] (any float, wraps every 1): eases in and out like a breath, with no sudden turn at the ends. */
+    fun breath(phase: Float): Float {
+        val t = ((phase % 1f) + 1f) % 1f
+        return 0.5f - 0.5f * cos(t * 2f * PI.toFloat())
+    }
 
     /** Each film theme gets its own fringe colour, tick count (BTTF turns 88) and scanline strength (the Matrix is the heaviest). */
     fun style(skin: CockpitSkin): Style = when (skin) {
-        CockpitSkin.Kitt -> Style(Color(0xFF40E0FF), 72, 0.05f)
-        CockpitSkin.Terminator -> Style(Color(0xFF40E0FF), 60, 0.06f)
-        CockpitSkin.Matrix -> Style(Color(0xFFB8FFC8), 72, 0.09f)
-        CockpitSkin.Future -> Style(Color(0xFF4DB8FF), 88, 0.05f)
-        CockpitSkin.RoboCop -> Style(Color(0xFF6AA8FF), 64, 0.07f)
+        CockpitSkin.Kitt -> Style(Color(0xFF40E0FF), 72, 0.05f, Color(0xFFFF2A2A), 1.0f)
+        CockpitSkin.Terminator -> Style(Color(0xFF40E0FF), 60, 0.06f, Color(0xFFFF3B30), 1.0f)
+        CockpitSkin.Matrix -> Style(Color(0xFFB8FFC8), 72, 0.09f, Color(0xFF7CFF9A), 1.25f)
+        CockpitSkin.Future -> Style(Color(0xFF4DB8FF), 88, 0.05f, Color(0xFFFF9A2A), 1.1f)
+        CockpitSkin.RoboCop -> Style(Color(0xFF6AA8FF), 64, 0.07f, Color(0xFF8FC0FF), 0.9f)
     }
 
     /** The point on a floor-plane ellipse (radii [rx], [ry]) at [angle] radians. */

@@ -233,6 +233,22 @@ class BrowserSession(
     var showScripts by mutableStateOf(false)
     var fullscreenView by mutableStateOf<View?>(null)
         private set
+
+    /** A direct video link the tab was about to open; the native player (ExoPlayer) shows it instead of the page. */
+    var nativeVideo by mutableStateOf<String?>(null)
+        private set
+    private var loadInPage: String? = null
+
+    fun closeNativeVideo() {
+        nativeVideo = null
+    }
+
+    /** The native player couldn't play it (or the driver chose to): load the link in the page as before. */
+    fun openVideoInPage(url: String) {
+        nativeVideo = null
+        loadInPage = url
+        current?.web?.loadUrl(url)
+    }
     private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
 
     /** A site asked for a file (e.g. a ROM); the UI shows the system picker and calls [deliverFiles]. */
@@ -589,6 +605,10 @@ class BrowserSession(
             }
             val scheme = request.url.scheme
             if (scheme != "http" && scheme != "https") return true
+            if (request.isForMainFrame && target != loadInPage && MediaUrls.isDirectVideo(target)) {
+                nativeVideo = target
+                return true
+            }
             if (!request.isForMainFrame || !blocksAds(tab)) return false
             // An ad redirect is dropped; a redirect to another site nobody tapped is held back.
             if (AdBlock.isBlocked(request.url.host)) {

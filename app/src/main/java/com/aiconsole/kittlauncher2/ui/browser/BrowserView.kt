@@ -184,6 +184,9 @@ fun BrowserView(
             if (fullscreen != null && !LocalWebViewHostActive.current) {
                 LaunchedEffect(fullscreen) { session.exitFullscreen() }
             }
+            session.nativeVideo?.let { url ->
+                NativePlayer(url, onClose = { session.closeNativeVideo() }, onOpenInPage = { session.openVideoInPage(url) }, modifier = Modifier.fillMaxSize())
+            }
             if (fullscreen != null && LocalWebViewHostActive.current) {
                 AndroidView(
                     factory = { fullscreen.also { (it.parent as? ViewGroup)?.removeView(it) } },

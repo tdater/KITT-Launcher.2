@@ -171,6 +171,7 @@ fun MediaMusicHubPane(app: KittApplication, onClose: () -> Unit) {
 
     BackHandler {
         when {
+            musicBrowser.nativeVideo != null -> musicBrowser.closeNativeVideo()
             musicBrowser.fullscreenView != null -> musicBrowser.exitFullscreen()
             musicBrowser.canGoBack() -> musicBrowser.goBack()
             musicBrowser.immersive -> musicBrowser.immersive = false
