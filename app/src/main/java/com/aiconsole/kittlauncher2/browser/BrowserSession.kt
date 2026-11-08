@@ -605,11 +605,16 @@ class BrowserSession(
             }
             val scheme = request.url.scheme
             if (scheme != "http" && scheme != "https") return true
-            if (request.isForMainFrame && target != loadInPage && MediaUrls.isDirectVideo(target)) {
-                nativeVideo = target
-                return true
+            // A tapped video link goes to the native player, after the ad-block and pop-up rules have had their say.
+            fun nativeOrPass(): Boolean {
+                val tappedNow = request.hasGesture() || SystemClock.uptimeMillis() - tab.lastInputAt < INPUT_GRACE_MS
+                val play = MediaUrls.shouldPlayNatively(
+                    request.isForMainFrame, target, loadInPage, AdBlock.isBlocked(request.url.host), tappedNow, tab === current
+                )
+                if (play) nativeVideo = target
+                return play
             }
-            if (!request.isForMainFrame || !blocksAds(tab)) return false
+            if (!request.isForMainFrame || !blocksAds(tab)) return nativeOrPass()
             // An ad redirect is dropped; a redirect to another site nobody tapped is held back.
             if (AdBlock.isBlocked(request.url.host)) {
                 countBlocked()
@@ -625,7 +630,7 @@ class BrowserSession(
                 blockedPopup = target
                 return true
             }
-            return false
+            return nativeOrPass()
         }
 
         override fun onPageCommitVisible(view: WebView, url: String?) {
