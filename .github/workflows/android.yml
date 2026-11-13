@@ -18,11 +18,20 @@ concurrency:
 # One codebase, two editions (product flavors): kitt2 = KITT Launcher.2, kitt = KITT Launcher.
 # A tag (v1.8) releases all four editions, each to its own downloads repo for its in-app updater.
 jobs:
-  # Starts KITT on an emulator shaped like a head unit (landscape 1280x720), visits every page and
-  # opens every overlay (LauncherSmokeTest). A crash fails the build before it can be released.
+  # Starts each edition on an emulator shaped like its head unit, visits every page and opens every
+  # overlay (LauncherSmokeTest). A crash in any edition fails the build before it can be released.
   smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        edition:
+          - { flavor: Kitt2, size: 1280x720 }
+          - { flavor: Kitt, size: 800x1151 }
+          - { flavor: HoloLandscape, size: 1280x720 }
+          - { flavor: HoloPortrait, size: 800x1151 }
+    name: smoke (${{ matrix.edition.flavor }})
     steps:
       # The emulator's data partition needs several GB the stock runner doesn't have free. First, so
       # nothing a later step installs is removed (the tool cache holds the Java setup-java adds).
@@ -54,14 +63,14 @@ jobs:
           disk-size: 3G
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            adb shell wm size 1280x720
+            adb shell wm size ${{ matrix.edition.size }}
             adb shell wm density 160
-            chmod +x gradlew && ./gradlew connectedKitt2DebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.aiconsole.kittlauncher2.LauncherSmokeTest
+            chmod +x gradlew && ./gradlew connected${{ matrix.edition.flavor }}DebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.aiconsole.kittlauncher2.LauncherSmokeTest
 
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: smoke-test-report
+          name: smoke-test-report-${{ matrix.edition.flavor }}
           path: app/build/reports/androidTests/
 
 
