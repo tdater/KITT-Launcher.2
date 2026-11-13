@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -29,7 +30,9 @@ object WakeWordRules {
     /**
      * Listen only when everything allows it. Never while music or any other media is playing:
      * the recognizer can't hear "Hey KITT" over it anyway, and restarting a session every few
-     * seconds made head units chime, duck or interrupt the music over and over.
+     * seconds made head units chime, duck or interrupt the music over and over. Never during a
+     * phone call either, offline spotter included: many head units share one microphone between
+     * apps and Bluetooth hands-free, so holding it open can mute or garble the call.
      */
     fun shouldListen(
         enabled: Boolean,
@@ -38,8 +41,16 @@ object WakeWordRules {
         kittSpeaking: Boolean,
         micBlocked: Boolean,
         mediaPlaying: Boolean,
-        micPermission: Boolean
-    ): Boolean = enabled && visible && !suspended && !kittSpeaking && !micBlocked && !mediaPlaying && micPermission
+        micPermission: Boolean,
+        inCall: Boolean = false
+    ): Boolean = enabled && visible && !suspended && !kittSpeaking && !micBlocked && !mediaPlaying && micPermission && !inCall
+
+    /** Whether [AudioManager.getMode] means a phone or VoIP call is under way (or being screened). */
+    fun isCallMode(mode: Int): Boolean =
+        mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION || mode == MODE_CALL_SCREENING
+
+    /** [AudioManager.MODE_CALL_SCREENING] (API 30), kept as a literal so older SDK levels compile the same. */
+    private const val MODE_CALL_SCREENING = 4
 
     /** Pause before the next session: a short gap after a quiet one, growing back-off after errors. */
     fun restartDelayMs(error: Boolean, failures: Int): Long =
@@ -71,6 +82,8 @@ object WakeWordRules {
 
     /** How often to look again while media plays (no callback says when it stops). */
     const val MEDIA_RECHECK_MS = 5_000L
+    /** How often to look for a call starting or ending below API 31 (no mode-change callback there). */
+    const val CALL_RECHECK_MS = 3_000L
     const val STARTUP_GRACE_MS = 3_500L
     const val POST_SPEECH_COOLDOWN_MS = 1_500L
     const val MAX_CHIME_SESSIONS = 1
@@ -95,6 +108,9 @@ class WakeWordListener(
 
     private val appContext = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
+    /** Separate from [main], whose callbacks [update] clears, so the call watch keeps running. */
+    private val callWatch = Handler(Looper.getMainLooper())
+    private var inCall = false
     private val audio = appContext.getSystemService(AudioManager::class.java)
     private var recognizer: SpeechRecognizer? = null
     private var visible = false
@@ -120,6 +136,7 @@ class WakeWordListener(
     private fun useOffline(): Boolean = offlineChosen && offline.installed.value && offline.unavailable == null
 
     init {
+        watchCalls()
         // A takeover while listening for "Hey KITT" would repeat forever: turn the wake word off.
         scope.launch(Dispatchers.Main) {
             MicGuard.stops.collect {
@@ -171,6 +188,34 @@ class WakeWordListener(
         update()
     }
 
+    /**
+     * Stops listening as soon as a call starts and resumes when it ends. The listener lives as long
+     * as the app (see KittApplication), so the callback is never removed.
+     */
+    private fun watchCalls() {
+        val manager = audio ?: return
+        inCall = WakeWordRules.isCallMode(manager.mode)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            manager.addOnModeChangedListener(ContextCompat.getMainExecutor(appContext)) { onCallModeChanged() }
+        } else {
+            callWatch.postDelayed(object : Runnable {
+                override fun run() {
+                    onCallModeChanged()
+                    callWatch.postDelayed(this, WakeWordRules.CALL_RECHECK_MS)
+                }
+            }, WakeWordRules.CALL_RECHECK_MS)
+        }
+    }
+
+    private fun onCallModeChanged() {
+        val now = audio?.let { WakeWordRules.isCallMode(it.mode) } ?: false
+        if (now == inCall) return
+        inCall = now
+        Log.i(TAG, if (now) "Call started: wake word paused" else "Call ended: wake word resumes")
+        quietSessions = 0
+        update()
+    }
+
     // A browser page counts while it's paused for a moment too (see WebMedia.busy).
     private fun mediaPlaying(): Boolean = audio?.isMusicActive == true || WebMedia.busy
 
@@ -182,7 +227,8 @@ class WakeWordListener(
         micBlocked = MicGuard.autoListenBlocked(),
         // The offline spotter needs no audio focus and never chimes: it keeps listening over music.
         mediaPlaying = !useOffline() && mediaPlaying(),
-        micPermission = ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        micPermission = ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED,
+        inCall = inCall
     )
 
     private fun update() {
