@@ -19,10 +19,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.supervisorScope
@@ -47,6 +50,7 @@ import kotlin.coroutines.resumeWithException
  */
 class TextToSpeechHelper(context: Context, private val settings: KittSettings, scope: CoroutineScope) {
 
+    private val appContext = context.applicationContext
     private val neural = GeminiSpeechClient(context.applicationContext, settings)
 
     /** The free on-device neural voice and its downloadable voices (see [LocalVoices]). */
@@ -57,7 +61,11 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
     @Volatile
     private var ready = false
     private var preferredVoice = settings.kittVoiceName.value
-    private val localReady = CompletableDeferred<Boolean>()
+    /** Device TTS engine: null while the first start is pending, then whether it's usable. */
+    private val localReady = MutableStateFlow<Boolean?>(null)
+    /** Which engine instance is current, so a replaced one's late callback is ignored. Main thread. */
+    private var engineGeneration = 0
+    private var initRetries = 0
     private val localDone = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
     private lateinit var tts: TextToSpeech
 
@@ -76,12 +84,34 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
     private data class Utterance(val text: String, val urgent: Boolean, val deviceOnly: Boolean, val character: FilmCharacter? = null)
 
     init {
-        tts = TextToSpeech(context.applicationContext) { status -> onInit(status) }
+        createEngine()
+    }
+
+    private fun createEngine() {
+        val generation = ++engineGeneration
+        tts = TextToSpeech(appContext) { status -> if (generation == engineGeneration) onInit(status) }
     }
 
     private fun onInit(status: Int) {
         ready = status == TextToSpeech.SUCCESS
-        if (ready) {
+        if (!ready) {
+            // At cold boot the TTS engine can still be starting when the launcher comes up. Without
+            // a retry every device-voice fallback stayed silent until the app restarted.
+            val wait = INIT_RETRY_MS.getOrNull(initRetries)
+            if (wait != null) {
+                initRetries += 1
+                VoiceLog.add("device voice engine didn't start (status $status); retrying in ${wait / 1000} s")
+                val failed = engineGeneration
+                main.launch {
+                    delay(wait)
+                    if (failed != engineGeneration) return@launch // shut down meanwhile
+                    runCatching { tts.shutdown() }
+                    createEngine()
+                }
+            } else {
+                VoiceLog.add("device voice engine didn't start (status $status); giving up for this run")
+            }
+        } else {
             // Slightly lowered pitch and a measured rate: calmer than the engine's default.
             tts.setAudioAttributes(ducker.attributes)
             tts.setPitch(0.92f)
@@ -101,7 +131,7 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
                 }
             })
         }
-        localReady.complete(ready)
+        localReady.value = ready
     }
 
     private fun finished(utteranceId: String?) {
@@ -152,6 +182,7 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
     fun shutdown() {
         main.launch {
             haltPlayback()
+            engineGeneration++ // ignore late callbacks and cancel a pending retry
             tts.shutdown()
         }
     }
@@ -192,8 +223,10 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
             _speakingAs.value = null
             releaseDucker()
             // Hold speaking=true briefly so room echo settles before any wake-word session can open.
-            if (queue.isEmpty()) {
-                runCatching { delay(POST_SPEECH_SETTLE_MS) }
+            // Cancelled means haltPlayback took over, and it owns the speaking flag. A cancelled
+            // delay here throws CancellationException, which must propagate, not be swallowed.
+            if (queue.isEmpty() && currentCoroutineContext().isActive) {
+                delay(POST_SPEECH_SETTLE_MS)
                 if (queue.isEmpty()) _speaking.value = false
             }
         }
@@ -337,7 +370,8 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
     }
 
     private suspend fun sayLocal(chunks: List<String>) {
-        val ok = withTimeoutOrNull(LOCAL_INIT_TIMEOUT_MS) { localReady.await() } ?: false
+        // A failed engine reports false at once (no wait) while its retry is pending.
+        val ok = withTimeoutOrNull(LOCAL_INIT_TIMEOUT_MS) { localReady.first { it != null } } ?: false
         if (!ok) {
             VoiceLog.add("device voice not ready: no TTS engine answered")
             return // No TTS engine installed; the answer is still shown on screen.
@@ -402,6 +436,8 @@ class TextToSpeechHelper(context: Context, private val settings: KittSettings, s
         // The first line after start-up also loads the model, slow for Kokoro on weak units.
         const val ON_DEVICE_TIMEOUT_MS = 20_000L
         const val LOCAL_INIT_TIMEOUT_MS = 5_000L
+        /** Waits before each new attempt to start a device TTS engine that failed to start. */
+        val INIT_RETRY_MS = longArrayOf(2_000L, 5_000L, 15_000L, 30_000L)
         const val POST_SPEECH_SETTLE_MS = 650L
     }
 }
