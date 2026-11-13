@@ -12,13 +12,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        flavor: [Kitt2, HoloPortrait]
+        edition:
+          - { flavor: Kitt2, size: 1280x720 }
+          - { flavor: Kitt, size: 800x1151 }
+          - { flavor: HoloLandscape, size: 1280x720 }
+          - { flavor: HoloPortrait, size: 800x1151 }
         variant:
-          - { name: baseline, cores: 2, gpu: swiftshader_indirect }
-          - { name: cores4, cores: 4, gpu: swiftshader_indirect }
-          - { name: swangle, cores: 2, gpu: swangle_indirect }
-          - { name: cores4-swangle, cores: 4, gpu: swangle_indirect }
-    name: ${{ matrix.flavor }} ${{ matrix.variant.name }}
+          - { name: swiftshader_indirect, cores: 2, gpu: swiftshader_indirect }
+          - { name: swangle_indirect, cores: 2, gpu: swangle_indirect }
+          - { name: swangle, cores: 2, gpu: swangle }
+        rep: [1, 2]
+    name: ${{ matrix.edition.flavor }} ${{ matrix.variant.name }} ${{ matrix.rep }}
     steps:
       - name: Free disk space
         run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/node_modules /usr/share/swift
@@ -35,7 +39,7 @@ jobs:
       - name: Build app and test APKs
         run: |
           chmod +x gradlew
-          ./gradlew assemble${{ matrix.flavor }}Debug assemble${{ matrix.flavor }}DebugAndroidTest
+          ./gradlew assemble${{ matrix.edition.flavor }}Debug assemble${{ matrix.edition.flavor }}DebugAndroidTest
 
       - name: Enable KVM
         run: |
@@ -54,8 +58,8 @@ jobs:
           disk-size: 3G
           emulator-options: -no-window -gpu ${{ matrix.variant.gpu }} -noaudio -no-boot-anim -camera-back none -no-snapshot-save
           script: |
-            adb shell wm size 1280x720
+            adb shell wm size ${{ matrix.edition.size }}
             adb shell wm density 160
             echo "test start $(date -u +%T)"
-            ./gradlew connected${{ matrix.flavor }}DebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.aiconsole.kittlauncher2.LauncherSmokeTest
+            ./gradlew connected${{ matrix.edition.flavor }}DebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.aiconsole.kittlauncher2.LauncherSmokeTest
             echo "test end $(date -u +%T)"
