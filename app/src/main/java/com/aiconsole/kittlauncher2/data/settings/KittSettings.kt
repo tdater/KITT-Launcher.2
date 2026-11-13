@@ -152,6 +152,8 @@ class KittSettings(context: Context, private val scope: CoroutineScope) {
         { k, v -> putString(k, v.name) }
     )
     val matrixRain = boolPref("matrix_rain", true)
+    /** Starship bridge cockpit over any theme (always on with the Bridge theme). */
+    val bridgeCockpit = boolPref("bridge_cockpit", false)
     /** Custom accent as ARGB, 0 = the theme's own (see AccentSwatches). */
     val accentColor = longPref("accent_color", 0L)
     /** Scanner doubles as a shift light near [shiftRpm]. */

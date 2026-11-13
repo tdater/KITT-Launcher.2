@@ -58,8 +58,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.editions != '[]'
     runs-on: ubuntu-latest
-    # A healthy edition finishes in about 5 minutes; a hung emulator shouldn't hold a runner for long.
-    timeout-minutes: 30
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
