@@ -125,6 +125,7 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val shiftLight by settings.shiftLight.state.collectAsState()
     val shiftRpm by settings.shiftRpm.state.collectAsState()
     val rain by settings.matrixRain.state.collectAsState()
+    val bridgeCockpit by settings.bridgeCockpit.state.collectAsState()
     val nightMode by settings.nightMode.state.collectAsState()
     val showMap by settings.showMap.state.collectAsState()
     val uiScale by settings.uiScale.state.collectAsState()
@@ -470,6 +471,19 @@ fun KittConfigScreen(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
             anchor("theme")
             item { Text("THEME", style = MaterialTheme.typography.labelMedium, color = DashGrey) }
             item { ChoiceRow(UiTheme.entries, theme, { it.label }, { settings.uiTheme.set(it) }, color = ScannerRed) }
+            if (theme == UiTheme.Bridge) {
+                item { HelpText("The Bridge theme always draws the Bridge cockpit.") }
+            } else {
+                item {
+                    KittToggle(
+                        "Bridge cockpit",
+                        bridgeCockpit,
+                        { settings.bridgeCockpit.set(it) },
+                        description = "Starship bridge look over this theme: chamfered consoles with a light strip, lit button underlines and a starfield " +
+                            "behind the panels that drifts with your speed (still when parked or in lite mode). The Matrix keeps its rain."
+                    )
+                }
+            }
             if (com.aiconsole.kittlauncher2.BuildConfig.HOLO_DESIGN) {
                 item { HoloVehicleSettings(app) }
             }

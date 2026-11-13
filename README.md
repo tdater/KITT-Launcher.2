@@ -9,7 +9,8 @@ footprint for cheap head units. It includes:
 - KITT, a voice and text AI co-pilot (Gemini or Perplexity) that sees live vehicle data;
 - map search with spoken turn-by-turn directions (OpenStreetMap, no account);
 - a tabbed browser for streaming, AI chat sites and browser games;
-- the always-on red scanner light and ten themes.
+- the always-on red scanner light, twelve themes and the Bridge cockpit (a starship bridge look
+  over any theme).
 
 See [FEATURES.md](FEATURES.md) for everything it does.
 
