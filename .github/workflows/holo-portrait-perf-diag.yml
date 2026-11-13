@@ -1,26 +1,34 @@
-name: Holo Portrait perf diagnostic
+name: Smoke test timing, main vs fix
 
 on:
   push:
     branches: [claude/holo-portrait-perf-diag]
 
 jobs:
-  diag:
+  time:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        run:
-          - { flavor: HoloPortrait, pkg: com.aiconsole.kittdual.portrait, size: 800x1151 }
-          - { flavor: HoloPortrait, pkg: com.aiconsole.kittdual.portrait, size: 1280x720 }
-          - { flavor: HoloLandscape, pkg: com.aiconsole.kittdual.landscape, size: 1280x720 }
-          - { flavor: HoloLandscape, pkg: com.aiconsole.kittdual.landscape, size: 800x1151 }
-    name: ${{ matrix.run.flavor }} ${{ matrix.run.size }}
+        ref: [main, claude/holo-portrait-smoke-speed]
+        edition:
+          - { flavor: Kitt2, size: 1280x720 }
+          - { flavor: Kitt, size: 800x1151 }
+          - { flavor: HoloLandscape, size: 1280x720 }
+          - { flavor: HoloPortrait, size: 800x1151 }
+        attempt: [1, 2]
+    name: ${{ matrix.ref }} ${{ matrix.edition.flavor }} ${{ matrix.attempt }}
     steps:
       - name: Free disk space
         run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/node_modules /usr/share/swift
       - uses: actions/checkout@v7
+        with:
+          path: diagtools
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.ref }}
+          path: app-src
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -31,7 +39,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Smoke test with sampling
+      - name: Timed smoke test
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -39,5 +47,6 @@ jobs:
           target: google_apis
           disable-animations: true
           disk-size: 3G
+          working-directory: app-src
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: bash .github/diag/perf-sample.sh ${{ matrix.run.pkg }} ${{ matrix.run.flavor }} ${{ matrix.run.size }}
+          script: bash ../diagtools/.github/diag/smoke-time.sh ${{ matrix.edition.flavor }} ${{ matrix.edition.size }}
