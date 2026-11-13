@@ -39,9 +39,11 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           PR_FILES: ${{ github.event.pull_request.changed_files }}
         run: |
+          # A renamed file counts under both its old and new path.
           if [ "$GITHUB_EVENT_NAME" = pull_request ] \
-              && files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename') \
-              && [ "$(printf '%s\n' "$files" | grep -c .)" = "$PR_FILES" ]; then
+              && listed=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[] | "\(.filename)\t\(.previous_filename // "")"') \
+              && [ "$(printf '%s\n' "$listed" | grep -c .)" = "$PR_FILES" ]; then
+            files=$(printf '%s\n' "$listed" | tr '\t' '\n' | grep . || true)
             echo "Changed files:"; printf '%s\n' "$files"
           else
             files=app/build.gradle.kts # not a pull request, or an incomplete list: a shared file tests all
@@ -56,9 +58,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.editions != '[]'
     runs-on: ubuntu-latest
-    # The emulator renders in software, and KITT Holo Portrait is slow there, so give each edition
-    # room to finish.
-    timeout-minutes: 60
+    # A healthy edition finishes in about 5 minutes; a hung emulator shouldn't hold a runner for long.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -79,8 +80,8 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
 
-      # Compiles the app and test APKs in the background while the emulator is installed and boots;
-      # the test step waits for it.
+      # Compiles the app and test APKs in the background while the emulator is installed and boots
+      # (about a minute and a half), so the two overlap; the test step waits for the build.
       - name: Start building the app and test APKs
         run: |
           chmod +x gradlew
@@ -92,37 +93,12 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # A booted emulator snapshot, reused so later runs skip the cold boot. Every edition shares it.
-      # The copy main saves serves every branch; a branch without one makes and keeps its own.
-      - name: Restore the emulator snapshot
-        id: avd-cache
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.android/avd/*
-            ~/.android/adb*
-          key: avd-api34-google_apis-x86_64-v1
-
-      - name: Create the emulator snapshot
-        if: steps.avd-cache.outputs.cache-hit != 'true'
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 34
-          arch: x86_64
-          target: google_apis
-          force-avd-creation: false
-          disable-animations: false
-          disk-size: 3G
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: echo "Snapshot created."
-
       - name: Smoke test on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
           arch: x86_64
           target: google_apis
-          force-avd-creation: false
           disable-animations: true
           disk-size: 3G
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
