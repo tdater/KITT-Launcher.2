@@ -813,7 +813,7 @@ fun LauncherRoot(
         // The Matrix: digital rain behind the translucent panels.
         if (rain) MatrixRain(Modifier.fillMaxSize())
         // Bridge cockpit: the starfield viewport behind the translucent consoles.
-        if (stars) BridgeStarfield(Modifier.fillMaxSize(), speedKmh = speedKmh)
+        if (stars) BridgeStarfield(speedKmh = speedKmh, modifier = Modifier.fillMaxSize())
 
         Column(
             Modifier
