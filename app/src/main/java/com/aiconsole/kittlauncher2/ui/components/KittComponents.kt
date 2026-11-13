@@ -48,6 +48,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aiconsole.kittlauncher2.ui.theme.AlertRed
+import com.aiconsole.kittlauncher2.ui.theme.BridgeGlow
+import com.aiconsole.kittlauncher2.ui.theme.BridgePanelShape
+import com.aiconsole.kittlauncher2.ui.theme.bridgeLightStrip
+import com.aiconsole.kittlauncher2.ui.theme.bridgeUnderline
 import com.aiconsole.kittlauncher2.ui.theme.DashAmber
 import com.aiconsole.kittlauncher2.ui.theme.DashAmberDim
 import com.aiconsole.kittlauncher2.ui.theme.DashGrey
@@ -149,7 +153,9 @@ fun KittPanel(
     trailing: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val shape = MaterialTheme.shapes.medium
+    val bridge = ThemeState.bridge
+    // Bridge cockpit: chamfered console tops whatever the theme's own corners are.
+    val shape = if (bridge) BridgePanelShape else MaterialTheme.shapes.medium
     val console = ThemeState.theme == UiTheme.Colorado
     val hud = ThemeState.theme.hud
     val edition = ThemeState.edition
@@ -160,10 +166,12 @@ fun KittPanel(
             .then(if (console) Modifier.shadow(10.dp, shape, ambientColor = accent, spotColor = accent) else Modifier)
             .clip(shape)
             .background(
-                if (console) Brush.verticalGradient(listOf(KittGraphite.copy(alpha = 0.9f), KittCharcoal.copy(alpha = 0.86f)))
+                // Translucent glass over the rain (Matrix) or the bridge's starfield viewport.
+                if (console || bridge) Brush.verticalGradient(listOf(KittGraphite.copy(alpha = 0.9f), KittCharcoal.copy(alpha = 0.86f)))
                 else Brush.verticalGradient(listOf(KittGraphite, KittCharcoal))
             )
             .border(1.dp, if (hud != null) accent.copy(alpha = 0.55f) else KittBezel, shape)
+            .then(if (bridge) Modifier.bridgeLightStrip(BridgeGlow) else Modifier)
     ) {
         Row(
             modifier = Modifier
@@ -241,11 +249,14 @@ fun KittButton(
 ) {
     val shape = MaterialTheme.shapes.small
     val tint = if (enabled) color else DashGrey.copy(alpha = 0.5f)
+    val bridge = ThemeState.bridge
     Box(
         modifier = modifier
             .clip(shape)
             .background(if (active && enabled) tint.copy(alpha = 0.22f) else KittBlack)
             .border(1.dp, if (active && enabled) tint else tint.copy(alpha = 0.45f), shape)
+            // Bridge cockpit: a lit underline like a console key's tell-tale.
+            .then(if (bridge) Modifier.bridgeUnderline(tint, active && enabled) else Modifier)
             .clickable(enabled = enabled) {
                 UiSounds.click()
                 onClick()
