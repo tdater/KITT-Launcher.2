@@ -1,11 +1,9 @@
 package com.aiconsole.kittlauncher2
 
 import android.Manifest
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -43,27 +41,28 @@ class LauncherSmokeTest {
     @Test
     fun everyPageAndOverlayOpensWithoutCrashing() {
         val intent = Intent(context, EditionComponents.mainActivity).putExtra(DemoSession.EXTRA, true)
-        ActivityScenario.launch<Activity>(intent).use { scenario ->
+        RunningLauncher.launch(intent).use { launcher ->
             settle(6_000)
-            alive(scenario)
+            alive(launcher)
             for (page in listOf("Drive", "Gauges", "Media", "Ai", "Entertainment", "Widgets", "Apps", "Drive")) {
                 LauncherBus.send(LauncherEvent.ShowPage(page))
                 settle(2_500)
-                alive(scenario)
+                alive(launcher)
             }
             for (event in listOf(LauncherEvent.OpenDiagnostics, LauncherEvent.OpenTrips, LauncherEvent.OpenPursuit, LauncherEvent.OpenConfig)) {
                 LauncherBus.send(event)
                 settle(3_000)
-                alive(scenario)
+                alive(launcher)
                 LauncherBus.send(LauncherEvent.ShowPage("Drive"))
                 settle(1_500)
             }
-            alive(scenario)
+            alive(launcher)
         }
     }
 
-    // Plain sleeps: the scanner animates forever, so the main thread never goes idle.
+    // Plain sleeps: the scanner animates forever, so the main thread never goes idle. For the same
+    // reason the launcher runs under RunningLauncher, not ActivityScenario (see RunningLauncher).
     private fun settle(ms: Long) = Thread.sleep(ms)
 
-    private fun alive(scenario: ActivityScenario<Activity>) = scenario.onActivity { assertFalse("KITT closed", it.isFinishing) }
+    private fun alive(launcher: RunningLauncher) = assertFalse("KITT closed", launcher.isFinishing)
 }
