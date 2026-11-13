@@ -18,19 +18,51 @@ concurrency:
 # One codebase, two editions (product flavors): kitt2 = KITT Launcher.2, kitt = KITT Launcher.
 # A tag (v1.8) releases all four editions, each to its own downloads repo for its in-app updater.
 jobs:
+  # Which editions the smoke test needs. Pull requests skip editions their changes can't reach
+  # (.github/scripts/smoke-editions.sh); pushes, tags and manual runs always test all four.
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      editions: ${{ steps.pick.outputs.editions }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Pick editions
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          PR_FILES: ${{ github.event.pull_request.changed_files }}
+        run: |
+          # A renamed file counts under both its old and new path.
+          if [ "$GITHUB_EVENT_NAME" = pull_request ] \
+              && listed=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[] | "\(.filename)\t\(.previous_filename // "")"') \
+              && [ "$(printf '%s\n' "$listed" | grep -c .)" = "$PR_FILES" ]; then
+            files=$(printf '%s\n' "$listed" | tr '\t' '\n' | grep . || true)
+            echo "Changed files:"; printf '%s\n' "$files"
+          else
+            files=app/build.gradle.kts # not a pull request, or an incomplete list: a shared file tests all
+          fi
+          editions=$(printf '%s\n' "$files" | bash .github/scripts/smoke-editions.sh)
+          echo "Editions to smoke test: $editions"
+          echo "editions=$editions" >> "$GITHUB_OUTPUT"
+
   # Starts each edition on an emulator shaped like its head unit, visits every page and opens every
   # overlay (LauncherSmokeTest). A crash in any edition fails the build before it can be released.
   smoke:
+    needs: changes
+    if: needs.changes.outputs.editions != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        edition:
-          - { flavor: Kitt2, size: 1280x720 }
-          - { flavor: Kitt, size: 800x1151 }
-          - { flavor: HoloLandscape, size: 1280x720 }
-          - { flavor: HoloPortrait, size: 800x1151 }
+        edition: ${{ fromJSON(needs.changes.outputs.editions) }}
     name: smoke (${{ matrix.edition.flavor }})
     steps:
       # The emulator's data partition needs several GB the stock runner doesn't have free. First, so
@@ -47,6 +79,13 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
 
+      # Compiles the app and test APKs in the background while the emulator is installed and boots
+      # (about a minute and a half), so the two overlap; the test step waits for the build.
+      - name: Start building the app and test APKs
+        run: |
+          chmod +x gradlew
+          nohup bash -c './gradlew --build-cache assemble${{ matrix.edition.flavor }}Debug assemble${{ matrix.edition.flavor }}DebugAndroidTest > "$RUNNER_TEMP/apk-build.log" 2>&1; echo $? > "$RUNNER_TEMP/apk-build.exit"' > /dev/null 2>&1 &
+
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -61,11 +100,12 @@ jobs:
           target: google_apis
           disable-animations: true
           disk-size: 3G
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             adb shell wm size ${{ matrix.edition.size }}
             adb shell wm density 160
-            chmod +x gradlew && ./gradlew connected${{ matrix.edition.flavor }}DebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.aiconsole.kittlauncher2.LauncherSmokeTest
+            bash .github/scripts/wait-for-apk-build.sh
+            ./gradlew --build-cache connected${{ matrix.edition.flavor }}DebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.aiconsole.kittlauncher2.LauncherSmokeTest
 
       - uses: actions/upload-artifact@v7
         if: failure()
