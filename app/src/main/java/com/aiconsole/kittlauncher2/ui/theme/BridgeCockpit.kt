@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -105,8 +106,10 @@ fun BridgeStarfield(speedKmh: () -> Double?, modifier: Modifier = Modifier) {
     val warmStar = DashAmber
     val glow = BridgeGlow
     val warmWash = DashAmber
-    Canvas(modifier) {
-        // Reading tick here redraws only this canvas, never the launcher above it.
+    // Its own graphics layer, so each frame re-records only the starfield. Without it the tick
+    // invalidates the parent layer and every console above the viewport is redrawn on the main
+    // thread 30 times a second.
+    Canvas(modifier.graphicsLayer {}) {
         if (tick < 0L) return@Canvas
         val w = size.width
         val h = size.height

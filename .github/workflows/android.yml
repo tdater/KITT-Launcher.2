@@ -22,7 +22,9 @@ jobs:
   # overlay (LauncherSmokeTest). A crash in any edition fails the build before it can be released.
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # The emulator renders in software, and KITT Holo Portrait is slow there even on main (its
+    # every-page test alone takes about 9 minutes), so give each edition room to finish.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
