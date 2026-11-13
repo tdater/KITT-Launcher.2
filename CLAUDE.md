@@ -59,7 +59,7 @@ gh run view <run-id> --log-failed                                         # on f
 gh run download <run-id> -n app-debug -D "$env:USERPROFILE\Downloads\KITT2-<run-id>"   # the debug APK
 ```
 
-The owner installs the APK on the head unit, either from that download or from the run's page on GitHub (artifact `app-debug`, a zip holding `app-kitt2-debug.apk` and `app-kitt-debug.apk`). Gradle tasks carry the flavor: `testKitt2DebugUnitTest`, `lintKitt2Debug`, `assembleKitt2Debug assembleKittDebug`. The `smoke` job runs `LauncherSmokeTest` (`connectedKitt2DebugAndroidTest`) on an API 34 emulator at 1280x720: demo mode, every page, every overlay. A tag (`v1.8`, or `v1.8-beta1` for a pre-release only beta-channel units see) releases both editions, in a `release` job that waits for `build` and `smoke`. Without `gh` (e.g. a cloud session), push the branch and open a pull request instead; the workflow runs on pull requests. The `/android-finish` skill walks through the whole loop.
+The owner installs the APK on the head unit, either from that download or from the run's page on GitHub (artifact `app-debug`, a zip holding `app-kitt2-debug.apk` and `app-kitt-debug.apk`). Gradle tasks carry the flavor: `testKitt2DebugUnitTest`, `lintKitt2Debug`, `assembleKitt2Debug assembleKittDebug`. The `smoke` job runs `LauncherSmokeTest` (`connected<Flavor>DebugAndroidTest`) on an API 34 emulator, one parallel job per edition at its head unit's shape: demo mode, every page, every overlay. A tag (`v1.8`, or `v1.8-beta1` for a pre-release only beta-channel units see) releases both editions, in a `release` job that waits for `build` and `smoke`. Without `gh` (e.g. a cloud session), push the branch and open a pull request instead; the workflow runs on pull requests. The `/android-finish` skill walks through the whole loop.
 
 **Local mode:** Gradle needs a JDK; use Android Studio's bundled JBR:
 
@@ -71,7 +71,7 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 .\gradlew.bat lintKitt2Debug    # text report: app/build/intermediates/lint_intermediate_text_report/
 ```
 
-CI: `.github/workflows/android.yml` has three jobs. `build` runs tests, lint and both debug builds, and with signing secrets (`KITT_KEYSTORE_BASE64` etc.) both signed releases. `smoke` runs the emulator test. On `v*` tags, `release` publishes each edition to its releases repo for the in-app updater (`RELEASES_TOKEN` must be able to write both repos; tags with a `-` are pre-releases). CI sets `versionCode` from the run number (above the retired repo's numbers, so KITT Launcher updates in place).
+CI: `.github/workflows/android.yml` has four jobs. `build` runs tests, lint and both debug builds, and with signing secrets (`KITT_KEYSTORE_BASE64` etc.) both signed releases. `changes` picks the editions `smoke` tests: on a pull request only those its files can reach (`.github/scripts/smoke-editions.sh`; docs and unit-test-only changes skip it), otherwise all four. `smoke` runs the emulator test, building the APKs while the emulator boots from a cached snapshot. On `v*` tags, `release` publishes each edition to its releases repo for the in-app updater (`RELEASES_TOKEN` must be able to write both repos; tags with a `-` are pre-releases). CI sets `versionCode` from the run number (above the retired repo's numbers, so KITT Launcher updates in place).
 
 Toolchain: AGP 9.x with **built-in Kotlin** (no `kotlin-android` plugin), Compose BOM, KSP 2.3.x (decoupled from Kotlin version) for Room, OkHttp 5. Versions live in `gradle/libs.versions.toml`. minSdk 24, target/compile 37.
 

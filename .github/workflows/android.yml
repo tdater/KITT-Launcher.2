@@ -18,11 +18,52 @@ concurrency:
 # One codebase, two editions (product flavors): kitt2 = KITT Launcher.2, kitt = KITT Launcher.
 # A tag (v1.8) releases all four editions, each to its own downloads repo for its in-app updater.
 jobs:
-  # Starts KITT on an emulator shaped like a head unit (landscape 1280x720), visits every page and
-  # opens every overlay (LauncherSmokeTest). A crash fails the build before it can be released.
-  smoke:
+  # Which editions the smoke test needs. Pull requests skip editions their changes can't reach
+  # (.github/scripts/smoke-editions.sh); pushes, tags and manual runs always test all four.
+  changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      editions: ${{ steps.pick.outputs.editions }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Pick editions
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          PR_FILES: ${{ github.event.pull_request.changed_files }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ] \
+              && files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename') \
+              && [ "$(printf '%s\n' "$files" | grep -c .)" = "$PR_FILES" ]; then
+            echo "Changed files:"; printf '%s\n' "$files"
+          else
+            files=app/build.gradle.kts # not a pull request, or an incomplete list: a shared file tests all
+          fi
+          editions=$(printf '%s\n' "$files" | bash .github/scripts/smoke-editions.sh)
+          echo "Editions to smoke test: $editions"
+          echo "editions=$editions" >> "$GITHUB_OUTPUT"
+
+  # Starts each edition on an emulator shaped like its head unit, visits every page and opens every
+  # overlay (LauncherSmokeTest). A crash in any edition fails the build before it can be released.
+  smoke:
+    needs: changes
+    if: needs.changes.outputs.editions != '[]'
+    runs-on: ubuntu-latest
+    # The emulator renders in software, and KITT Holo Portrait is slow there, so give each edition
+    # room to finish.
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: ${{ fromJSON(needs.changes.outputs.editions) }}
+    name: smoke (${{ matrix.edition.flavor }})
     steps:
       # The emulator's data partition needs several GB the stock runner doesn't have free. First, so
       # nothing a later step installs is removed (the tool cache holds the Java setup-java adds).
@@ -38,11 +79,42 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
 
+      # Compiles the app and test APKs in the background while the emulator is installed and boots;
+      # the test step waits for it.
+      - name: Start building the app and test APKs
+        run: |
+          chmod +x gradlew
+          nohup bash -c './gradlew --build-cache assemble${{ matrix.edition.flavor }}Debug assemble${{ matrix.edition.flavor }}DebugAndroidTest > "$RUNNER_TEMP/apk-build.log" 2>&1; echo $? > "$RUNNER_TEMP/apk-build.exit"' > /dev/null 2>&1 &
+
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+
+      # A booted emulator snapshot, reused so later runs skip the cold boot. Every edition shares it.
+      # The copy main saves serves every branch; a branch without one makes and keeps its own.
+      - name: Restore the emulator snapshot
+        id: avd-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-google_apis-x86_64-v1
+
+      - name: Create the emulator snapshot
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          force-avd-creation: false
+          disable-animations: false
+          disk-size: 3G
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: echo "Snapshot created."
 
       - name: Smoke test on an emulator
         uses: reactivecircus/android-emulator-runner@v2
@@ -50,18 +122,20 @@ jobs:
           api-level: 34
           arch: x86_64
           target: google_apis
+          force-avd-creation: false
           disable-animations: true
           disk-size: 3G
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            adb shell wm size 1280x720
+            adb shell wm size ${{ matrix.edition.size }}
             adb shell wm density 160
-            chmod +x gradlew && ./gradlew connectedKitt2DebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.aiconsole.kittlauncher2.LauncherSmokeTest
+            bash .github/scripts/wait-for-apk-build.sh
+            ./gradlew --build-cache connected${{ matrix.edition.flavor }}DebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.aiconsole.kittlauncher2.LauncherSmokeTest
 
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: smoke-test-report
+          name: smoke-test-report-${{ matrix.edition.flavor }}
           path: app/build/reports/androidTests/
 
 
