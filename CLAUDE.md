@@ -205,6 +205,8 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
 - **`ScannerEngine`:** pure-Kotlin light simulation (eased head plus exponential lamp decay) shared by the Compose `KittScanner` and the overlay's plain `View`.
 - **`ScannerOverlayService`:** a non-touchable `TYPE_APPLICATION_OVERLAY` at alpha 0.8, the Android 12+ pass-through-touch limit. It hides while `LauncherVisibility.visible` is true.
 
+**Bridge cockpit (`ui/theme/BridgeCockpit.kt`, pure `Starfield`):** setting `bridgeCockpit` or the `UiTheme.Bridge` theme → `ThemeState.bridge`. `KittPanel` takes `BridgePanelShape`, see-through glass and `bridgeLightStrip(BridgeGlow)`; `KittButton` gets `bridgeUnderline`; `LauncherRoot` draws `BridgeStarfield` behind the pages (not with The Matrix, whose rain stays). Colours come from the palette (`KittPalette.glow`, else the accent), so every theme has a bridge variant in every edition. The starfield polls speed in its own loop, stands still parked, in lite mode and while a web page is on screen.
+
 ## Conventions
 
 - **Film HUD themes:** `UiTheme.hud` (`HudStyle`: Terminator, RoboCop, Matrix — the Matrix theme is stored as `UiTheme.Colorado`) also changes typography (`HudTypography`), shapes, the scanner (`KittScanner`: 20-segment bar or visor), panel headers/frames (`hudFrame`), the full-screen `FilmHudOverlay`, and HUD text (`FilmHudText`). New UI should go through `KittPanel`/palette tokens so these themes apply automatically.

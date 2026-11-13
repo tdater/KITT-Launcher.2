@@ -151,6 +151,7 @@ import com.aiconsole.kittlauncher2.ui.theme.LedGreen
 import com.aiconsole.kittlauncher2.ui.theme.KnightRiderLauncherTheme
 import com.aiconsole.kittlauncher2.ui.theme.LocalLiteMode
 import com.aiconsole.kittlauncher2.ui.theme.MatrixRain
+import com.aiconsole.kittlauncher2.ui.theme.BridgeStarfield
 import com.aiconsole.kittlauncher2.ui.theme.ScannerRed
 import com.aiconsole.kittlauncher2.ui.theme.ThemeState
 import com.aiconsole.kittlauncher2.ui.theme.UiTheme
@@ -211,6 +212,13 @@ open class MainActivity : ComponentActivity() {
                 val obdMoving by kitt.obd.moving.collectAsState()
                 val gpsFix by kitt.gps.fix.collectAsState()
                 val pinned = remember(pinnedStored) { AppLists.decode(pinnedStored) }
+                // Polled by the bridge starfield's frame loop, so it never recomposes the launcher.
+                val bridgeSpeed = remember {
+                    {
+                        kitt.obd.readings.value[PidCatalog.SPEED]?.value
+                            ?: kitt.gps.fix.value?.takeIf { System.currentTimeMillis() - it.timestamp < 4_000 }?.speedKmh
+                    }
+                }
                 val homeApps = remember(apps, pinned, hiddenStored) {
                     AppLists.homeSelection(apps, LauncherApp::key, pinned, AppLists.decode(hiddenStored).toSet())
                 }
@@ -244,6 +252,9 @@ open class MainActivity : ComponentActivity() {
                     nav = if (navNotifications) navInstruction else null,
                     // The Matrix rain is pure eye candy: off in lite mode.
                     rain = rain && !lite && ThemeState.theme == UiTheme.Colorado,
+                    // Bridge cockpit viewport; The Matrix keeps its rain as its viewport instead.
+                    stars = ThemeState.bridge && ThemeState.theme != UiTheme.Colorado,
+                    speedKmh = bridgeSpeed,
                     night = night,
                     whatsNew = whatsNew,
                     onWhatsNewSeen = {
@@ -592,6 +603,8 @@ fun LauncherRoot(
     showMap: Boolean = false,
     nav: NavInstruction? = null,
     rain: Boolean = false,
+    stars: Boolean = false,
+    speedKmh: () -> Double? = { null },
     night: Boolean = false,
     whatsNew: List<ReleaseNote> = emptyList(),
     onWhatsNewSeen: () -> Unit = {}
@@ -799,6 +812,8 @@ fun LauncherRoot(
     ) {
         // The Matrix: digital rain behind the translucent panels.
         if (rain) MatrixRain(Modifier.fillMaxSize())
+        // Bridge cockpit: the starfield viewport behind the translucent consoles.
+        if (stars) BridgeStarfield(Modifier.fillMaxSize(), speedKmh = speedKmh)
 
         Column(
             Modifier

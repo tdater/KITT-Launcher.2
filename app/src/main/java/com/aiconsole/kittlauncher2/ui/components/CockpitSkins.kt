@@ -1030,6 +1030,7 @@ fun VehicleDashPane(
             com.aiconsole.kittlauncher2.ui.theme.UiTheme.RetroVfd -> "1984 VFD Instrument Status"
             com.aiconsole.kittlauncher2.ui.theme.UiTheme.Outrun -> "Outrun Turbo Telemetry"
             com.aiconsole.kittlauncher2.ui.theme.UiTheme.Stealth -> "Stealth Low-Observable HUD"
+            com.aiconsole.kittlauncher2.ui.theme.UiTheme.Bridge -> "Bridge Flight Telemetry"
             else -> skin.hudTitle
         }
         else -> skin.hudTitle
@@ -1275,6 +1276,7 @@ fun SkinTerminal(modifier: Modifier = Modifier) {
                         com.aiconsole.kittlauncher2.ui.theme.UiTheme.RetroVfd -> "KNIGHT 2000 // VFD BUS"
                         com.aiconsole.kittlauncher2.ui.theme.UiTheme.Outrun -> "KITT // OUTRUN TURBO"
                         com.aiconsole.kittlauncher2.ui.theme.UiTheme.Stealth -> "KITT // STEALTH MODE"
+                        com.aiconsole.kittlauncher2.ui.theme.UiTheme.Bridge -> "KITT // BRIDGE CONSOLE"
                         else -> "KNIGHT 2000 CO-PILOT"
                     }
                     Text(title, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), color = ScannerRed, maxLines = 1)
