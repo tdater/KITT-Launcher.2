@@ -42,12 +42,13 @@ A Knight Rider–themed home screen for Android car head units. It replaces the 
   - It can also show over other apps as a see-through strip that ignores touches (a `TYPE_APPLICATION_OVERLAY` at 80% opacity, the most Android 12+ allows while still letting taps through).
   - **Shift light option:** the scanner flashes as the engine approaches an RPM you choose (5,000 by default).
   - *Under the hood:* a shared simulation engine (eased head movement with exponentially fading lamps) drives both the in-app scanner and the overlay.
-- **10 themes:**
-  - **Colour themes:** KITT, KARR, Night Vision, Super Pursuit, Retro VFD, Outrun and Stealth.
+- **12 themes:**
+  - **Colour themes:** KITT, KARR, Night Vision, Super Pursuit, Retro VFD, Outrun, Stealth and Bridge (a starship bridge: gunmetal consoles, cyan light strips, amber lamps and KITT's red scanner).
   - **Film HUD themes:** these change much more than colours, including the fonts, panel shapes, the scanner, the panel frames, a full-screen scanline effect and themed status text.
     - **Terminator:** a red-tinted vision overlay, a 20-segment scanner, and T-800 readouts such as "THREAT ASSESSMENT: NONE".
     - **RoboCop:** a cold blue visor glow, targeting-bracket panel corners, a visor-style scanner and the Prime Directives.
     - **The Matrix:** green phosphor terminal styling with optional falling "digital rain" behind see-through panels.
+- **Bridge cockpit (KITT Config → Theme):** a starship bridge look over any theme, so each theme gets its own bridge variant. Consoles get chamfered tops with a light strip, buttons a lit underline, and a starfield viewport drifts behind see-through panels at road speed (still when parked, in lite mode or while a web page is on screen). Always on with the Bridge theme; The Matrix keeps its digital rain as its viewport. Works in all four editions.
 - **Custom accent colour:** any theme can be given your own accent colour.
 - **Night mode:** Off, Auto or Always.
 - **Units:** imperial or metric.

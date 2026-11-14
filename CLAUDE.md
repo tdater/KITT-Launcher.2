@@ -59,7 +59,7 @@ gh run view <run-id> --log-failed                                         # on f
 gh run download <run-id> -n app-debug -D "$env:USERPROFILE\Downloads\KITT2-<run-id>"   # the debug APK
 ```
 
-The owner installs the APK on the head unit, either from that download or from the run's page on GitHub (artifact `app-debug`, a zip holding `app-kitt2-debug.apk` and `app-kitt-debug.apk`). Gradle tasks carry the flavor: `testKitt2DebugUnitTest`, `lintKitt2Debug`, `assembleKitt2Debug assembleKittDebug`. The `smoke` job runs `LauncherSmokeTest` (`connectedKitt2DebugAndroidTest`) on an API 34 emulator at 1280x720: demo mode, every page, every overlay. A tag (`v1.8`, or `v1.8-beta1` for a pre-release only beta-channel units see) releases both editions, in a `release` job that waits for `build` and `smoke`. Without `gh` (e.g. a cloud session), push the branch and open a pull request instead; the workflow runs on pull requests. The `/android-finish` skill walks through the whole loop.
+The owner installs the APK on the head unit, either from that download or from the run's page on GitHub (artifact `app-debug`, a zip holding `app-kitt2-debug.apk` and `app-kitt-debug.apk`). Gradle tasks carry the flavor: `testKitt2DebugUnitTest`, `lintKitt2Debug`, `assembleKitt2Debug assembleKittDebug`. The `smoke` job runs `LauncherSmokeTest` (`connected<Flavor>DebugAndroidTest`) for all four editions, each on an API 34 emulator shaped like its head unit (landscape 1280x720, portrait 800x1151): demo mode, every page, every overlay. A tag (`v1.8`, or `v1.8-beta1` for a pre-release only beta-channel units see) releases both editions, in a `release` job that waits for `build` and `smoke`. Without `gh` (e.g. a cloud session), push the branch and open a pull request instead; the workflow runs on pull requests. The `/android-finish` skill walks through the whole loop.
 
 **Local mode:** Gradle needs a JDK; use Android Studio's bundled JBR:
 
@@ -71,7 +71,7 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 .\gradlew.bat lintKitt2Debug    # text report: app/build/intermediates/lint_intermediate_text_report/
 ```
 
-CI: `.github/workflows/android.yml` has three jobs. `build` runs tests, lint and both debug builds, and with signing secrets (`KITT_KEYSTORE_BASE64` etc.) both signed releases. `smoke` runs the emulator test. On `v*` tags, `release` publishes each edition to its releases repo for the in-app updater (`RELEASES_TOKEN` must be able to write both repos; tags with a `-` are pre-releases). CI sets `versionCode` from the run number (above the retired repo's numbers, so KITT Launcher updates in place).
+CI: `.github/workflows/android.yml` has three jobs. `build` runs tests, lint and both debug builds, and with signing secrets (`KITT_KEYSTORE_BASE64` etc.) both signed releases. `smoke` runs the emulator test for each edition. On `v*` tags, `release` publishes each edition to its releases repo for the in-app updater (`RELEASES_TOKEN` must be able to write both repos; tags with a `-` are pre-releases). CI sets `versionCode` from the run number (above the retired repo's numbers, so KITT Launcher updates in place).
 
 Toolchain: AGP 9.x with **built-in Kotlin** (no `kotlin-android` plugin), Compose BOM, KSP 2.3.x (decoupled from Kotlin version) for Room, OkHttp 5. Versions live in `gradle/libs.versions.toml`. minSdk 24, target/compile 37.
 
@@ -205,6 +205,8 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
 - **`ScannerEngine`:** pure-Kotlin light simulation (eased head plus exponential lamp decay) shared by the Compose `KittScanner` and the overlay's plain `View`.
 - **`ScannerOverlayService`:** a non-touchable `TYPE_APPLICATION_OVERLAY` at alpha 0.8, the Android 12+ pass-through-touch limit. It hides while `LauncherVisibility.visible` is true.
 
+**Bridge cockpit (`ui/theme/BridgeCockpit.kt`, pure `Starfield`):** setting `bridgeCockpit` or the `UiTheme.Bridge` theme → `ThemeState.bridge`. `KittPanel` takes `BridgePanelShape`, see-through glass and `bridgeLightStrip(BridgeGlow)`; `KittButton` gets `bridgeUnderline`; `LauncherRoot` draws `BridgeStarfield` behind the pages (not with The Matrix, whose rain stays). Colours come from the palette (`KittPalette.glow`, else the accent), so every theme has a bridge variant in every edition. The starfield polls speed in its own loop, stands still parked, in lite mode and while a web page is on screen.
+
 ## Conventions
 
 - **Film HUD themes:** `UiTheme.hud` (`HudStyle`: Terminator, RoboCop, Matrix — the Matrix theme is stored as `UiTheme.Colorado`) also changes typography (`HudTypography`), shapes, the scanner (`KittScanner`: 20-segment bar or visor), panel headers/frames (`hudFrame`), the full-screen `FilmHudOverlay`, and HUD text (`FilmHudText`). New UI should go through `KittPanel`/palette tokens so these themes apply automatically.
@@ -214,3 +216,4 @@ There's no DI framework. Composables that need them do `LocalContext.current.app
 - **Animations:** read animated values inside draw lambdas, so frames only redraw instead of recomposing.
 - **Threading:** network, DB, Keystore and IO work goes through `Dispatchers.IO` or Room suspend functions. Always rethrow `CancellationException` before a broad `catch`. `SpeechRecognizer` must be driven on the main thread.
 - **Unit tests:** JVM tests can't use `org.json` or Android framework classes. Keep protocol and formatting logic in plain-Kotlin objects (`ObdResponseParser`, `FormulaEvaluator`, `DtcDecoder`, `VehicleContextFormatter`, `ScannerEngine`), which is what the tests cover.
+- **Emulator tests:** start the launcher with `RunningLauncher`, not `ActivityScenario`. The scanner and the hologram redraw continuously, so the main thread is almost never idle, and ActivityScenario waits for idle before launch, before every `onActivity` and on close. On the software-rendered CI emulator that made `LauncherSmokeTest` take anywhere from 1 to over 9 minutes for the same build. Pause between steps with plain sleeps, not idle waits.

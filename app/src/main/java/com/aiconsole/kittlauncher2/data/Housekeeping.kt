@@ -11,6 +11,14 @@ object ReleaseNotes {
 
     val ALL = listOf(
         ReleaseNote(
+            15,
+            listOf(
+                "New Bridge theme and Bridge cockpit: a starship bridge look with chamfered consoles, light strips, lit button " +
+                    "underlines and a starfield that drifts behind the panels at your speed. Turn the cockpit on over any theme in " +
+                    "KITT Config → Theme, so every theme gets its own bridge variant.",
+            )
+        ),
+        ReleaseNote(
             14,
             listOf(
                 "Direct video links (mp4, webm, mkv, HLS, DASH) now open in a built-in native player with big Play/Pause, ±10 s and " +

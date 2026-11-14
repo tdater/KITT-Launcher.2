@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.lerp
 
 /** The launcher's selectable looks. */
@@ -19,7 +20,10 @@ enum class UiTheme(val label: String) {
     RoboCop("RoboCop"),
     // Stored as "Colorado" (its first name) so earlier selections carry over.
     Colorado("The Matrix"),
-    BackToTheFuture("Back to the Future")
+    BackToTheFuture("Back to the Future"),
+    // Starship bridge: gunmetal consoles, cyan light strips, amber lamps, KITT's red scanner.
+    // Always drawn with the Bridge cockpit (see BridgeCockpit.kt).
+    Bridge("Bridge")
 }
 
 /** Film HUD themes change more than colours: scanner, panels, overlay, HUD text, intro and voice. */
@@ -37,6 +41,7 @@ val UiTheme.hud: HudStyle?
 /**
  * Every color the UI draws with, by role. [accent] is the brand color (KITT's scanner red),
  * [danger] is reserved for warnings and destructive actions so it stays red in every theme.
+ * [glow] colours the Bridge cockpit's light strips; unspecified means the theme's [accent].
  */
 data class KittPalette(
     val black: Color,
@@ -54,8 +59,12 @@ data class KittPalette(
     val yellow: Color,
     val info: Color,
     val white: Color,
-    val grey: Color
+    val grey: Color,
+    val glow: Color = Color.Unspecified
 )
+
+/** The Bridge cockpit's light-strip colour: the palette's own [KittPalette.glow], else its accent. */
+val KittPalette.lightStrip: Color get() = if (glow.isSpecified) glow else accent
 
 // The black-glass KITT dashboard: scanner red, dash amber, LED green.
 val KittClassicPalette = KittPalette(
@@ -282,6 +291,28 @@ val FuturePalette = KittPalette(
     grey = Color(0xFF9AA2AA)
 )
 
+// Bridge: the spaceship bridge concept. Gunmetal hull and consoles, cyan light strips, warm amber
+// lamps, KITT's red scanner kept as the brand accent.
+val BridgePalette = KittPalette(
+    black = Color(0xFF0A0E13),
+    charcoal = Color(0xFF111A22),
+    graphite = Color(0xFF182530),
+    bezel = Color(0xFF263845),
+    grid = Color(0xFF1A2731),
+    accent = Color(0xFFFF3B30),
+    accentDim = Color(0xFF4A0E0B),
+    danger = Color(0xFFFF3B30),
+    amber = Color(0xFFFF9F3A),
+    amberDim = Color(0xFF3D2508),
+    green = Color(0xFF57E39B),
+    greenDim = Color(0xFF0F3A27),
+    yellow = Color(0xFFFFD45A),
+    info = Color(0xFF3FE0EF),
+    white = Color(0xFFE3F6FA),
+    grey = Color(0xFF8BA7B1),
+    glow = Color(0xFF3FE0EF)
+)
+
 fun UiTheme.palette(): KittPalette = when (this) {
     UiTheme.Kitt -> KittClassicPalette
     UiTheme.Karr -> KarrPalette
@@ -294,6 +325,7 @@ fun UiTheme.palette(): KittPalette = when (this) {
     UiTheme.RoboCop -> RoboCopPalette
     UiTheme.Colorado -> ColoradoPalette
     UiTheme.BackToTheFuture -> FuturePalette
+    UiTheme.Bridge -> BridgePalette
 }
 
 /** Swatches for the custom accent; 0 means "use the theme's own". */
@@ -301,9 +333,12 @@ val AccentSwatches: List<Long> = listOf(
     0xFFFF1E1E, 0xFFFF8A1A, 0xFFFFC21A, 0xFF3DFF3D, 0xFF3DF5E0, 0xFF3DA5FF, 0xFF9B5CFF, 0xFFFF2BD6, 0xFFE8E8E6
 )
 
-/** Replaces the brand accent (scanner, headers, active buttons) with [accent]. */
+/**
+ * Replaces the brand accent (scanner, headers, active buttons) with [accent]. The bridge light
+ * strips follow a custom accent too.
+ */
 fun KittPalette.withAccent(accent: Color?): KittPalette =
-    if (accent == null) this else copy(accent = accent, accentDim = lerp(black, accent, 0.25f))
+    if (accent == null) this else copy(accent = accent, accentDim = lerp(black, accent, 0.25f), glow = Color.Unspecified)
 
 /**
  * The active theme. Snapshot state, so every composable and draw lambda that reads one of
@@ -314,6 +349,12 @@ object ThemeState {
 
     /** Driver-picked accent overriding the theme's, or null. */
     var accentOverride by mutableStateOf<Color?>(null)
+
+    /** The "Bridge cockpit" setting: the starship bridge look over whichever theme is active. */
+    var bridgeCockpit by mutableStateOf(false)
+
+    /** Draw the Bridge cockpit: the setting is on, or the Bridge theme itself is active. */
+    val bridge: Boolean get() = bridgeCockpit || theme == UiTheme.Bridge
 
     /** Each film's chosen edition and character (see [FilmChoices]); set from settings. */
     var filmChoices by mutableStateOf<Map<HudStyle, FilmChoice>>(emptyMap())

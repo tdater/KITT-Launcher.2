@@ -243,6 +243,8 @@ class KittApplication : Application() {
         // Apply the saved look before the first frame, then follow changes from KITT Config.
         ThemeState.theme = settings.uiTheme.value
         ThemeState.filmChoices = FilmChoices.decode(settings.filmChoices.value)
+        ThemeState.bridgeCockpit = settings.bridgeCockpit.value
+        appScope.launch(Dispatchers.Main) { settings.bridgeCockpit.state.collect { ThemeState.bridgeCockpit = it } }
         appScope.launch(Dispatchers.Main) { settings.filmChoices.state.collect { ThemeState.filmChoices = FilmChoices.decode(it) } }
         // The night theme (if one is chosen) takes over while night mode says it's dark.
         appScope.launch(Dispatchers.Main) {
