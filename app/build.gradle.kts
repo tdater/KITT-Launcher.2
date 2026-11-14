@@ -27,10 +27,15 @@ android {
         targetSdk = 37
         // CI builds number themselves so in-app updates always see a newer version. A release
         // tag (v1.2) becomes the version name, so it matches the release the updater compares.
+        // A local build is 1 / "1.0", which can't install over a CI build of the same edition:
+        // set KITT_VERSION_CODE (above the installed build's) and optionally KITT_VERSION_NAME in
+        // the untracked local.properties to test one on a unit that already has a release.
         val ciBuild = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
         val releaseTag = System.getenv("GITHUB_REF_NAME")?.takeIf { System.getenv("GITHUB_REF_TYPE") == "tag" }?.removePrefix("v")
-        versionCode = ciBuild ?: 1
-        versionName = releaseTag ?: if (ciBuild != null) "1.0.$ciBuild" else "1.0"
+        val localCode = localProperties.getProperty("KITT_VERSION_CODE")?.trim()?.toIntOrNull()?.takeIf { it > 0 }
+        val localName = localProperties.getProperty("KITT_VERSION_NAME")?.trim()?.takeIf { it.isNotEmpty() }
+        versionCode = ciBuild ?: localCode ?: 1
+        versionName = releaseTag ?: if (ciBuild != null) "1.0.$ciBuild" else localName ?: "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

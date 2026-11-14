@@ -101,6 +101,21 @@ class OfflineWake(context: Context) {
     /** Serializes listen sessions so a new thread never overlaps native teardown of the previous one. */
     private val sessionLock = Any()
 
+    /**
+     * The loaded model, kept between sessions while the wake word is in use: [start] runs after
+     * every KITT line, every overlay close and every return home, and reloading the model each
+     * time costs a cheap head unit real CPU. Each session gets only a new stream and microphone.
+     * Freed after [IDLE_RELEASE_MS] without a session, on low memory, on a model error and on
+     * [remove]. Guarded by [sessionLock].
+     */
+    private var spotter: KeywordSpotter? = null
+
+    /** Low memory: drop the model as soon as the current session ends. */
+    @Volatile
+    private var releaseAfterSession = false
+
+    private val idleRelease = Runnable { releaseWhenIdle() }
+
     suspend fun install() = withContext(Dispatchers.IO) {
         val temp = File(dir.parentFile, "$ARCHIVE.part")
         temp.deleteRecursively()
@@ -126,10 +141,43 @@ class OfflineWake(context: Context) {
 
     fun remove() {
         stop()
+        main.removeCallbacks(idleRelease)
         synchronized(sessionLock) {
+            releaseSpotter()
             dir.deleteRecursively()
             _installed.value = false
         }
+    }
+
+    /** From Application.onTrimMemory: the model goes when memory runs low (it reloads on the next session). */
+    fun trimMemory(level: Int) {
+        if (level < android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) return
+        releaseAfterSession = true
+        releaseWhenIdle()
+    }
+
+    /**
+     * Frees the model off the main thread once no session holds it. A session that starts first
+     * (any [start] or [stop] changes [generation]) keeps it.
+     */
+    private fun releaseWhenIdle() {
+        val gen = generation
+        Thread({
+            synchronized(sessionLock) {
+                if (generation == gen || releaseAfterSession) releaseSpotter()
+            }
+        }, "kitt-wake-release").apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    /** Called with [sessionLock] held. */
+    private fun releaseSpotter() {
+        releaseAfterSession = false
+        val loaded = spotter ?: return
+        spotter = null
+        synchronized(OnDeviceVoice.nativeInitLock) { runCatching { loaded.release() } }
     }
 
     /**
@@ -139,6 +187,7 @@ class OfflineWake(context: Context) {
     fun start(onHeard: (OfflineHeard) -> Unit, onFailed: () -> Unit): Boolean {
         if (active) return true
         if (!_installed.value || unavailable != null) return false
+        main.removeCallbacks(idleRelease)
         active = true
         val gen = ++generation
         Thread({ listen(gen, onHeard, onFailed) }, "kitt-wake").apply {
@@ -149,15 +198,19 @@ class OfflineWake(context: Context) {
     }
 
     fun stop() {
+        val wasActive = active
         active = false
         generation++
+        if (wasActive) {
+            main.removeCallbacks(idleRelease)
+            main.postDelayed(idleRelease, IDLE_RELEASE_MS)
+        }
     }
 
     @SuppressLint("MissingPermission") // Checked by WakeWordListener before starting.
     private fun listen(gen: Int, onHeard: (OfflineHeard) -> Unit, onFailed: () -> Unit) {
         synchronized(sessionLock) {
             if (generation != gen) return
-            var spotter: KeywordSpotter? = null
             var stream: OnlineStream? = null
             var record: AudioRecord? = null
             try {
@@ -167,7 +220,7 @@ class OfflineWake(context: Context) {
                     keywords.writeText(OfflinePhrases.keywords(tokenizer::encode))
                 }
                 if (generation != gen) return
-                spotter = synchronized(OnDeviceVoice.nativeInitLock) {
+                val loaded = spotter ?: synchronized(OnDeviceVoice.nativeInitLock) {
                     KeywordSpotter(
                         config = KeywordSpotterConfig(
                             featConfig = FeatureConfig(sampleRate = RATE, featureDim = 80),
@@ -184,12 +237,12 @@ class OfflineWake(context: Context) {
                             keywordsFile = keywords.path
                         )
                     )
-                }
+                }.also { spotter = it }
                 val minBuffer = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
                 if (minBuffer <= 0) throw IOException("invalid AudioRecord minBuffer ($minBuffer)")
                 record = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(minBuffer, CHUNK * 4))
                 if (record.state != AudioRecord.STATE_INITIALIZED) throw IOException("the microphone didn't open")
-                stream = synchronized(OnDeviceVoice.nativeInitLock) { spotter.createStream() }
+                stream = synchronized(OnDeviceVoice.nativeInitLock) { loaded.createStream() }
                 val activeStream = stream!!
                 record.startRecording()
                 val pcm = ShortArray(CHUNK)
@@ -202,21 +255,25 @@ class OfflineWake(context: Context) {
                     }
                     for (i in 0 until n) samples[i] = pcm[i] / 32768f
                     activeStream.acceptWaveform(if (n == CHUNK) samples else samples.copyOf(n), RATE)
-                    while (spotter.isReady(activeStream)) spotter.decode(activeStream)
-                    val keyword = spotter.getResult(activeStream).keyword
+                    while (loaded.isReady(activeStream)) loaded.decode(activeStream)
+                    val keyword = loaded.getResult(activeStream).keyword
                     if (keyword.isNotBlank()) {
-                        spotter.reset(activeStream)
+                        loaded.reset(activeStream)
                         OfflinePhrases.heard(keyword)?.let { heard -> main.post { if (generation == gen) onHeard(heard) } }
                     }
                 }
             } catch (e: Throwable) {
                 // UnsatisfiedLinkError (no native library for this CPU), a broken model or a busy mic.
+                // Anything but a microphone error may have left the model in a bad state: load it fresh next time.
+                if (e !is IOException) releaseAfterSession = true
                 if (generation == gen) {
                     Log.w(TAG, "Offline wake word stopped", e)
                     if (e !is IOException) unavailable = e.message ?: e.javaClass.simpleName
                     main.post {
                         if (generation == gen) {
                             active = false
+                            main.removeCallbacks(idleRelease)
+                            main.postDelayed(idleRelease, IDLE_RELEASE_MS)
                             onFailed()
                         }
                     }
@@ -226,8 +283,8 @@ class OfflineWake(context: Context) {
                 runCatching { record?.release() }
                 synchronized(OnDeviceVoice.nativeInitLock) {
                     runCatching { stream?.release() }
-                    runCatching { spotter?.release() }
                 }
+                if (releaseAfterSession) releaseSpotter()
             }
         }
     }
@@ -244,5 +301,7 @@ class OfflineWake(context: Context) {
         const val READY = ".ready"
         const val RATE = 16_000
         const val CHUNK = 1_600 // 100 ms
+        /** Model kept this long after the last session (the wake word restarts within seconds in normal use). */
+        const val IDLE_RELEASE_MS = 2 * 60_000L
     }
 }
