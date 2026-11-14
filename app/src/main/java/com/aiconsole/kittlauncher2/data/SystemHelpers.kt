@@ -5,6 +5,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.database.sqlite.SQLiteConstraintException
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -57,11 +58,23 @@ class AutoBackup(private val context: Context, private val edition: String) {
         val name = AutoBackupRules.fileName(edition, SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(now)))
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) writeMediaStore(name) else writeLegacy(name)
+        } catch (e: SQLiteConstraintException) {
+            // Today's file is already in Downloads/KITT (an earlier install or a cleared-data run wrote
+            // it, so MediaStore refuses a second one with the same name): count it as backed up today.
+            // Letting this escape used to crash the launcher at every start.
+            Log.w(TAG, "Backup $name already exists", e)
+            "Downloads/KITT/$name"
         } catch (e: IOException) {
             Log.w(TAG, "Automatic backup failed", e)
             null
         } catch (e: SecurityException) {
             Log.w(TAG, "Automatic backup not allowed", e)
+            null
+        } catch (e: IllegalStateException) {
+            // MediaProvider throws this when it can't pick a free name ("Failed to build unique
+            // file") and for other provider-side refusals. A missed backup is retried at the next
+            // start; it must never take the launcher down with it.
+            Log.w(TAG, "Automatic backup refused", e)
             null
         }
     }
