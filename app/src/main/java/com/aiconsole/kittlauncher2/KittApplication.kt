@@ -109,7 +109,8 @@ class KittApplication : Application() {
     val wakeWord: WakeWordListener by lazy { WakeWordListener(this, settings, kittVoice, offlineWake, appScope) }
 
     /** The offline "Hey KITT" and quick-command spotter (model downloaded on request). */
-    val offlineWake: OfflineWake by lazy { OfflineWake(this) }
+    private val offlineWakeLazy = lazy { OfflineWake(this) }
+    val offlineWake: OfflineWake by offlineWakeLazy
 
     /** Offline speech-to-text for the mic button (model downloaded on request). */
     val offlineSpeech: OfflineSpeech by lazy { OfflineSpeech(this) }
@@ -288,6 +289,7 @@ class KittApplication : Application() {
         // The offline voice's model is the next biggest thing (loaded again on the next line).
         if (kittVoiceLazy.isInitialized()) kittVoice.onDevice.trimMemory(level)
         offlineSpeech.trimMemory(level)
+        if (offlineWakeLazy.isInitialized()) offlineWake.trimMemory(level)
     }
 
     private companion object {

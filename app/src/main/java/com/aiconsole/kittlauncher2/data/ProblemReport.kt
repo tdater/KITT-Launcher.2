@@ -14,9 +14,9 @@ import java.util.Locale
 
 /**
  * Crash capture and the "Report a problem" file: device and app details, recent crashes, the
- * OBD connection log, non-secret settings and this app's own recent log output. Built for a
+ * OBD connection log, allow-listed settings and this app's own recent log output. Built for a
  * head unit where adb isn't available. API keys live in a separate encrypted store and are
- * never included.
+ * never included; VINs, Bluetooth addresses and the driver's name are masked (see [ReportPrivacy]).
  */
 object ProblemReport {
 
@@ -75,6 +75,8 @@ object ProblemReport {
     fun write(context: Context, obd: ObdManager, out: OutputStream) {
         val writer = out.bufferedWriter(Charsets.UTF_8)
         val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z", Locale.US)
+        val settingsPrefs = context.getSharedPreferences("kitt_settings", Context.MODE_PRIVATE)
+        val driverName = runCatching { settingsPrefs.getString("driver_name", "").orEmpty() }.getOrDefault("")
         fun section(title: String, body: StringBuilder.() -> Unit) {
             val text = try {
                 buildString(body)
@@ -82,7 +84,7 @@ object ProblemReport {
                 "(section failed: ${e.javaClass.simpleName}: ${e.message})\n"
             }
             writer.write("== $title ==\n")
-            writer.write(text)
+            writer.write(ReportPrivacy.scrub(text, driverName))
             writer.write("\n")
             writer.flush()
         }
@@ -166,10 +168,8 @@ object ProblemReport {
                 appendLine(f.readText().take(8_000))
             }
         }
-        section("Settings (no API keys)") {
-            context.getSharedPreferences("kitt_settings", Context.MODE_PRIVATE).all.toSortedMap().forEach { (k, v) ->
-                appendLine("$k = ${v.toString().replace('\n', ' ').take(200)}")
-            }
+        section("Settings (no API keys or personal entries)") {
+            settingsPrefs.all.toSortedMap().forEach { (k, v) -> appendLine(ReportPrivacy.settingLine(k, v, driverName)) }
         }
         section("App log (this app only)") { append(appLog()) }
     }
