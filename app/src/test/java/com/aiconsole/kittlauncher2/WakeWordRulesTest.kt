@@ -8,7 +8,7 @@ import org.junit.Test
 
 class WakeWordRulesTest {
 
-    private fun listen(mediaPlaying: Boolean = false, enabled: Boolean = true, kittSpeaking: Boolean = false) =
+    private fun listen(mediaPlaying: Boolean = false, enabled: Boolean = true, kittSpeaking: Boolean = false, inCall: Boolean = false) =
         WakeWordRules.shouldListen(
             enabled = enabled,
             visible = true,
@@ -16,8 +16,19 @@ class WakeWordRulesTest {
             kittSpeaking = kittSpeaking,
             micBlocked = false,
             mediaPlaying = mediaPlaying,
-            micPermission = true
+            micPermission = true,
+            inCall = inCall
         )
+
+    @Test
+    fun neverListensDuringACall() {
+        assertFalse(listen(inCall = true))
+        assertTrue(WakeWordRules.isCallMode(2)) // AudioManager.MODE_IN_CALL
+        assertTrue(WakeWordRules.isCallMode(3)) // AudioManager.MODE_IN_COMMUNICATION
+        assertTrue(WakeWordRules.isCallMode(4)) // AudioManager.MODE_CALL_SCREENING
+        assertFalse(WakeWordRules.isCallMode(0)) // AudioManager.MODE_NORMAL
+        assertFalse(WakeWordRules.isCallMode(1)) // AudioManager.MODE_RINGTONE
+    }
 
     @Test
     fun neverListensOverMusic() {

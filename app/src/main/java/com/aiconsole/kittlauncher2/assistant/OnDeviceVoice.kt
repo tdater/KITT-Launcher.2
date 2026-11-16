@@ -56,7 +56,10 @@ class OnDeviceVoice(context: Context) {
     private var engine: OfflineTts? = null
     private var engineId: String? = null
 
-    /** Native code missing or the model broken: the device voice takes over for good this run. */
+    /**
+     * Native code missing, the model broken, or playback stalled [STALL_STRIKES] times in a row:
+     * the device voice takes over for good this run.
+     */
     @Volatile
     var unavailable: String? = null
         private set
@@ -206,7 +209,9 @@ class OnDeviceVoice(context: Context) {
      * Plays [clip] to the end (cancellable), [pitch] 1 = natural. Streams 16-bit PCM: some head
      * units (an Android 12 alps build, 2026-10) accepted a static float track, pulled a few
      * milliseconds of it and stalled, so KITT ducked the music and said nothing. A track whose
-     * play position stops moving throws, and the device voice takes over.
+     * play position stops moving throws, and the device voice says that line. One stall can be a
+     * route change (ignition on, the phone's Bluetooth reconnecting), so the voice is only benched
+     * for the run after [STALL_STRIKES] in a row; a clip that plays clears the count.
      */
     suspend fun play(clip: VoiceClip, attributes: AudioAttributes, pitch: Float) = withContext(Dispatchers.IO) {
         val pcm = VoicePcm.toPcm16(clip.samples)
@@ -242,6 +247,7 @@ class OnDeviceVoice(context: Context) {
                 if (watch.stalled(track.playbackHeadPosition, System.currentTimeMillis())) throw stalled("no audio came out")
                 delay(40)
             }
+            stalls = 0
             VoiceLog.add("played ${track.playbackHeadPosition}/${pcm.size} frames at ${clip.sampleRate} Hz, routed to ${runCatching { track.routedDevice?.productName }.getOrNull() ?: "?"}")
         } finally {
             runCatching { track.pause() }
@@ -250,9 +256,14 @@ class OnDeviceVoice(context: Context) {
         }
     }
 
+    /** Stalls in a row since a clip last played through; only touched from [play]'s IO thread. */
+    @Volatile
+    private var stalls = 0
+
     private fun stalled(why: String): IOException {
-        unavailable = "this head unit didn't play the voice's audio: $why"
-        VoiceLog.add("playback stalled: $why")
+        stalls += 1
+        if (stalls >= STALL_STRIKES) unavailable = "this head unit didn't play the voice's audio: $why"
+        VoiceLog.add("playback stalled (${stalls}x): $why")
         return IOException("On-device playback stalled: $why")
     }
 
@@ -266,5 +277,7 @@ class OnDeviceVoice(context: Context) {
         const val STALL_MS = 1_500L
         const val WRITE_CHUNK = 4_096
         const val SLOW_STRIKES = 2
+        /** Stalls in a row before the voice is benched for the run. */
+        const val STALL_STRIKES = 2
     }
 }
