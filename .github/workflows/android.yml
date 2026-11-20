@@ -170,8 +170,14 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5 # v6+ caching needs Gradle's proprietary terms
 
+      # On its own runner, compiling all four release variants at once ran the Kotlin compiler out
+      # of the 2 GB it inherits from gradle.properties (sized for small local machines). The
+      # runner has 16 GB, so give the Kotlin daemon 4 GB here only.
       - name: Prepare Gradle
-        run: chmod +x gradlew
+        run: |
+          chmod +x gradlew
+          mkdir -p ~/.gradle
+          echo "kotlin.daemon.jvmargs=-Xmx4g" >> ~/.gradle/gradle.properties
 
       # Signed releases for in-app updates, when the signing secrets are configured.
       - name: Signed release APKs
