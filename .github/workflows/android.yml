@@ -116,15 +116,8 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    env:
-      KITT_KEYSTORE_BASE64: ${{ secrets.KITT_KEYSTORE_BASE64 }}
-      KITT_KEYSTORE_PASSWORD: ${{ secrets.KITT_KEYSTORE_PASSWORD }}
-      KITT_KEY_ALIAS: ${{ secrets.KITT_KEY_ALIAS }}
-      KITT_KEY_PASSWORD: ${{ secrets.KITT_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0 # release notes list the commits since the previous tag
 
       - uses: actions/setup-java@v6
         with:
@@ -155,6 +148,30 @@ jobs:
           path: |
             app/build/outputs/apk/holoLandscape/debug/app-holoLandscape-debug.apk
             app/build/outputs/apk/holoPortrait/debug/app-holoPortrait-debug.apk
+
+  # The signed release APKs build in their own job, beside the debug build, tests and lint, so a
+  # run waits for the slower of the two rather than both in a row.
+  signed:
+    runs-on: ubuntu-latest
+    env:
+      KITT_KEYSTORE_BASE64: ${{ secrets.KITT_KEYSTORE_BASE64 }}
+      KITT_KEYSTORE_PASSWORD: ${{ secrets.KITT_KEYSTORE_PASSWORD }}
+      KITT_KEY_ALIAS: ${{ secrets.KITT_KEY_ALIAS }}
+      KITT_KEY_PASSWORD: ${{ secrets.KITT_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # release notes list the commits since the previous tag
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v5 # v6+ caching needs Gradle's proprietary terms
+
+      - name: Prepare Gradle
+        run: chmod +x gradlew
 
       # Signed releases for in-app updates, when the signing secrets are configured.
       - name: Signed release APKs
@@ -191,11 +208,11 @@ jobs:
           path: release/
 
   # Tags publish each signed APK to its public downloads-only repository, which that edition's
-  # in-app updater checks, only once the build and the smoke test passed. RELEASES_TOKEN must be
-  # allowed to write all four repositories.
+  # in-app updater checks, only once the debug build, tests and lint, the signed build and the
+  # smoke test all passed. RELEASES_TOKEN must be allowed to write all four repositories.
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build, smoke]
+    needs: [build, signed, smoke]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v7
